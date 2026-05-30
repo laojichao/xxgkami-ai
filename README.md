@@ -1,35 +1,80 @@
-# 小小怪卡密验证系统 Pro - Java 全栈实现
+# 小小怪卡密验证系统 Pro
 
-基于原项目 [xxgkami-pro](https://github.com/xiaoxiaoguai-yyds/xxgkami-pro) 的完整 Java 全栈实现，包含后端、前端、Android 客户端和 Kotlin Multiplatform 共享模块。
+基于原项目 [xxgkami-pro](https://github.com/xiaoxiaoguai-yyds/xxgkami-pro) 的完整 Java 全栈实现，包含 Spring Boot 后端、Vue 3 前端、Android 客户端和 Kotlin Multiplatform 共享模块。
 
 ## 项目结构
 
 ```
-xxgkami-java/
-├── backend/                    # Java Spring Boot 后端
-├── frontend/                   # Vue 3 前端 (原仓库代码)
-├── shared/                     # Kotlin Multiplatform 共享模块
-├── androidApp/                 # Android Jetpack Compose 客户端
-├── build.gradle.kts            # Gradle 根配置
-├── settings.gradle.kts         # Gradle 设置
-├── kami.sql                    # 数据库初始化脚本
-└── README.md
+xxgkami-ai/
+├── backend/                # Spring Boot 后端 (Maven)
+│   ├── pom.xml
+│   └── src/main/
+│       ├── java/org/xxg/backend/backend/
+│       │   ├── config/     # 安全配置、数据库初始化、CORS
+│       │   ├── controller/ # REST 控制器
+│       │   ├── dto/        # 数据传输对象
+│       │   ├── entity/     # JPA 实体
+│       │   ├── exception/  # 全局异常处理
+│       │   ├── filter/     # JWT、速率限制、请求监控
+│       │   ├── mapper/     # Spring Data Repository
+│       │   ├── service/    # 业务逻辑
+│       │   └── util/       # JWT、密码、加密工具
+│       └── resources/
+│           └── application.properties
+├── frontend/               # Vue 3 前端 (Vite)
+│   ├── package.json
+│   └── src/
+│       ├── components/     # 页面组件
+│       ├── services/       # API 服务
+│       ├── data/           # 模拟数据
+│       └── utils/          # 工具函数
+└── mobile/                 # Android/KMP 移动端 (Gradle)
+    ├── build.gradle.kts
+    ├── settings.gradle.kts
+    ├── androidApp/         # Android Jetpack Compose 应用
+    │   ├── build.gradle.kts
+    │   ├── proguard-rules.pro
+    │   └── src/main/kotlin/com/xxgkami/android/
+    │       ├── data/       # Token 持久化
+    │       ├── navigation/ # 导航配置
+    │       ├── ui/screens/ # 页面
+    │       ├── ui/theme/   # 主题
+    │       └── viewmodel/  # ViewModel
+    └── shared/             # Kotlin Multiplatform 共享模块
+        └── src/
+            ├── commonMain/ # 跨平台代码
+            ├── androidMain/# Android 平台实现
+            ├── iosMain/    # iOS 平台实现
+            └── desktopMain/# Desktop 平台实现
 ```
 
 ## 技术栈
 
 | 模块 | 技术 |
 |------|------|
-| 后端 | Spring Boot 3.3 + JPA + JWT + BCrypt + MySQL 8.0 |
-| 前端 | Vue 3 + Vite + Element Plus + ECharts |
+| 后端 | Spring Boot 3.3 + Spring Security + JPA + JWT + BCrypt + MySQL 8.0 |
+| 前端 | Vue 3 + Vite + Element Plus |
 | 共享模块 | Kotlin Multiplatform + Ktor Client + Kotlinx Serialization |
-| Android | Jetpack Compose + Material 3 + Navigation |
+| Android | Jetpack Compose + Material 3 + Navigation Compose |
+
+## 安全特性
+
+- JWT 认证（HS256，强制配置密钥，启动校验长度）
+- 登录/卡密验证速率限制（基于 IP）
+- SSRF 防护（Webhook URL 内网地址校验）
+- CORS 白名单校验（禁止通配符 + allowCredentials）
+- 敏感配置脱敏（Settings API 不返回密钥明文）
+- 命令注入防护（BackupService 参数校验）
+- JSON 注入防护（共享模块使用 JsonObject 构建）
+- Token 自动刷新（401 拦截器 + Mutex 防并发）
+- Token 持久化（Android SharedPreferences）
+- ProGuard 代码混淆（Android Release 构建）
 
 ## 快速开始
 
 ### 环境要求
 
-- JDK 20+
+- JDK 17+
 - Maven 3.8+
 - MySQL 8.0+
 - Node.js 18+
@@ -40,13 +85,22 @@ xxgkami-java/
 CREATE DATABASE kami DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-导入 `kami.sql` 初始化表结构和默认数据。
+启动后端后 JPA 会自动创建表结构（`ddl-auto=update`）。
 
 ### 2. 启动后端
 
 ```bash
 cd backend
-# 修改 src/main/resources/application.properties 中的数据库连接
+
+# 必须配置环境变量
+export JWT_SECRET=your-secret-key-at-least-32-chars
+export DB_PASSWORD=your-database-password
+
+# 可选配置
+export DB_URL=jdbc:mysql://localhost:3306/kami?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+export DB_USERNAME=root
+export CORS_ALLOWED_ORIGINS=http://localhost:5173
+
 mvn clean package -DskipTests
 java -jar target/xxgkami-backend-1.0.2.jar
 ```
@@ -66,10 +120,11 @@ npm run dev
 ### 4. 构建 Android (可选)
 
 ```bash
+cd mobile
 ./gradlew :androidApp:assembleDebug
 ```
 
-APK 生成在 `androidApp/build/outputs/apk/debug/`
+APK 生成在 `mobile/androidApp/build/outputs/apk/debug/`
 
 ---
 
@@ -86,11 +141,9 @@ APK 生成在 `androidApp/build/outputs/apk/debug/`
 | POST | `/auth/email-code` | 发送验证码 | 否 |
 | POST | `/auth/reset-code` | 发送重置验证码 | 否 |
 | POST | `/auth/reset-password` | 重置密码 | 否 |
-| POST | `/auth/refresh` | 刷新 Token | 否 |
+| POST | `/auth/refresh-token` | 刷新 Token | 否 |
 | POST | `/auth/logout` | 退出登录 | 是 |
 | GET | `/auth/user/info` | 获取用户信息 | 是 |
-| GET | `/auth/bind/token` | 获取绑定 Token | 是 |
-| POST | `/auth/bind/validate` | 验证绑定 Token | 否 |
 | POST | `/auth/totp/setup` | TOTP 配置 | 是 |
 | POST | `/auth/totp/enable` | 启用 TOTP | 是 |
 | POST | `/auth/totp/disable` | 禁用 TOTP | 是 |
@@ -101,114 +154,86 @@ APK 生成在 `androidApp/build/outputs/apk/debug/`
 |------|------|------|------|
 | POST | `/cards/use` | 使用卡密 | 否 |
 | POST | `/cards/verify` | 验证卡密 | 否 |
-| POST | `/cards/admin/create` | 管理员创建卡密 | 是 |
-| POST | `/cards/generate` | 生成卡密 | 是 |
-| GET | `/cards/admin/all` | 管理员全部卡密 | 是 |
-| GET | `/cards/admin` | 管理员卡密分页 | 是 |
-| PUT | `/cards/admin/{id}` | 编辑卡密 | 是 |
-| PATCH | `/cards/admin/{id}/status` | 更新卡密状态 | 是 |
+| POST | `/cards/generate` | 生成卡密 | ADMIN |
+| GET | `/cards/admin` | 管理员卡密分页 | ADMIN |
+| PATCH | `/cards/admin/{id}/status` | 更新卡密状态 | ADMIN |
 | GET | `/cards/user/{userId}` | 用户卡密列表 | 是 |
-| GET | `/cards/apikey/{apiKeyId}` | API Key 卡密 | 是 |
-| GET | `/cards/trend` | 使用趋势 | 是 |
 | DELETE | `/cards/{id}` | 删除卡密 | 是 |
 | PUT | `/cards/{id}/disable` | 停用卡密 | 是 |
 | PUT | `/cards/{id}/enable` | 启用卡密 | 是 |
 | PUT | `/cards/{id}/unbind` | 解绑机器码 | 是 |
-| GET | `/cards/stats` | 卡密统计 | 是 |
+| GET | `/cards/stats` | 卡密统计 | ADMIN |
 
 ### 订单管理 `/orders`
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | POST | `/orders` | 创建订单 | 是 |
-| GET | `/orders?userId=X` | 用户订单 | 是 |
-| GET | `/orders/admin` | 管理员订单 | 是 |
-| GET | `/orders/admin/all` | 管理员全部订单 | 是 |
-| POST | `/orders/admin/updateStatus` | 更新订单状态 | 是 |
+| GET | `/orders` | 用户订单 | 是 |
+| GET | `/orders/admin/all` | 管理员全部订单 | ADMIN |
+| POST | `/orders/admin/updateStatus` | 更新订单状态 | ADMIN |
 | GET | `/orders/{orderNo}` | 订单详情 | 是 |
-| PUT | `/orders/{orderNo}/complete` | 完成订单 | 是 |
+| GET | `/orders/stats` | 订单统计 | ADMIN |
 
-### 用户管理
+### 用户管理 `/user` `/admin/users`
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | GET | `/user/profile` | 获取个人资料 | 是 |
 | PUT | `/user/profile` | 更新个人资料 | 是 |
 | POST | `/user/password` | 修改密码 | 是 |
-| POST | `/user/avatar` | 上传头像 | 是 |
-| GET | `/user/social` | 社交绑定列表 | 是 |
-| POST | `/user/social/bind` | 绑定社交账号 | 是 |
-| POST | `/user/social/unbind` | 解绑社交账号 | 是 |
-| GET | `/admin/users` | 管理员用户列表 | 是 |
-| POST | `/admin/users` | 创建用户 | 是 |
-| PUT | `/admin/users/{id}` | 更新用户 | 是 |
-| DELETE | `/admin/users/{id}` | 删除用户 | 是 |
-| PUT | `/admin/users/{id}/status` | 更新用户状态 | 是 |
+| GET | `/admin/users` | 管理员用户列表 | ADMIN |
+| PUT | `/admin/users/{id}` | 更新用户 | ADMIN |
+| DELETE | `/admin/users/{id}` | 删除用户 | ADMIN |
+| PUT | `/admin/users/{id}/status` | 更新用户状态 | ADMIN |
 
 ### API 密钥 `/admin/apikeys`
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/admin/apikeys` | 密钥列表 | 是 |
-| POST | `/admin/apikeys` | 创建密钥 | 是 |
-| PUT | `/admin/apikeys/{id}` | 更新密钥 | 是 |
-| DELETE | `/admin/apikeys/{id}` | 删除密钥 | 是 |
-| POST | `/admin/apikeys/{id}/users` | 分配用户 | 是 |
-| DELETE | `/admin/apikeys/{id}/users/{userId}` | 取消分配 | 是 |
+| GET | `/admin/apikeys` | 密钥列表 | ADMIN |
+| POST | `/admin/apikeys` | 创建密钥 | ADMIN |
+| PUT | `/admin/apikeys/{id}` | 更新密钥 | ADMIN |
+| DELETE | `/admin/apikeys/{id}` | 删除密钥 | ADMIN |
 
-### 定价管理
+### 钱包管理 `/wallet`
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/pricing` | 定价列表 | 是 |
-| POST | `/pricing` | 添加定价 | 是 |
-| PUT | `/pricing/{id}` | 更新定价 | 是 |
-| DELETE | `/pricing/{id}` | 删除定价 | 是 |
+| GET | `/wallet` | 获取钱包 | 是 |
+| POST | `/wallet/recharge` | 余额充值 | 是 |
+| GET | `/wallet/transactions` | 交易记录 | 是 |
 
-### 系统设置
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/settings/all` | 获取全部设置 | 是 |
-| POST | `/settings/save` | 保存设置 | 是 |
-| POST | `/settings/email/test` | 发送测试邮件 | 是 |
-
-### 系统监控 `/monitor`
+### 安全中心 `/security`
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/monitor/all` | 全部监控数据 | 是 |
-| GET | `/monitor/system` | 系统状态 | 是 |
-| GET | `/monitor/database` | 数据库状态 | 是 |
-| GET | `/monitor/api` | API 状态 | 是 |
-| GET | `/monitor/users` | 在线用户 | 是 |
+| GET | `/security/blacklist` | IP 黑名单 | ADMIN |
+| POST | `/security/blacklist` | 添加封禁 | ADMIN |
+| DELETE | `/security/blacklist/{ip}` | 解除封禁 | ADMIN |
+| GET | `/security/access-logs` | 访问日志 | ADMIN |
 
-### 在线用户 `/online`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/online/list` | 在线用户列表 | 是 |
-| POST | `/online/login` | 用户上线 | 是 |
-| POST | `/online/logout` | 用户下线 | 是 |
-| POST | `/online/heartbeat` | 心跳更新 | 是 |
-| GET | `/online/check/{userId}` | 检查在线状态 | 是 |
-
-### 维护与备份
+### 系统设置 `/settings`
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/maintenance/status` | 维护状态 | 是 |
-| POST | `/maintenance/update` | 更新维护设置 | 是 |
-| POST | `/maintenance/clear-cache` | 清理缓存 | 是 |
-| POST | `/maintenance/clear-logs` | 清理日志 | 是 |
-| POST | `/backup/create` | 创建备份 | 是 |
+| GET | `/settings/all` | 获取全部设置（敏感字段脱敏） | ADMIN |
+| POST | `/settings/save` | 保存设置 | ADMIN |
+| POST | `/settings/email/test` | 发送测试邮件 | ADMIN |
+
+### 维护与备份 `/maintenance` `/backup`
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| GET | `/maintenance/status` | 维护状态 | 否 |
+| POST | `/maintenance/update` | 更新维护设置 | ADMIN |
+| POST | `/backup/create` | 创建备份 | ADMIN |
 
 ### 支付 `/payment`
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | POST | `/payment/pay` | 发起支付 | 是 |
-| POST | `/payment/create` | 创建支付 | 是 |
 | POST | `/payment/notify` | 支付回调 | 否 |
 | GET | `/payment/return` | 支付返回 | 否 |
 
@@ -221,65 +246,7 @@ APK 生成在 `androidApp/build/outputs/apk/debug/`
 | POST | `/public/cards/machine-bind/query` | 查询机器码绑定 | 否 |
 | POST | `/public/cards/machine-bind/unbind` | 自助解绑机器码 | 否 |
 
-### 钱包管理 `/wallet` [新增]
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/wallet` | 获取钱包 | 是 |
-| POST | `/wallet/recharge` | 余额充值 | 是 |
-| GET | `/wallet/transactions` | 交易记录 | 是 |
-
-### 安全中心 `/security` [新增]
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/security/blacklist` | IP 黑名单 | 是 |
-| POST | `/security/blacklist` | 添加封禁 | 是 |
-| DELETE | `/security/blacklist/{ip}` | 解除封禁 | 是 |
-| GET | `/security/access-logs` | 访问日志 | 是 |
-
 ---
-
-## 前端说明
-
-前端代码直接使用原仓库 [xxgkami-pro](https://github.com/xiaoxiaoguai-yyds/xxgkami-pro) 的 Vue 3 前端。
-
-**主要页面:**
-- 首页 - 轮播图、特性展示、卡密验证
-- 管理后台 - 数据概览、卡密管理、订单管理、用户管理、API 密钥、定价管理、系统设置、安全中心、系统监控
-- 用户中心 - 个人面板、我的卡密、购买中心、订单、个人资料
-
-**启动:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## Android 客户端
-
-基于 Jetpack Compose + Material 3 构建，使用 KMP 共享模块的 API 客户端。
-
-**主要页面:**
-- 首页 - 卡密验证入口
-- 登录/注册 - 用户认证
-- 我的卡密 - 卡密列表
-- 订单 - 订单记录
-- 钱包 - 余额管理
-
-**构建:**
-```bash
-./gradlew :androidApp:assembleDebug
-```
-
-## Kotlin Multiplatform 共享模块
-
-跨平台共享模块，支持 Android、iOS、Desktop。
-
-**模块结构:**
-- `api/` - Ktor HTTP 客户端 (ApiClient, AuthApi, CardApi, OrderApi, WalletApi)
-- `model/` - 数据模型 (User, Card, Order, Wallet, ApiResponse)
-- `util/` - 工具类 (TokenManager)
 
 ## 默认账号
 
