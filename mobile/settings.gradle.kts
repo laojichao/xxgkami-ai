@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "xxgkami-java"
+rootProject.name = "xxgkami-mobile"
 include(":shared")
 include(":androidApp")

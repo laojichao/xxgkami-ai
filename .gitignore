@@ -30,14 +30,15 @@ frontend/.env.local
 frontend/.env.*.local
 
 # Android
-androidApp/build/
-androidApp/.gradle/
+mobile/androidApp/build/
+mobile/androidApp/.gradle/
 *.apk
 *.aab
 
 # KMP
-shared/build/
-shared/.gradle/
+mobile/shared/build/
+mobile/shared/.gradle/
+mobile/.gradle/
 
 # OS
 .DS_Store
