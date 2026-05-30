@@ -1,0 +1,425 @@
+<template>
+  <div class="system-info-container">
+    <div class="page-header">
+      <h2>系统信息</h2>
+      <p class="subtitle">查看系统版本、作者信息及开源协议</p>
+    </div>
+
+    <div class="info-content">
+      <el-card class="info-card">
+        <template #header>
+          <div class="card-header">
+            <span>基本信息</span>
+          </div>
+        </template>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="系统名称">XXG-KAMI-PRO 卡密验证系统</el-descriptions-item>
+          <el-descriptions-item label="当前版本">
+            <div class="version-row">
+              <span>{{ currentVersion }}</span>
+              <el-button type="primary" link size="small" @click="checkUpdate" :loading="checking">检查更新</el-button>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="发布时间">2026-05-06</el-descriptions-item>
+          <el-descriptions-item label="开发语言">Vue 3 + Spring Boot 3</el-descriptions-item>
+          <el-descriptions-item label="官方网站">
+            <a href="https://www.xxgkami.com" target="_blank" class="link">www.xxgkami.com</a>
+          </el-descriptions-item>
+        </el-descriptions>
+      </el-card>
+
+      <el-card class="info-card">
+        <template #header>
+          <div class="card-header">
+            <span>开发团队</span>
+          </div>
+        </template>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="作者">小小怪</el-descriptions-item>
+          <el-descriptions-item label="联系邮箱">xxgyyds@vip.qq.com</el-descriptions-item>
+          <el-descriptions-item label="QQ群组">
+            <a href="https://qm.qq.com/cgi-bin/qm/qr?k=5q7h3tdOC-fXyszk3kGCJxIImDW_hVBP&jump_from=webapi&authKey=n7o2H5vcTCkRNpnTbOSU9BxI4jP3WKv9Qytmfk2I2Y+zP28lb614xqvd3+qETV8x" target="_blank" class="link">1050160397 (点击加入)</a>
+          </el-descriptions-item>
+          <el-descriptions-item label="Gitee">
+            <a href="https://gitee.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" class="link">https://gitee.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
+          </el-descriptions-item>
+          <el-descriptions-item label="GitHub">
+            <a href="https://github.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" class="link">https://github.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
+          </el-descriptions-item>
+          <el-descriptions-item label="AtomGit">
+            <a href="https://atomgit.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" class="link">https://atomgit.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
+          </el-descriptions-item>
+        </el-descriptions>
+      </el-card>
+
+      <el-card class="info-card">
+        <template #header>
+          <div class="card-header">
+            <span>开源协议</span>
+          </div>
+        </template>
+        <div class="license-content">
+          <p>本系统遵循 Apache-2.0 开源协议。</p>
+          <p>您可以免费使用、修改和分发本软件，但必须保留原作者的版权声明。</p>
+        </div>
+      </el-card>
+
+      <!-- 赞助模块 -->
+      <el-card class="info-card sponsor-card">
+        <template #header>
+          <div class="card-header">
+            <span>赞助开源</span>
+          </div>
+        </template>
+        <div class="sponsor-content">
+          <img src="../assets/aifadian.svg" alt="爱发电" class="sponsor-logo">
+          <p>如果觉得本项目对您有帮助，欢迎赞助支持作者持续开发！</p>
+          <a href="https://ifdian.net/a/xxgyyds" target="_blank" class="sponsor-btn">
+            <el-button type="primary" size="large" color="#946ce6" :dark="false">
+              前往爱发电赞助
+            </el-button>
+          </a>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 更新时间轴 -->
+    <div class="timeline-section">
+      <el-card>
+        <template #header>
+          <div class="card-header">
+            <span>版本历程</span>
+          </div>
+        </template>
+        <el-timeline>
+          <el-timeline-item timestamp="2026-05-06" placement="top" type="primary" size="large">
+            <el-card>
+              <h4>v1.0.6 版本更新</h4>
+              <p>1. 新增 API 密钥管理页「代码实例」入口（位于「接口文档」左侧），便于快速查阅核销接口调用方式</p>
+              <p>2. 新增核销接口多语言示例弹窗：覆盖 Shell（cURL/Wget/HTTPie 等）、PowerShell、Node.js、浏览器/JavaScript、HTML、Vue 3、Python、PHP、Go、Java、C#、Ruby、Kotlin、Dart、Rust、Swift 等常见语言与工具</p>
+              <p>3. 示例数据独立维护于 apiUseCardCodeExamples.js，弹窗内支持左侧切换语言、一键复制源码</p>
+              <p>4. 集成 highlight.js（GitHub Dark 主题），各语言代码块支持语法高亮；展示当前环境 API 根路径参考，便于替换示例中的 BASE_URL</p>
+              <p>5. 卡密管理：支持按设备码/机器码查找对应卡密；导出支持筛选「未使用」「已使用」</p>
+              <p>6. 时间卡规则：新增「叠加 / 单张」模式——单张为现行逻辑（以激活时刻起算到期）；叠加模式下同一设备续充时间卡时，将新卡时长累加到当前生效授权的到期时间（原到期时间 + 新卡含时），实现无缝续期；参与叠加的卡密标记为已使用（叠加）或已合并；不同面额仅叠加时长数值、不改写套餐类型；修正原同机多张时间卡「后者覆盖前者剩余时长、每次均以当前时间重新起算」及多记录并行不合理倒计时等问题</p>
+              <p>7. 一机一码增强：卡密在首台设备绑定且为已使用后，其它机器码无法再通过该卡核销，补全跨机校验与防重复滥用</p>
+              <p>8. API 密钥能力：支持按密钥配置「同一机器码对指定卡密类型仅可成功核销一次」（例如每台机仅一次 1 天体验卡）</p>
+              <p>9. 用户首页：支持用户自行解绑已绑定的机器码（无需仅依赖管理员后台）</p>
+              <p>10. 管理后台：顶部导航栏布局与交互重做，提升入口清晰度与操作效率</p>
+              <p>11. 修正部分示例片段（如 Go JSON 请求体、C# HttpClient 调用等），保证可对照使用</p>
+              <p>12. 修复次数卡剩余最后一次无法正常扣减、次数无法归零的问题</p>
+              <p>13. 修复已激活时间卡在后台修改时长不生效的问题</p>
+            </el-card>
+          </el-timeline-item>
+          <el-timeline-item timestamp="2026-04-08" placement="top" size="large">
+            <el-card>
+              <h4>v1.0.5 版本更新</h4>
+              <p>1. 新增一机一码功能：卡密首次核销时自动绑定机器码，后续验证必须匹配</p>
+              <p>2. 新增机器码管理：卡密列表展示机器码列，编辑弹窗支持重置机器码</p>
+              <p>3. 新增时间卡密实时倒计时：管理端按秒刷新显示剩余时间</p>
+              <p>4. 新增卡密启用/暂停功能：已使用卡密被暂停后提示"卡密被停止使用"</p>
+              <p>5. 新增重复验证控制：时间卡密支持开启/关闭重复验证，关闭后仅允许验证一次</p>
+              <p>6. 新增批量创建进度条：大量创建卡密时逐条创建，实时显示进度</p>
+              <p>7. 优化登录页 UI：管理员与用户登录页采用不同主题，管理员页新增返回入口</p>
+              <p>8. 优化自定义接口：输入/输出参数新增机器码变量，新增机器码不匹配/重复验证拒绝状态码</p>
+              <p>9. 修复高级时间卡密激活后管理端显示"未激活"的问题</p>
+              <p>10. 修复新创建卡密立即开始倒计时的问题（改为首次核销后才计时）</p>
+              <p>11. 修复卡密导出时间卡到期时间为空的问题</p>
+              <p>12. 修复 API 管理无法分配用户的问题</p>
+              <p>13. 修复 CORS 不支持 PATCH 方法的问题</p>
+            </el-card>
+          </el-timeline-item>
+          <el-timeline-item timestamp="2026-03-05" placement="top" size="large">
+            <el-card>
+              <h4>v1.0.4 版本更新</h4>
+              <p>1. 修复次数卡密在设置过期时间后被误识别为时间卡密的问题</p>
+              <p>2. 优化卡密验证核心逻辑，优先根据总次数判断卡密类型</p>
+              <p>3. 修复部分已知后端逻辑问题，提升系统稳定性</p>
+            </el-card>
+          </el-timeline-item>
+          <el-timeline-item timestamp="2026-02-13" placement="top" size="large">
+            <el-card>
+              <h4>v1.0.3 版本更新</h4>
+              <p>1. 全面优化移动端 UI 体验，重构用户管理页面为响应式卡片布局</p>
+              <p>2. 修复移动端侧边栏菜单无法展开的问题，优化首页导航栏显示</p>
+              <p>3. API 接口自定义返回配置新增“卡密状态”字段支持</p>
+              <p>4. 优化管理后台顶部导航栏，移除冗余的消息通知入口</p>
+              <p>5. 修复部分已知 UI 溢出和布局错位问题</p>
+            </el-card>
+          </el-timeline-item>
+          <el-timeline-item timestamp="2026-02-09" placement="top" size="large">
+            <el-card>
+              <h4>v1.0.2 版本更新</h4>
+              <p>1. 修复用户注册时因邮件配置缺失导致的 500 错误，优化异常处理逻辑</p>
+              <p>2. 升级 xxgkami 命令行工具，新增数据库智能增量更新功能</p>
+              <p>3. 优化系统安装脚本，提升部署体验</p>
+              <p>4. 修复部分已知的小问题</p>
+            </el-card>
+          </el-timeline-item>
+          <el-timeline-item timestamp="2026-01-30" placement="top" size="large">
+            <el-card>
+              <h4>v1.0.1 版本更新</h4>
+              <p>1. 完善管理员账号密码加密逻辑，数据库存储由明文全面升级为 BCrypt 加密</p>
+              <p>2. 新增系统信息页面，支持查看版本信息、开源协议及开发团队</p>
+              <p>3. 新增在线检查更新功能，提供国内/海外一键更新脚本</p>
+              <p>4. 优化前端导航栏布局，提升用户体验</p>
+            </el-card>
+          </el-timeline-item>
+          <el-timeline-item timestamp="2026-01-17" placement="top">
+            <el-card>
+              <h4>v1.0.0 正式发布</h4>
+              <p>小小怪卡密验证系统 1.0 正式发布</p>
+            </el-card>
+          </el-timeline-item>
+        </el-timeline>
+      </el-card>
+    </div>
+
+    <!-- 更新提示弹窗 -->
+    <el-dialog v-model="showUpdateDialog" title="发现新版本" width="500px">
+      <div v-if="updateInfo">
+        <div class="new-version">最新版本: v{{ updateInfo.version }}</div>
+        <div class="update-date">发布时间: {{ updateInfo.buildDate }}</div>
+        <div class="changelog-title">更新内容:</div>
+        <ul class="changelog-list">
+          <li v-for="(item, index) in updateInfo.changelog" :key="index">{{ item }}</li>
+        </ul>
+        
+        <div v-if="updateInfo.updateScripts" class="update-scripts">
+          <div class="script-block">
+            <div class="script-header">
+              <span>国内更新脚本</span>
+              <el-button type="primary" link size="small" @click="copyScript(updateInfo.updateScripts.cn)">复制</el-button>
+            </div>
+            <div class="script-content">{{ updateInfo.updateScripts.cn }}</div>
+          </div>
+          <div class="script-block">
+            <div class="script-header">
+              <span>海外更新脚本</span>
+              <el-button type="primary" link size="small" @click="copyScript(updateInfo.updateScripts.global)">复制</el-button>
+            </div>
+            <div class="script-content">{{ updateInfo.updateScripts.global }}</div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showUpdateDialog = false">关闭</el-button>
+          <el-button type="primary" @click="goToRepo">前往仓库</el-button>
+        </span>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { copyToClipboard } from '../utils/clipboard.js'
+
+const currentVersion = 'v1.0.6'
+const checking = ref(false)
+const showUpdateDialog = ref(false)
+const updateInfo = ref(null)
+
+const copyScript = async (text) => {
+  const success = await copyToClipboard(text)
+  if (success) {
+    ElMessage.success('脚本已复制到剪贴板')
+  } else {
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
+const checkUpdate = async () => {
+  checking.value = true
+  try {
+    // 使用相对路径调用接口，避免跨域和混合内容问题
+    // 浏览器会自动使用当前页面的协议和域名
+    const res = await fetch('/api/monitor/check-update')
+    if (!res.ok) throw new Error('检查更新失败')
+    
+    const data = await res.json()
+    const remoteVersion = data.version
+    
+    // 简单的版本比较逻辑：如果不相等则提示更新
+    // 实际项目中建议使用 semver 库进行版本号比较
+    if (remoteVersion !== currentVersion.replace('v', '')) {
+      updateInfo.value = data
+      showUpdateDialog.value = true
+    } else {
+      ElMessage.success('当前已是最新版本')
+    }
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('检查更新失败，请稍后重试')
+  } finally {
+    checking.value = false
+  }
+}
+
+const goToRepo = () => {
+  if (updateInfo.value && updateInfo.value.repoUrl) {
+    window.open(updateInfo.value.repoUrl, '_blank')
+    showUpdateDialog.value = false
+  }
+}
+</script>
+
+<style scoped>
+.system-info-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h2 {
+  font-size: 24px;
+  color: #303133;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: #909399;
+  font-size: 14px;
+}
+
+.sponsor-card {
+  border-color: #946ce6;
+}
+
+.sponsor-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 0;
+  gap: 15px;
+}
+
+.sponsor-logo {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 10px;
+}
+
+.sponsor-btn {
+  text-decoration: none;
+}
+
+.info-content {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  margin-bottom: 24px;
+}
+
+.timeline-section {
+  margin-top: 24px;
+}
+
+.timeline-section h4 {
+  margin: 0 0 10px;
+  color: #303133;
+}
+
+.timeline-section p {
+  margin: 0 0 5px;
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.info-card {
+  height: 100%;
+}
+
+.card-header {
+  font-weight: bold;
+}
+
+.link {
+  color: #409EFF;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.license-content {
+  color: #606266;
+  line-height: 1.6;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.new-version {
+  font-size: 18px;
+  font-weight: bold;
+  color: #409EFF;
+  margin-bottom: 8px;
+}
+
+.update-date {
+  color: #909399;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.changelog-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.changelog-list {
+  padding-left: 20px;
+  margin-bottom: 16px;
+  color: #606266;
+}
+
+.changelog-list li {
+  margin-bottom: 4px;
+}
+
+.update-scripts {
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+}
+
+.script-block {
+  margin-bottom: 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.script-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: #606266;
+  font-weight: bold;
+}
+
+.script-content {
+  font-family: monospace;
+  background-color: #303133;
+  color: #fff;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+</style>

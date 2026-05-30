@@ -1,0 +1,71 @@
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.log
+target/
+build/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+
+# Maven
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# Android
+androidApp/build/
+androidApp/.gradle/
+*.apk
+*.aab
+
+# KMP
+shared/build/
+shared/.gradle/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Env
+.env
+.env.local
+*.log
+
+# Keys
+backend/keys/
+backend/backups/
+
+# Kotlin
+*.kotlin_module
+local.properties
+*.hprof
+
+# Security
+*.pem
+*.key
+*.p12
+*.env.production
+
+# Misc
+*.bak
+*.tmp
+*.orig
+*~
