@@ -72,7 +72,7 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok("密码重置成功"));
     }
 
-    @PostMapping("/refresh-token")
+    @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(@RequestBody TokenRefreshRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(authService.refreshToken(request)));
     }

@@ -13,16 +13,14 @@ import com.xxgkami.android.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewModel()) {
+fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewModel(), onLoginSuccess: () -> Unit = {}) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val isLoading by viewModel.isLoading.collectAsState()
     val loginState by viewModel.loginState.collectAsState()
 
     LaunchedEffect(loginState) {
-        if (loginState?.success == true) navController.navigate("cards") {
-            popUpTo("home") { inclusive = true }
-        }
+        if (loginState?.success == true) onLoginSuccess()
     }
 
     Scaffold(topBar = { TopAppBar(title = { Text("登录") }) }) { padding ->

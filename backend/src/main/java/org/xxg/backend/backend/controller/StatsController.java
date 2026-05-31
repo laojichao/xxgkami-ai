@@ -21,4 +21,9 @@ public class StatsController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> overview() {
         return ResponseEntity.ok(ApiResponse.ok(statsService.getOverview()));
     }
+
+    @GetMapping("/user-activity")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> userActivity(@RequestParam(defaultValue = "7") int days) {
+        return ResponseEntity.ok(ApiResponse.ok(statsService.getUserActivityStats(days)));
+    }
 }

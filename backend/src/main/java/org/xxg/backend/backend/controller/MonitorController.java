@@ -88,4 +88,17 @@ public class MonitorController {
         users.put("onlineUsers", onlineUserService.getOnlineUsers());
         return users;
     }
+
+    @GetMapping("/check-update")
+    public ResponseEntity<Map<String, Object>> checkUpdate() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("version", "1.0.2");
+        result.put("repoUrl", "https://github.com/user/xxgkami-ai");
+        Map<String, String> scripts = new HashMap<>();
+        scripts.put("cn", "curl -sSL https://raw.githubusercontent.com/user/xxgkami-ai/main/install.sh | bash");
+        scripts.put("global", "curl -sSL https://raw.githubusercontent.com/user/xxgkami-ai/main/install.sh | bash");
+        result.put("updateScripts", scripts);
+        return ResponseEntity.ok(result);
+    }
 }

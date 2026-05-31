@@ -31,4 +31,13 @@ public class StatsService {
         overview.put("dashboard", getDashboardStats());
         return overview;
     }
+
+    public Map<String, Object> getUserActivityStats(int days) {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("period", days);
+        stats.put("activeUsers", userService.getUserStats().getOrDefault("totalUsers", 0));
+        stats.put("newRegistrations", 0);
+        stats.put("loginCount", 0);
+        return stats;
+    }
 }

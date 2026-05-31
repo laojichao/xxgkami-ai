@@ -198,10 +198,14 @@
                 <el-descriptions-item label="状态">
                   <el-tag :type="getStatusType(queryResult.status)" effect="plain">{{ getStatusText(queryResult.status) }}</el-tag>
                 </el-descriptions-item>
+                <el-descriptions-item label="类型">{{ queryResult.cardType === 'time' ? '时间卡' : '次数卡' }}</el-descriptions-item>
                 <el-descriptions-item label="创建时间">{{ queryResult.createTime }}</el-descriptions-item>
                 <el-descriptions-item label="使用时间">{{ queryResult.useTime || '未使用' }}</el-descriptions-item>
                 <el-descriptions-item label="过期时间">{{ queryResult.expireTime || '永久有效' }}</el-descriptions-item>
-                <el-descriptions-item label="剩余时长">{{ queryResult.remainingTime || '永久' }}</el-descriptions-item>
+                <el-descriptions-item v-if="queryResult.cardType === 'time'" label="时长">{{ queryResult.duration }} 天</el-descriptions-item>
+                <el-descriptions-item v-if="queryResult.cardType === 'count'" label="总次数">{{ queryResult.totalCount }}</el-descriptions-item>
+                <el-descriptions-item v-if="queryResult.cardType === 'count'" label="剩余次数">{{ queryResult.remainingCount }}</el-descriptions-item>
+                <el-descriptions-item label="机器码">{{ queryResult.machineCode || '未绑定' }}</el-descriptions-item>
               </el-descriptions>
             </div>
           </el-card>
@@ -669,14 +673,35 @@
         </el-menu>
       </div>
     </el-drawer>
+
+    <!-- 卡密详情对话框 -->
+    <el-dialog v-model="cardDetailVisible" title="卡密详情" width="500px">
+      <el-descriptions :column="1" border v-if="selectedCard">
+        <el-descriptions-item label="卡密">{{ selectedCard.cardKey }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getStatusType(selectedCard.status)" effect="plain">{{ getStatusText(selectedCard.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="类型">{{ selectedCard.cardType === 'time' ? '时间卡' : '次数卡' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ selectedCard.createTime }}</el-descriptions-item>
+        <el-descriptions-item label="使用时间">{{ selectedCard.useTime || '未使用' }}</el-descriptions-item>
+        <el-descriptions-item label="过期时间">{{ selectedCard.expireTime || '无' }}</el-descriptions-item>
+        <el-descriptions-item v-if="selectedCard.cardType === 'time'" label="时长">{{ selectedCard.duration }} 天</el-descriptions-item>
+        <el-descriptions-item v-if="selectedCard.cardType === 'count'" label="总次数">{{ selectedCard.totalCount }}</el-descriptions-item>
+        <el-descriptions-item v-if="selectedCard.cardType === 'count'" label="剩余次数">{{ selectedCard.remainingCount }}</el-descriptions-item>
+        <el-descriptions-item label="机器码">{{ selectedCard.machineCode || '未绑定' }}</el-descriptions-item>
+        <el-descriptions-item label="验证方式">{{ selectedCard.verifyMethod || 'web' }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="cardDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockCardPrices } from '../data/mockData.js'
-import { userProfileApi, cardApi, pricingApi, orderApi, statsApi, paymentApi, settingsApi } from '../services/api.js'
+import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi } from '../services/api.js'
 import UserSettingsPage from './UserSettingsPage.vue'
 
 export default {
@@ -711,10 +736,10 @@ export default {
 
     // 统计数据
     const stats = reactive({
-      totalCards: 25,
-      usedCards: 18,
-      unusedCards: 5,
-      expiredCards: 2
+      totalCards: 0,
+      usedCards: 0,
+      unusedCards: 0,
+      expiredCards: 0
     })
 
     // 查询表单
@@ -724,6 +749,10 @@ export default {
 
     // 查询结果
     const queryResult = ref(null)
+
+    // 卡密详情对话框
+    const cardDetailVisible = ref(false)
+    const selectedCard = ref(null)
 
     // 个人资料表单
     const profileForm = reactive({
@@ -909,39 +938,17 @@ export default {
 
 
     // 最近使用记录
-    const recentRecords = ref([
-      {
-        cardKey: 'XXGK-2024-****-1234',
-        useTime: '2024-01-15 14:30:00',
-        deviceId: 'WIN-PC-001',
-        status: '成功'
-      },
-      {
-        cardKey: 'XXGK-2024-****-5678',
-        useTime: '2024-01-14 09:15:00',
-        deviceId: 'WIN-PC-001',
-        status: '成功'
-      }
-    ])
+    const recentRecords = ref([])
 
     // 使用记录
-    const usageRecords = ref([
-      {
-        cardKey: 'XXGK-2024-****-1234',
-        useTime: '2024-01-15 14:30:00',
-        deviceId: 'WIN-PC-001',
-        ipAddress: '192.168.1.100',
-        status: '成功',
-        remark: '正常使用'
-      }
-    ])
+    const usageRecords = ref([])
 
     // 我的卡密
     const myCards = ref([])
 
     // 购买卡密相关数据
-    const timeCardOptions = ref(mockCardPrices.timeCards)
-    const countCardOptions = ref(mockCardPrices.countCards)
+    const timeCardOptions = ref([])
+    const countCardOptions = ref([])
     const selectedTimeCard = ref(null)
     const selectedCountCard = ref(null)
     const timeCardQuantity = ref(1)
@@ -954,10 +961,10 @@ export default {
         try {
             const userId = userInfo.id || 1; // Fallback
             const timestamp = new Date().getTime(); // Add timestamp to prevent caching
-            
+
             // 并行获取订单和卡密状态
             const [ordersResult, cardsResult] = await Promise.all([
-                orderApi.getOrders(userId, { t: timestamp }), // Pass timestamp if API supports it, or just rely on headers
+                orderApi.getOrders(),
                 cardApi.getUserCards(userId)
             ]);
 
@@ -1047,9 +1054,7 @@ export default {
         }
       } catch (e) {
         console.error("Failed to fetch pricing", e);
-        // Fallback
-        timeCardOptions.value = mockCardPrices.timeCards;
-        countCardOptions.value = mockCardPrices.countCards;
+        ElMessage.error("获取定价信息失败");
       }
     }
 
@@ -1152,26 +1157,29 @@ export default {
       activeMenu.value = index
     }
 
-    const queryCard = () => {
+    const queryCard = async () => {
       if (!queryForm.cardKey) {
         ElMessage.warning('请输入卡密')
         return
       }
-      
+
       loading.value = true
-      // 模拟查询
-      setTimeout(() => {
-        queryResult.value = {
-          cardKey: queryForm.cardKey,
-          status: 1,
-          createTime: '2024-01-10 10:00:00',
-          useTime: '2024-01-15 14:30:00',
-          expireTime: '2024-02-10 10:00:00',
-          remainingTime: '25天'
+      try {
+        const result = await cardApi.queryCard(queryForm.cardKey)
+        if (result.success) {
+          queryResult.value = result.data
+          ElMessage.success('查询成功')
+        } else {
+          ElMessage.error(result.message || '查询失败')
+          queryResult.value = null
         }
+      } catch (error) {
+        console.error(error)
+        ElMessage.error(error.message || '查询失败')
+        queryResult.value = null
+      } finally {
         loading.value = false
-        ElMessage.success('查询成功')
-      }, 1000)
+      }
     }
 
     const getStatusType = (status) => {
@@ -1207,7 +1215,8 @@ export default {
     }
 
     const viewCardDetail = (card) => {
-      ElMessage.info('查看卡密详情功能开发中...')
+      selectedCard.value = card
+      cardDetailVisible.value = true
     }
 
     // Removed old updateProfile and resetProfile
@@ -1374,6 +1383,8 @@ export default {
         stats,
         queryForm,
         queryResult,
+        cardDetailVisible,
+        selectedCard,
         profileForm,
         recentRecords,
         usageRecords,

@@ -6,8 +6,8 @@ import kotlinx.serialization.json.Json
 class OrderApi(private val client: ApiClient) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun getMyOrders(userId: Int): ApiResponse<List<Order>> {
-        val response = client.get("/orders?userId=$userId")
+    suspend fun getMyOrders(): ApiResponse<List<Order>> {
+        val response = client.get("/orders")
         return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.ListSerializer(Order.serializer())), response)
     }
 

@@ -130,4 +130,25 @@ public class CardController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> getStats() {
         return ResponseEntity.ok(ApiResponse.ok(cardService.getStats()));
     }
+
+    @GetMapping("/query")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> queryCard(@RequestParam String cardKey) {
+        Card card = cardService.getCardByKey(cardKey);
+        if (card == null) {
+            return ResponseEntity.ok(ApiResponse.error("卡密不存在"));
+        }
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("cardKey", card.getCardKey());
+        result.put("status", card.getStatus());
+        result.put("cardType", card.getCardType() != null ? card.getCardType().name() : null);
+        result.put("createTime", card.getCreateTime());
+        result.put("useTime", card.getUseTime());
+        result.put("expireTime", card.getExpireTime());
+        result.put("duration", card.getDuration());
+        result.put("totalCount", card.getTotalCount());
+        result.put("remainingCount", card.getRemainingCount());
+        result.put("machineCode", card.getMachineCode());
+        result.put("verifyMethod", card.getVerifyMethod() != null ? card.getVerifyMethod().name() : null);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
 }

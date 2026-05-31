@@ -23,17 +23,14 @@ class AuthViewModel : ViewModel() {
     private val _userInfo = MutableStateFlow<User?>(null)
     val userInfo: StateFlow<User?> = _userInfo
 
-    init {
-        // Set up token refresh callback
-        ApiProvider.setOnTokenRefreshed { newToken, newRefreshToken ->
-            // Token refreshed automatically by ApiClient
-        }
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
 
-        // Set up logout callback (called when refresh fails)
-        ApiProvider.setOnLogout {
-            _loginState.value = null
-            _userInfo.value = null
-        }
+    private val _registerSuccess = MutableStateFlow(false)
+    val registerSuccess: StateFlow<Boolean> = _registerSuccess
+
+    init {
+        // Token callbacks are managed by TokenStore to avoid conflicts
     }
 
     fun login(username: String, password: String) {
@@ -79,16 +76,26 @@ class AuthViewModel : ViewModel() {
     fun register(username: String, password: String, email: String, code: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
+            _registerSuccess.value = false
             try {
                 authApi.register(RegisterRequest(username, password, email, code))
-            } catch (_: Exception) { }
+                _registerSuccess.value = true
+            } catch (e: Exception) {
+                _error.value = e.message ?: "注册失败"
+            }
             _isLoading.value = false
         }
     }
 
     fun sendCode(email: String, type: String = "register") {
         viewModelScope.launch {
-            try { authApi.sendEmailCode(email, type) } catch (_: Exception) {}
+            _error.value = null
+            try {
+                authApi.sendEmailCode(email, type)
+            } catch (e: Exception) {
+                _error.value = e.message ?: "发送验证码失败"
+            }
         }
     }
 
@@ -97,7 +104,9 @@ class AuthViewModel : ViewModel() {
             try {
                 val response = authApi.getUserInfo()
                 _userInfo.value = response.data
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _error.value = e.message ?: "获取用户信息失败"
+            }
         }
     }
 
@@ -108,5 +117,9 @@ class AuthViewModel : ViewModel() {
             _loginState.value = null
             _userInfo.value = null
         }
+    }
+
+    fun clearError() {
+        _error.value = null
     }
 }

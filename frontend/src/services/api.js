@@ -368,6 +368,13 @@ export const monitorApi = {
    */
   async getAllMonitorData() {
     return await apiRequest('/monitor/all');
+  },
+
+  /**
+   * 检查系统更新
+   */
+  async checkUpdate() {
+    return await apiRequest('/monitor/check-update');
   }
 };
 
@@ -557,6 +564,13 @@ export const cardApi = {
   },
 
   /**
+   * 查询单个卡密详情（需要登录）
+   */
+  async queryCard(cardKey) {
+    return await apiRequest(`/cards/query?cardKey=${encodeURIComponent(cardKey)}`);
+  },
+
+  /**
    * 公开页：查询卡密是否已绑定机器码（无需登录）
    */
   async publicMachineBindQuery(cardKey) {
@@ -657,10 +671,9 @@ export const orderApi = {
 
   /**
    * 获取用户订单列表
-   * @param {number} userId
    */
-  async getOrders(userId) {
-    return await apiRequest(`/orders?userId=${userId}`);
+  async getOrders() {
+    return await apiRequest('/orders');
   },
 
   /**

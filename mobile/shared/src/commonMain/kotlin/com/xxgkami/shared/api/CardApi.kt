@@ -31,9 +31,10 @@ class CardApi(private val client: ApiClient) {
         return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.MapSerializer(kotlinx.serialization.builtins.serializer<String>(), kotlinx.serialization.builtins.serializer<String>())), response)
     }
 
-    suspend fun machineUnbind(cardKey: String): ApiResponse<Unit> {
+    suspend fun machineUnbind(cardKey: String, machineCode: String): ApiResponse<Unit> {
         val body = buildJsonObject {
             put("card_key", JsonPrimitive(cardKey))
+            put("machine_code", JsonPrimitive(machineCode))
         }.toString()
         val response = client.post("/public/cards/machine-bind/unbind", body)
         return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.serializer<Unit>()), response)

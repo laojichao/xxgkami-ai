@@ -16,12 +16,23 @@ class OrderViewModel : ViewModel() {
     private val _orders = MutableStateFlow<List<Order>>(emptyList())
     val orders: StateFlow<List<Order>> = _orders
 
-    fun loadOrders(userId: Int) {
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+
+    fun loadOrders() {
         viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
             try {
-                val response = orderApi.getMyOrders(userId)
+                val response = orderApi.getMyOrders()
                 _orders.value = response.data ?: emptyList()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _error.value = e.message ?: "加载订单失败"
+            }
+            _isLoading.value = false
         }
     }
 }

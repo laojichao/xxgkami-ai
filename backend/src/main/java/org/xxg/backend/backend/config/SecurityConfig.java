@@ -38,14 +38,14 @@ public class SecurityConfig {
                     "/auth/login", "/auth/register", "/auth/register-bind",
                     "/auth/user/login", "/auth/admin/login",
                     "/auth/email-code", "/auth/reset-code", "/auth/reset-password",
-                    "/auth/bind/validate", "/auth/refresh-token",
+                    "/auth/bind/validate", "/auth/refresh",
                     // Public endpoints
                     "/public/**",
                     // Payment callbacks
                     "/payment/notify", "/payment/return",
                     // System
                     "/actuator/**", "/error",
-                    "/system/health",
+                    "/system/health", "/monitor/check-update",
                     // Card use (open API)
                     "/cards/use", "/cards/verify",
                     // Custom/open API

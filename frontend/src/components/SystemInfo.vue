@@ -215,6 +215,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { copyToClipboard } from '../utils/clipboard.js'
+import { monitorApi } from '../services/api.js'
 
 const currentVersion = 'v1.0.6'
 const checking = ref(false)
@@ -233,16 +234,10 @@ const copyScript = async (text) => {
 const checkUpdate = async () => {
   checking.value = true
   try {
-    // 使用相对路径调用接口，避免跨域和混合内容问题
-    // 浏览器会自动使用当前页面的协议和域名
-    const res = await fetch('/api/monitor/check-update')
-    if (!res.ok) throw new Error('检查更新失败')
-    
-    const data = await res.json()
+    const data = await monitorApi.checkUpdate()
+    if (!data.success) throw new Error(data.message || '检查更新失败')
+
     const remoteVersion = data.version
-    
-    // 简单的版本比较逻辑：如果不相等则提示更新
-    // 实际项目中建议使用 semver 库进行版本号比较
     if (remoteVersion !== currentVersion.replace('v', '')) {
       updateInfo.value = data
       showUpdateDialog.value = true
