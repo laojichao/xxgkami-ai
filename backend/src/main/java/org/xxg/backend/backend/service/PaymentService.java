@@ -14,6 +14,10 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+/**
+ * 支付服务（易支付对接）
+ * 处理支付订单的创建、支付回调验证等支付相关业务逻辑
+ */
 @Service
 public class PaymentService {
 
@@ -32,6 +36,11 @@ public class PaymentService {
         this.paymentUtil = paymentUtil;
     }
 
+    /**
+     * 创建支付订单，生成易支付跳转URL
+     * @param orderNo 订单编号
+     * @return 包含支付跳转URL的Map
+     */
     public Map<String, String> createPayment(String orderNo) {
         Order order = orderRepository.findByOrderNo(orderNo)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
@@ -64,6 +73,12 @@ public class PaymentService {
         return result;
     }
 
+    /**
+     * 处理易支付异步回调通知
+     * 验证签名并完成订单状态更新
+     * @param params 回调参数
+     * @return "success"表示处理成功，"fail"表示处理失败
+     */
     @Transactional
     public String handlePaymentCallback(Map<String, String> params) {
         String key = getSettingValue("epay_key", "");
@@ -84,12 +99,23 @@ public class PaymentService {
         return "fail";
     }
 
+    /**
+     * 从数据库获取系统配置项的值
+     * @param name 配置项名称
+     * @param defaultValue 默认值
+     * @return 配置项值，不存在返回默认值
+     */
     private String getSettingValue(String name, String defaultValue) {
         return settingRepository.findByName(name)
                 .map(Setting::getValue)
                 .orElse(defaultValue);
     }
 
+    /**
+     * 将参数Map拼接为URL查询字符串
+     * @param params 参数Map
+     * @return URL编码后的查询字符串
+     */
     private String buildQueryString(Map<String, String> params) {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, String> entry : params.entrySet()) {

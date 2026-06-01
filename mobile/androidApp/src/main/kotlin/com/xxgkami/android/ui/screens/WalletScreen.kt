@@ -12,12 +12,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.xxgkami.android.viewmodel.WalletViewModel
 
+/**
+ * 钱包管理页面
+ * 展示用户余额、累计充值、累计消费信息
+ * 下方列出交易记录列表，消费显示红色负数，充值显示绿色正数
+ *
+ * @param navController 页面导航控制器
+ * @param walletViewModel 钱包ViewModel，负责加载钱包和交易记录数据
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel = viewModel()) {
     val wallet by walletViewModel.wallet.collectAsState()
     val transactions by walletViewModel.transactions.collectAsState()
 
+    // 页面首次加载时并行请求钱包信息和交易记录
     LaunchedEffect(Unit) {
         walletViewModel.loadWallet()
         walletViewModel.loadTransactions()
@@ -67,7 +76,8 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
                                 }
                             }
                             Text(
-                                "${if (tx.type == "consume") "-" else "+"}¥${tx.amount ?: "0"}",
+                                // 消费显示负数（红色），充值/其他显示正数（绿色）
+                            "${if (tx.type == "consume") "-" else "+"}¥${tx.amount ?: "0"}",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (tx.type == "consume") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                             )

@@ -8,12 +8,18 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+/**
+ * 邮件发送服务
+ * 提供验证码邮件、订单通知、卡密发放等邮件发送功能
+ * 所有邮件发送方法均为异步执行，避免阻塞主线程
+ */
 @Service
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
     private final JavaMailSender mailSender;
 
+    /** 发件人邮箱地址，从配置文件读取 */
     @Value("${spring.mail.username:}")
     private String fromEmail;
 
@@ -24,6 +30,12 @@ public class EmailService {
         this.mailSender = mailSender;
     }
 
+    /**
+     * 异步发送验证码邮件
+     * @param to 收件人邮箱
+     * @param code 验证码
+     * @param type 验证码类型：register-注册验证码，其他-重置密码验证码
+     */
     @Async
     public void sendVerificationCode(String to, String code, String type) {
         try {
@@ -42,6 +54,12 @@ public class EmailService {
         }
     }
 
+    /**
+     * 异步发送订单通知邮件
+     * @param to 收件人邮箱
+     * @param orderNo 订单编号
+     * @param content 邮件内容
+     */
     @Async
     public void sendOrderNotification(String to, String orderNo, String content) {
         try {
@@ -57,6 +75,11 @@ public class EmailService {
         }
     }
 
+    /**
+     * 异步发送卡密邮件
+     * @param to 收件人邮箱
+     * @param cardKeys 卡密内容
+     */
     @Async
     public void sendCardKeys(String to, String cardKeys) {
         try {

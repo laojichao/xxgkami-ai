@@ -12,11 +12,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xxgkami.android.viewmodel.AuthViewModel
 import com.xxgkami.android.viewmodel.CardViewModel
 
+/**
+ * 我的卡密列表页面
+ * 展示当前用户拥有的所有卡密信息，包括卡密号、类型和状态
+ *
+ * @param navController 页面导航控制器
+ * @param viewModel 卡密ViewModel，负责加载卡密数据
+ * @param authViewModel 认证ViewModel，提供当前用户信息
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewModel(), authViewModel: AuthViewModel = viewModel()) {
     val cards by viewModel.cards.collectAsState()
     val userInfo by authViewModel.userInfo.collectAsState()
+    // 用户信息加载完成后，自动加载该用户的卡密列表
     LaunchedEffect(userInfo) {
         userInfo?.id?.let { viewModel.loadUserCards(it) }
     }

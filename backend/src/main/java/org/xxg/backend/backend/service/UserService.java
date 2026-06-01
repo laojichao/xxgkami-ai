@@ -12,6 +12,10 @@ import org.xxg.backend.backend.util.PasswordUtil;
 import java.time.LocalDateTime;
 import java.util.*;
 
+/**
+ * 用户管理服务
+ * 提供用户注册、查询、修改资料、修改密码、启用禁用等用户管理功能
+ */
 @Service
 public class UserService {
 
@@ -23,20 +27,43 @@ public class UserService {
         this.passwordUtil = passwordUtil;
     }
 
+    /**
+     * 根据用户ID获取用户信息
+     * @param id 用户ID
+     * @return 用户实体，不存在则抛出异常
+     */
     public User getUserById(Integer id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
     }
 
+    /**
+     * 根据用户名获取用户信息
+     * @param username 用户名
+     * @return 用户实体，不存在则抛出异常
+     */
     public User getUserByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("用户不存在: " + username));
     }
 
+    /**
+     * 分页查询所有用户
+     * @param pageable 分页参数
+     * @return 用户分页结果
+     */
     public Page<User> getAllUsers(Pageable pageable) {
         return userRepository.findAll(pageable);
     }
 
+    /**
+     * 更新用户个人资料
+     * @param userId 用户ID
+     * @param nickname 新昵称，为null则不更新
+     * @param email 新邮箱，为null则不更新
+     * @param phone 新手机号，为null则不更新
+     * @return 更新后的用户实体
+     */
     @Transactional
     public User updateProfile(Integer userId, String nickname, String email, String phone) {
         User user = getUserById(userId);
@@ -47,6 +74,12 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    /**
+     * 修改用户密码
+     * @param userId 用户ID
+     * @param oldPassword 旧密码
+     * @param newPassword 新密码
+     */
     @Transactional
     public void changePassword(Integer userId, String oldPassword, String newPassword) {
         User user = getUserById(userId);
@@ -58,6 +91,10 @@ public class UserService {
         userRepository.save(user);
     }
 
+    /**
+     * 切换用户启用/禁用状态
+     * @param userId 用户ID
+     */
     @Transactional
     public void toggleUserStatus(Integer userId) {
         User user = getUserById(userId);
@@ -66,12 +103,20 @@ public class UserService {
         userRepository.save(user);
     }
 
+    /**
+     * 删除用户
+     * @param userId 用户ID
+     */
     @Transactional
     public void deleteUser(Integer userId) {
         User user = getUserById(userId);
         userRepository.delete(user);
     }
 
+    /**
+     * 获取用户统计数据
+     * @return 包含总用户数、活跃用户数、今日新增用户数的Map
+     */
     public Map<String, Object> getUserStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalUsers", userRepository.count());

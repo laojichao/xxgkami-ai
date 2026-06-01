@@ -10,6 +10,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 
+/**
+ * 首页 - 应用的主入口页面
+ * 提供卡密验证、用户登录、用户注册三个功能入口
+ *
+ * @param navController 页面导航控制器
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController) {

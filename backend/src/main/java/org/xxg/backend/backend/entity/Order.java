@@ -5,6 +5,9 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 订单实体 - 用户购买卡密的订单记录
+ */
 @Data
 @Entity
 @Table(name = "orders")
@@ -14,43 +17,43 @@ public class Order {
     private Integer id;
 
     @Column(name = "order_no", nullable = false, unique = true, length = 32)
-    private String orderNo;
+    private String orderNo; // 订单编号(唯一标识)
 
     @Column(name = "user_id", nullable = false)
-    private Integer userId;
+    private Integer userId; // 下单用户ID
 
     @Column(length = 50)
-    private String username;
+    private String username; // 下单用户名(冗余存储便于查询)
 
     @Column(name = "card_type", nullable = false, length = 20)
-    private String cardType;
+    private String cardType; // 卡密类型(time=时长卡, count=次数卡)
 
     @Column(name = "card_spec", nullable = false, length = 50)
-    private String cardSpec;
+    private String cardSpec; // 卡密规格(如"7天", "100次")
 
-    private Integer quantity = 1;
+    private Integer quantity = 1; // 购买数量
 
     @Column(name = "unit_price", precision = 10, scale = 2)
-    private BigDecimal unitPrice = BigDecimal.ZERO;
+    private BigDecimal unitPrice = BigDecimal.ZERO; // 单价(元)
 
     @Column(name = "total_price", nullable = false, precision = 10, scale = 2)
-    private BigDecimal totalPrice;
+    private BigDecimal totalPrice; // 总价(元)
 
     @Column(nullable = false, length = 20)
-    private String status = "pending";
+    private String status = "pending"; // 订单状态: pending=待支付, paid=已支付, cancelled=已取消
 
     @Column(name = "payment_method", length = 20)
-    private String paymentMethod = "wechat";
+    private String paymentMethod = "wechat"; // 支付方式: wechat=微信, alipay=支付宝
 
     @Column(name = "create_time")
     private LocalDateTime createTime = LocalDateTime.now();
 
     @Column(name = "update_time")
-    private LocalDateTime updateTime;
+    private LocalDateTime updateTime; // 订单更新时间
 
     @Column(name = "pay_time")
-    private LocalDateTime payTime;
+    private LocalDateTime payTime; // 支付完成时间
 
     @Column(name = "card_keys", columnDefinition = "TEXT")
-    private String cardKeys;
+    private String cardKeys; // 购买的卡密内容(支付成功后填充, JSON格式)
 }

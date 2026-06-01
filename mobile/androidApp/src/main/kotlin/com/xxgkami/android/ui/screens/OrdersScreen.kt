@@ -12,11 +12,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.xxgkami.android.viewmodel.OrderViewModel
 
+/**
+ * 订单列表页面
+ * 展示当前用户的所有订单，包括订单号、卡密类型、数量、总价、状态等信息
+ * 无订单时显示空状态提示
+ *
+ * @param navController 页面导航控制器
+ * @param orderViewModel 订单ViewModel，负责加载订单数据
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrdersScreen(navController: NavController, orderViewModel: OrderViewModel = viewModel()) {
     val orders by orderViewModel.orders.collectAsState()
 
+    // 页面首次加载时请求订单数据
     LaunchedEffect(Unit) {
         orderViewModel.loadOrders()
     }

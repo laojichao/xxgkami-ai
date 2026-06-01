@@ -11,6 +11,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.xxgkami.android.viewmodel.AuthViewModel
 
+/**
+ * 登录页面
+ * 支持用户名/密码登录，登录成功后回调 [onLoginSuccess]
+ *
+ * @param navController 页面导航控制器
+ * @param viewModel 认证ViewModel，处理登录逻辑
+ * @param onLoginSuccess 登录成功回调，用于跳转到主页
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewModel(), onLoginSuccess: () -> Unit = {}) {
@@ -19,6 +27,7 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewMod
     val isLoading by viewModel.isLoading.collectAsState()
     val loginState by viewModel.loginState.collectAsState()
 
+    // 监听登录状态变化，登录成功时触发回调跳转
     LaunchedEffect(loginState) {
         if (loginState?.success == true) onLoginSuccess()
     }

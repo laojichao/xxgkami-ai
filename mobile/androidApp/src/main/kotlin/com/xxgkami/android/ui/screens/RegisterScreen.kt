@@ -10,6 +10,14 @@ import androidx.navigation.NavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xxgkami.android.viewmodel.AuthViewModel
 
+/**
+ * 用户注册页面
+ * 支持通过用户名、邮箱验证码、密码完成注册
+ * 包含发送邮箱验证码功能
+ *
+ * @param navController 页面导航控制器
+ * @param viewModel 认证ViewModel，处理注册和验证码发送逻辑
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(navController: NavController, viewModel: AuthViewModel = viewModel()) {

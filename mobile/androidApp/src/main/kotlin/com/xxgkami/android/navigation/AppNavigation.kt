@@ -15,6 +15,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.xxgkami.android.ui.screens.*
 
+/**
+ * 底部导航栏页面定义
+ * 使用 sealed class 确保类型安全，每个页面包含路由路径、标题和图标
+ *
+ * @param route 路由路径
+ * @param title 底部导航栏显示的标题
+ * @param icon 底部导航栏显示的图标
+ */
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Cards : Screen("cards", "卡密", Icons.Default.CreditCard)
     data object Orders : Screen("orders", "订单", Icons.Default.List)
@@ -22,10 +30,17 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     data object Profile : Screen("profile", "我的", Icons.Default.Person)
 }
 
+/**
+ * 主页面框架 - 包含底部导航栏的页面容器
+ * 登录后进入此页面，包含卡密、订单、钱包、个人资料四个底部Tab
+ *
+ * @param onLogout 退出登录回调
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(onLogout: () -> Unit) {
     val navController = rememberNavController()
+    // 底部导航栏的四个Tab页面
     val bottomNavItems = listOf(Screen.Cards, Screen.Orders, Screen.Wallet, Screen.Profile)
 
     Scaffold(
@@ -39,6 +54,7 @@ fun MainScreen(onLogout: () -> Unit) {
                         label = { Text(screen.title) },
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
+                            // 导航时避免重复创建相同页面实例，并保存/恢复各Tab的状态
                             navController.navigate(screen.route) {
                                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true
@@ -59,13 +75,20 @@ fun MainScreen(onLogout: () -> Unit) {
     }
 }
 
+/**
+ * 应用根导航组件
+ * 管理全局页面路由，包括首页、登录、注册、验证和主页面
+ * 通过 [isLoggedIn] 状态控制登录前后的页面切换
+ */
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    // 全局登录状态，控制页面路由切换
     var isLoggedIn by remember { mutableStateOf(false) }
 
     NavHost(navController = navController, startDestination = "home") {
         composable("home") { HomeScreen(navController) }
+        // 登录成功后清除回退栈并跳转到主页
         composable("login") { LoginScreen(navController, onLoginSuccess = { isLoggedIn = true; navController.navigate("main") { popUpTo(0) { inclusive = true } } }) }
         composable("register") { RegisterScreen(navController) }
         composable("verify") { VerifyScreen(navController) }

@@ -13,6 +13,15 @@ import androidx.navigation.NavController
 import com.xxgkami.android.data.TokenStore
 import com.xxgkami.android.viewmodel.AuthViewModel
 
+/**
+ * 个人资料页面
+ * 展示用户头像、用户名、邮箱、昵称、手机号、角色、注册时间等信息
+ * 提供退出登录功能
+ *
+ * @param navController 页面导航控制器
+ * @param authViewModel 认证ViewModel，提供用户信息和退出登录功能
+ * @param onLogout 退出登录回调，用于跳转回首页
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = viewModel(), onLogout: () -> Unit = {}) {
@@ -66,6 +75,13 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
     }
 }
 
+/**
+ * 个人资料信息行组件
+ * 左侧显示标签名，右侧显示对应值，行间用分割线分隔
+ *
+ * @param label 标签名称（如"用户名"、"邮箱"等）
+ * @param value 对应的值
+ */
 @Composable
 private fun ProfileItem(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {

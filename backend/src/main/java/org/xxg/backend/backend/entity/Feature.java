@@ -3,6 +3,9 @@ package org.xxg.backend.backend.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
+/**
+ * 系统特性/功能展示实体 - 首页展示的系统功能亮点
+ */
 @Data
 @Entity
 @Table(name = "features")
@@ -12,16 +15,16 @@ public class Feature {
     private Integer id;
 
     @Column(nullable = false, length = 50)
-    private String icon;
+    private String icon; // 图标标识(如图标类名或图标名称)
 
     @Column(nullable = false, length = 100)
-    private String title;
+    private String title; // 功能标题
 
     @Column(nullable = false, columnDefinition = "TEXT")
-    private String description;
+    private String description; // 功能描述
 
     @Column(name = "sort_order")
-    private Integer sortOrder = 0;
+    private Integer sortOrder = 0; // 排序权重(越小越靠前)
 
-    private Boolean status = true;
+    private Boolean status = true; // 是否启用展示
 }

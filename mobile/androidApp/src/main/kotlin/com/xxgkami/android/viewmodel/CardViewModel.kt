@@ -9,22 +9,37 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * 卡密业务ViewModel
+ * 管理卡密验证、用户卡密列表加载、机器码解绑等状态
+ * 通过 StateFlow 暴露状态给 UI 层观察
+ */
 class CardViewModel : ViewModel() {
+    // API客户端和卡密API实例
     private val apiClient = ApiProvider.apiClient
     private val cardApi = CardApi(apiClient)
 
+    // 卡密验证结果
     private val _verifyResult = MutableStateFlow<CardVerifyResponse?>(null)
     val verifyResult: StateFlow<CardVerifyResponse?> = _verifyResult
 
+    // 用户卡密列表
     private val _cards = MutableStateFlow<List<Card>>(emptyList())
     val cards: StateFlow<List<Card>> = _cards
 
+    // 加载状态
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    // 错误信息
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    /**
+     * 验证卡密
+     * @param cardKey 卡密字符串
+     * @param deviceId 设备标识，默认为"Android"
+     */
     fun verify(cardKey: String, deviceId: String = "Android") {
         viewModelScope.launch {
             _isLoading.value = true
@@ -39,6 +54,10 @@ class CardViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 加载指定用户的卡密列表
+     * @param userId 用户ID
+     */
     fun loadUserCards(userId: Int) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -53,6 +72,11 @@ class CardViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 解绑卡密的机器码
+     * @param cardKey 卡密字符串
+     * @param machineCode 要解绑的机器码
+     */
     fun unbindMachineCode(cardKey: String, machineCode: String) {
         viewModelScope.launch {
             _error.value = null
