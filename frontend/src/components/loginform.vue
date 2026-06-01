@@ -1,4 +1,6 @@
+<!-- 登录/注册/忘记密码/TOTP验证/OAuth第三方登录表单组件 -->
 <template>
+  <!-- OAuth注册模式：第三方登录后完善账号信息 -->
   <div v-if="isOAuthRegister" class="login-container">
     <div class="login-card">
       <div class="login-header">
@@ -36,6 +38,7 @@
     </div>
   </div>
 
+  <!-- 主登录卡片：区分管理员/用户主题样式 -->
   <div v-else class="login-container" :class="{ 'admin-theme': userType === 'admin' }">
     <div class="login-card" :class="{ 'admin-card': userType === 'admin' }">
       <!-- 管理员页顶部返回 -->
@@ -106,6 +109,7 @@
           </button>
         </div>
 
+        <!-- 第三方OAuth登录区域（QQ/微信/支付宝） -->
         <!-- 第三方登录 -->
         <div v-if="oauthEnabled && userType === 'user'" class="oauth-section">
           <div class="divider">
@@ -149,6 +153,7 @@
       </div>
     </div>
 
+    <!-- 用户注册弹窗（用户名/昵称/密码/手机号/邮箱/验证码） -->
     <div v-if="showRegister" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
@@ -210,6 +215,7 @@
       </div>
     </div>
 
+    <!-- 找回密码弹窗（用户名/邮箱/验证码/新密码） -->
     <div v-if="showForgotPassword" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
@@ -263,6 +269,7 @@
       </div>
     </div>
 
+    <!-- TOTP双重验证弹窗（6位验证码输入） -->
     <div v-if="showTotpInput" class="modal-overlay">
       <div class="modal-content" style="max-width: 400px;">
         <div class="modal-header">
@@ -307,6 +314,7 @@
       </div>
     </div>
     
+    <!-- TOTP恢复弹窗（通过邮箱验证码关闭双重验证） -->
     <!-- TOTP 恢复弹窗 -->
     <div v-if="showRecoveryModal" class="modal-overlay">
       <div class="modal-content" style="max-width: 400px;">
@@ -352,6 +360,7 @@
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { authApi, settingsApi } from '../services/api.js'
 
+/** 父组件传入的初始用户类型（user/admin） */
 const props = defineProps({
   initialUserType: {
     type: String,
@@ -359,9 +368,12 @@ const props = defineProps({
   }
 })
 
+/** 当前登录类型（user/admin） */
 const userType = ref(props.initialUserType)
+/** 向父组件发送：登录成功、切换到用户登录事件 */
 const emit = defineEmits(['login-success', 'switch-to-user'])
 
+/** 从管理员登录切换回用户登录模式 */
 const switchToUser = () => {
   userType.value = 'user'
   errorMessage.value = ''
@@ -372,16 +384,27 @@ const switchToUser = () => {
   emit('switch-to-user')
 }
 
+/* ========== 通用登录状态 ========== */
+
+/** 是否显示密码明文 */
 const showPassword = ref(false)
+/** 登录按钮加载状态 */
 const loading = ref(false)
+/** 错误提示信息 */
 const errorMessage = ref('')
+/** 成功提示信息 */
 const successMessage = ref('')
+/** 注册弹窗是否可见 */
 const showRegister = ref(false)
+/** 找回密码弹窗是否可见 */
 const showForgotPassword = ref(false)
+/** TOTP验证弹窗是否可见 */
 const showTotpInput = ref(false)
+/** TOTP输入框DOM引用（用于自动聚焦） */
 const totpInputRef = ref(null)
 
-// TOTP Recovery
+/* ========== TOTP恢复相关 ========== */
+
 const showRecoveryModal = ref(false)
 const recoveryLoading = ref(false)
 const recoveryError = ref('')
@@ -389,10 +412,12 @@ const recoverySuccess = ref('')
 const recoveryTimer = ref(0)
 let recoveryTimerInterval = null
 
+/** TOTP恢复表单（邮箱验证码） */
 const recoveryForm = reactive({
   code: ''
 })
 
+/** 发送TOTP恢复验证码到管理员邮箱 */
 const sendRecoveryCode = async () => {
   if (!loginForm.username) {
     recoveryError.value = '请先输入用户名'
@@ -413,6 +438,7 @@ const sendRecoveryCode = async () => {
   }
 }
 
+/** 启动恢复验证码倒计时（60秒） */
 const startRecoveryTimer = (initialValue = 60) => {
   recoveryTimer.value = initialValue
   if (recoveryTimerInterval) clearInterval(recoveryTimerInterval)
@@ -424,6 +450,7 @@ const startRecoveryTimer = (initialValue = 60) => {
   }, 1000)
 }
 
+/** 提交TOTP恢复验证码，验证通过后自动关闭双重验证并重新登录 */
 const handleRecovery = async () => {
   if (!recoveryForm.code) {
     recoveryError.value = '请输入验证码'
@@ -456,9 +483,13 @@ const handleRecovery = async () => {
   }
 }
 
-// OAuth Register Mode
+/* ========== OAuth第三方登录相关 ========== */
+
+/** 是否处于OAuth注册模式（第三方登录后补充账号信息） */
 const isOAuthRegister = ref(false)
+/** OAuth用户的昵称（来自第三方平台） */
 const oauthNickname = ref('')
+/** OAuth注册表单数据 */
 const oauthRegisterForm = reactive({
   username: '',
   password: '',
@@ -466,7 +497,9 @@ const oauthRegisterForm = reactive({
   email: ''
 })
 
+/** 是否启用OAuth登录 */
 const oauthEnabled = ref(false)
+/** 各OAuth平台的启用状态 */
 const oauthLoginTypes = reactive({
   qq: false,
   wx: false,
@@ -507,12 +540,16 @@ onMounted(async () => {
   }
 })
 
+/** 跳转到第三方OAuth登录页面 */
 const handleOAuthLogin = (type) => {
     const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
     const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
     window.location.href = `${cleanBase}/oauth/login/${type}`;
 }
 
+/* ========== 用户注册相关 ========== */
+
+/** 注册表单数据 */
 const registerForm = reactive({
   username: '',
   nickname: '',
@@ -526,9 +563,11 @@ const registerForm = reactive({
 const registerError = ref('')
 const registerSuccess = ref('')
 const registerLoading = ref(false)
+/** 邮箱验证码倒计时秒数 */
 const codeTimer = ref(0)
 let timerInterval = null
 
+/** 发送注册邮箱验证码 */
 const sendCode = async () => {
   if (!registerForm.email) {
     registerError.value = '请先输入邮箱'
@@ -550,6 +589,7 @@ const sendCode = async () => {
   }
 }
 
+/** 启动注册验证码倒计时（60秒） */
 const startTimer = (initialValue = 60) => {
   codeTimer.value = initialValue
   if (timerInterval) clearInterval(timerInterval)
@@ -577,6 +617,7 @@ watch(() => registerForm.email, (newEmail) => {
   }
 })
 
+/** 提交用户注册请求 */
 const handleRegister = async () => {
   if (registerForm.password !== registerForm.confirmPassword) {
     registerError.value = '两次输入的密码不一致'
@@ -614,6 +655,9 @@ const handleRegister = async () => {
   }
 }
 
+/* ========== 找回密码相关 ========== */
+
+/** 找回密码表单数据 */
 const forgotPasswordForm = reactive({
   username: '',
   email: '',
@@ -626,6 +670,10 @@ const forgotPasswordError = ref('')
 const forgotPasswordSuccess = ref('')
 const forgotPasswordLoading = ref(false)
 
+/**
+ * 自动清除消息提示（3秒后淡出）
+ * 统一应用于所有错误/成功消息ref
+ */
 const autoDismiss = (messageRef) => {
   let timer = null
   watch(messageRef, (newVal) => {
@@ -640,9 +688,11 @@ const autoDismiss = (messageRef) => {
 
 [errorMessage, successMessage, registerError, registerSuccess, forgotPasswordError, forgotPasswordSuccess, recoveryError, recoverySuccess].forEach(autoDismiss)
 
+/** 找回密码验证码倒计时秒数 */
 const forgotCodeTimer = ref(0)
 let forgotTimerInterval = null
 
+/** 发送找回密码邮箱验证码 */
 const sendForgotCode = async () => {
   if (!forgotPasswordForm.username || !forgotPasswordForm.email) {
     forgotPasswordError.value = '请先输入用户名和邮箱'
@@ -664,6 +714,7 @@ const sendForgotCode = async () => {
   }
 }
 
+/** 启动找回密码验证码倒计时（60秒） */
 const startForgotTimer = (initialValue = 60) => {
   forgotCodeTimer.value = initialValue
   if (forgotTimerInterval) clearInterval(forgotTimerInterval)
@@ -691,6 +742,7 @@ watch(() => forgotPasswordForm.email, (newEmail) => {
   }
 })
 
+/** 提交密码重置请求 */
 const handleResetPassword = async () => {
   if (forgotPasswordForm.password !== forgotPasswordForm.confirmPassword) {
     forgotPasswordError.value = '两次输入的密码不一致'

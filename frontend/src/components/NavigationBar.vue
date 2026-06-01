@@ -1,5 +1,8 @@
+<!-- 管理后台侧边导航栏组件：支持折叠/展开，包含各管理模块入口及用户下拉菜单 -->
 <template>
+  <!-- 侧边栏容器，根据折叠状态切换宽度 -->
   <aside class="sidebar" :class="{ 'sidebar-collapsed': isCollapsed }">
+    <!-- 侧边栏头部：Logo 与折叠按钮 -->
     <div class="sidebar-header">
       <div class="logo">
         <img src="../assets/icon.png" alt="XXG-KAMI-PRO" class="logo-img">
@@ -11,9 +14,11 @@
       </button>
     </div>
 
+    <!-- 导航菜单区域：各功能模块入口链接 -->
     <nav class="sidebar-nav">
-      <a href="javascript:void(0)" 
-         :class="{ active: activeTab === 'overview' }" 
+      <!-- 概览 -->
+      <a href="javascript:void(0)"
+         :class="{ active: activeTab === 'overview' }"
          @click="handleTabClick('overview')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
         <span v-if="!isCollapsed">概览</span>
@@ -54,8 +59,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
         <span v-if="!isCollapsed">通知管理</span>
       </a>
+      <!-- 系统设置（带子菜单的分组项） -->
       <div class="nav-item-group">
-        <a href="javascript:void(0)" 
+        <a href="javascript:void(0)"
            :class="{ active: activeTab === 'settings' }" 
            @click="toggleSettingsSub">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 5 15.4a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -84,6 +90,7 @@
       </a>
     </nav>
 
+    <!-- 侧边栏底部：用户头像与下拉菜单（账号设置/退出登录） -->
     <div class="sidebar-footer">
       <el-dropdown trigger="click" @command="handleCommand" placement="top-start">
         <div class="user-dropdown-trigger">
@@ -109,6 +116,7 @@
     </div>
   </aside>
 
+  <!-- 管理员账号设置弹窗（修改用户名/邮箱/密码） -->
   <el-dialog
     v-model="showAdminModal"
     title="管理员账号设置"
@@ -143,29 +151,38 @@ import { ref, reactive } from 'vue'
 import { authApi } from '../services/api.js'
 import { ElMessage } from 'element-plus'
 
+// 父组件传入的用户信息与当前激活的Tab标识
 const props = defineProps({
   userInfo: Object,
   activeTab: String
 })
 
+// 向父组件发送：退出登录、切换Tab、折叠状态变更事件
 const emit = defineEmits(['logout', 'tab-change', 'collapse-change'])
 
+/** 系统设置子菜单是否展开 */
 const showSettingsSub = ref(false)
+/** 侧边栏是否折叠 */
 const isCollapsed = ref(false)
 
+/** 管理员账号设置弹窗是否可见 */
 const showAdminModal = ref(false)
+/** 保存按钮加载状态 */
 const updating = ref(false)
+/** 管理员账号编辑表单 */
 const adminForm = reactive({
   username: '',
   email: '',
   password: ''
 })
 
+/** 切换侧边栏折叠/展开状态 */
 const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value
   emit('collapse-change', isCollapsed.value)
 }
 
+/** 切换系统设置子菜单展开状态；折叠模式下直接跳转设置页 */
 const toggleSettingsSub = () => {
   if (isCollapsed.value) {
     emit('tab-change', 'settings')
@@ -174,6 +191,7 @@ const toggleSettingsSub = () => {
   }
 }
 
+/** 处理用户下拉菜单命令（退出登录/账号设置） */
 const handleCommand = (command) => {
   if (command === 'logout') {
     emit('logout')
@@ -182,12 +200,14 @@ const handleCommand = (command) => {
   }
 }
 
+/** 打开管理员账号设置弹窗，回填当前用户名 */
 const openAdminModal = () => {
   adminForm.username = props.userInfo.username
   adminForm.password = ''
   showAdminModal.value = true
 }
 
+/** 提交管理员账号更新请求，成功后强制重新登录 */
 const updateAdminProfile = async () => {
   if (!adminForm.username) {
     ElMessage.warning('用户名不能为空')
@@ -217,10 +237,12 @@ const updateAdminProfile = async () => {
   }
 }
 
+/** 导航菜单点击，通知父组件切换Tab */
 const handleTabClick = (tab) => {
   emit('tab-change', tab)
 }
 
+/** 子菜单点击，传递 tab 和具体 section 参数 */
 const handleSubMenuClick = (tab, section) => {
   emit('tab-change', tab, section)
   showSettingsSub.value = false

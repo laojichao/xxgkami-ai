@@ -1,3 +1,4 @@
+<!-- 在线自助解绑页面：用户输入卡密查询绑定状态，支持在线解绑设备 -->
 <template>
   <div class="unbind-page">
     <nav class="navbar">
@@ -14,6 +15,7 @@
       </div>
     </nav>
 
+    <!-- 主内容区域 -->
     <main class="main-content">
       <div class="panel">
         <h1 class="page-title">在线解绑</h1>
@@ -83,21 +85,31 @@ import { ref, computed } from 'vue'
 import { cardApi } from '../services/api.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+/** 向父组件发送：返回首页、显示登录页事件 */
 const emit = defineEmits(['backHome', 'showLogin'])
 
+/** 用户输入的卡密 */
 const cardKeyInput = ref('')
+/** 查询按钮加载状态 */
 const loadingQuery = ref(false)
+/** 解绑按钮加载状态 */
 const loadingUnbind = ref(false)
+/** 查询结果数据 */
 const queryResult = ref(null)
+/** 错误提示信息 */
 const errorMsg = ref('')
 
+/** 查询是否成功 */
 const queryOk = computed(() => queryResult.value?.success === true)
+/** 查询结果中的业务数据 */
 const dataPayload = computed(() => queryResult.value?.data || null)
 
+/** 是否允许执行解绑（已绑定机器码 且 已开启自助解绑） */
 const canUnbind = computed(
   () => queryOk.value && dataPayload.value?.bound === true && dataPayload.value?.allowSelfUnbind === true
 )
 
+/** 查询卡密绑定状态 */
 async function query() {
   errorMsg.value = ''
   queryResult.value = null
@@ -120,6 +132,7 @@ async function query() {
   }
 }
 
+/** 执行设备解绑操作（需用户二次确认） */
 async function unbind() {
   if (!canUnbind.value) return
   const key = cardKeyInput.value.trim()

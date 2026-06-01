@@ -1,3 +1,4 @@
+<!-- 用户管理页面：支持用户列表展示、搜索、分页、新建/编辑/删除/启禁用操作 -->
 <template>
   <div class="user-manage-page">
     <div class="section-header">
@@ -21,6 +22,7 @@
       </div>
     </div>
     
+    <!-- 用户列表卡片区域 -->
     <div class="user-list">
       <div class="user-card" v-for="user in users" :key="user.id">
         <div class="user-info">
@@ -95,6 +97,7 @@
       </div>
     </div>
 
+    <!-- 分页导航 -->
     <!-- 分页组件 -->
     <div class="pagination-container" v-if="totalPages > 1">
       <div class="pagination">
@@ -128,6 +131,7 @@
       </div>
     </div>
 
+    <!-- 创建/编辑用户弹窗表单 -->
     <!-- 创建/编辑用户模态框 -->
     <div class="modal-overlay" v-if="showModal" @click.self="closeModal">
       <div class="modal-content">
@@ -185,17 +189,26 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { userApi } from '../services/api.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+/** 用户列表数据 */
 const users = ref([])
+/** 全局加载状态 */
 const loading = ref(false)
+/** 当前页码 */
 const currentPage = ref(1)
+/** 每页条数 */
 const pageSize = ref(10)
+/** 总记录数 */
 const total = ref(0)
+/** 搜索关键字（用户名/邮箱/昵称） */
 const searchKeyword = ref('')
+/** 总页数（计算属性） */
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 
-// Modal state
+/** 弹窗是否可见 */
 const showModal = ref(false)
+/** 是否为编辑模式（区别于新建） */
 const isEditing = ref(false)
+/** 用户表单数据（新建/编辑共用） */
 const form = reactive({
   id: null,
   username: '',
@@ -206,7 +219,7 @@ const form = reactive({
   status: 1
 })
 
-// Pagination logic
+/** 可见页码列表（最多显示5页） */
 const visiblePages = computed(() => {
   const pages = []
   const start = Math.max(1, currentPage.value - 2)
@@ -221,6 +234,7 @@ onMounted(() => {
   fetchUsers()
 })
 
+/** 从后端获取用户列表（带分页和搜索） */
 const fetchUsers = async () => {
   try {
     loading.value = true
@@ -237,22 +251,26 @@ const fetchUsers = async () => {
   }
 }
 
+/** 搜索按钮点击：重置到第一页并重新请求 */
 const handleSearch = () => {
   currentPage.value = 1
   fetchUsers()
 }
 
+/** 跳转到指定页码 */
 const goToPage = (page) => {
   if (page < 1 || page > totalPages.value) return
   currentPage.value = page
   fetchUsers()
 }
 
+/** 格式化日期字符串为本地时间 */
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString()
 }
 
+/** 打开新建用户弹窗，重置表单 */
 const openCreateModal = () => {
   isEditing.value = false
   form.id = null
@@ -265,6 +283,7 @@ const openCreateModal = () => {
   showModal.value = true
 }
 
+/** 打开编辑用户弹窗，回填用户数据 */
 const openEditModal = (user) => {
   isEditing.value = true
   form.id = user.id
@@ -281,6 +300,7 @@ const closeModal = () => {
   showModal.value = false
 }
 
+/** 提交用户表单（新建或编辑） */
 const submitForm = async () => {
   try {
     loading.value = true
@@ -300,6 +320,7 @@ const submitForm = async () => {
   }
 }
 
+/** 切换用户启用/禁用状态 */
 const toggleUserStatus = async (id, status) => {
   try {
     await userApi.updateUserStatus(id, status)
@@ -310,6 +331,7 @@ const toggleUserStatus = async (id, status) => {
   }
 }
 
+/** 删除用户（二次确认后执行） */
 const handleDeleteUser = async (id) => {
   try {
     await ElMessageBox.confirm('确定要删除该用户吗？此操作不可恢复。', '确认删除', {

@@ -1,3 +1,4 @@
+<!-- 系统维护管理页面：配置维护模式开关、维护提示内容、时间及邮件通知模板 -->
 <template>
   <div class="maintenance-admin">
     <div class="page-header">
@@ -5,7 +6,9 @@
       <p class="page-subtitle">设置系统维护状态，开启后用户端将显示维护提示</p>
     </div>
 
+    <!-- 维护设置卡片 -->
     <div class="maintenance-card">
+      <!-- 维护模式开关区域 -->
       <div class="status-section">
         <div class="status-info">
           <h3>维护模式开关</h3>
@@ -17,6 +20,7 @@
         </label>
       </div>
 
+      <!-- 维护详情表单区域 -->
       <div class="form-section">
         <div class="form-group">
           <label>维护内容提示</label>
@@ -74,7 +78,9 @@ import { ref, onMounted } from 'vue'
 import { maintenanceApi } from '../services/api.js'
 import { ElMessage } from 'element-plus'
 
+/** 保存按钮加载状态 */
 const loading = ref(false)
+/** 维护设置数据（开关、内容、时间、邮件模板等） */
 const settings = ref({
   id: 1,
   enabled: false,
@@ -85,6 +91,7 @@ const settings = ref({
   emailTemplate: ''
 })
 
+/** 从后端加载当前维护设置 */
 const loadSettings = async () => {
   try {
     const res = await maintenanceApi.getStatus()
@@ -105,11 +112,13 @@ const loadSettings = async () => {
   }
 }
 
+/** 维护模式开关切换回调（目前仅更新本地状态，点击保存后才提交） */
 const handleSwitchChange = () => {
   // 可以在这里添加开关切换的即时保存逻辑，或者等待用户点击保存
   // 这里选择点击保存按钮才提交
 }
 
+/** 提交维护设置到后端保存 */
 const saveSettings = async () => {
   loading.value = true
   try {

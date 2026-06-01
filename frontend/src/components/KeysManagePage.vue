@@ -1,3 +1,4 @@
+<!-- 卡密管理页面：卡密列表展示、搜索、分页、生成/编辑/删除/导出、时间卡倒计时 -->
 <template>
   <div class="keys-manage-page">
     <div class="section-header">
@@ -14,6 +15,7 @@
       </div>
     </div>
 
+    <!-- 工具栏：机器码搜索筛选 + 列表统计信息 -->
     <div class="keys-toolbar">
       <div class="toolbar-search">
         <label class="toolbar-label" for="machine-code-search">机器码搜索</label>
@@ -38,6 +40,7 @@
       </p>
     </div>
 
+    <!-- 卡密数据表格 -->
     <div class="keys-table">
       <table>
         <thead>
@@ -129,6 +132,7 @@
       </table>
     </div>
 
+    <!-- 分页导航（含页码跳转） -->
     <!-- 分页组件 -->
     <div class="pagination-container" v-if="totalPages > 1">
       <div class="pagination">
@@ -212,6 +216,7 @@
       </div>
     </div>
 
+    <!-- 导出数据弹窗（列选择/格式/范围/预览） -->
     <!-- 导出数据模态框 -->
     <div v-if="showExportModal" class="modal-overlay" @click="showExportModal = false">
       <div class="modal-content export-modal" @click.stop>
@@ -290,6 +295,7 @@
       </div>
     </div>
 
+    <!-- 编辑卡密弹窗（类型/时长/次数/状态/机器码/自助解绑） -->
     <!-- 编辑卡密模态框 -->
     <div v-if="showEditKeyModal" class="modal-overlay" @click="showEditKeyModal = false">
       <div class="modal-content" @click.stop>
@@ -400,6 +406,7 @@
       </div>
     </div>
 
+    <!-- 生成卡密弹窗（类型/数量/时长/叠加/自助解绑） -->
     <!-- 生成卡密模态框 -->
     <div v-if="showCreateKeyModal" class="modal-overlay" @click="showCreateKeyModal = false">
       <div class="modal-content" @click.stop>
@@ -520,7 +527,9 @@ const props = defineProps({
 
 const emit = defineEmits(['create-keys', 'delete-key', 'update-key', 'toggle-key-status'])
 
-/** 每秒刷新，驱动时间卡密倒计时 */
+/* ========== 时间卡倒计时 ========== */
+
+/** 当前时间戳（每秒刷新），驱动时间卡密实时倒计时 */
 const nowMs = ref(Date.now())
 let countdownTimer = null
 
@@ -537,8 +546,10 @@ onUnmounted(() => {
   }
 })
 
+/** 数字补零为两位字符串 */
 const pad2 = (n) => String(n).padStart(2, '0')
 
+/** 解析卡密到期时间为毫秒时间戳 */
 const parseExpireTimeMs = (key) => {
   const raw = key?.expire_time
   if (raw == null || raw === '') return null
@@ -546,11 +557,13 @@ const parseExpireTimeMs = (key) => {
   return Number.isFinite(t) ? t : null
 }
 
+/** 判断时间卡是否已过期 */
 const isTimeCardExpired = (key) => {
   const end = parseExpireTimeMs(key)
   return end != null && end <= nowMs.value
 }
 
+/** 格式化时间卡剩余时间（天/时/分/秒） */
 const formatTimeCardRemaining = (key) => {
   const end = parseExpireTimeMs(key)
   if (end == null) return '—'
@@ -567,17 +580,23 @@ const formatTimeCardRemaining = (key) => {
   return `${pad2(h)}:${pad2(m)}:${pad2(s)}`
 }
 
+/* ========== 弹窗与导出状态 ========== */
+
 const showCreateKeyModal = ref(false)
 const showEditKeyModal = ref(false)
 const showExportModal = ref(false)
+/** 导出按钮加载状态 */
 const exporting = ref(false)
+/** 导出格式（xlsx/csv） */
 const exportFormat = ref('xlsx')
-/** all | unused | used — 导出时筛选未使用 / 已使用（含暂停） */
+/** 导出使用状态范围：all | unused | used */
 const exportUsageScope = ref('all')
-/** 列表与导出预览均先按机器码关键字过滤（不区分大小写） */
+/** 机器码搜索关键字（列表与导出预览均按此过滤，不区分大小写） */
 const machineCodeSearch = ref('')
+/** 导出时选中的列 */
 const selectedColumns = ref(['id', 'card_key', 'card_type', 'status', 'create_time'])
 
+/** 可导出的列定义 */
 const availableColumns = [
   { key: 'id', label: '序号' },
   { key: 'card_key', label: '卡密' },
@@ -592,12 +611,13 @@ const availableColumns = [
   { key: 'api_key_id', label: '专属API Key' }
 ]
 
+/** 根据列key获取中文标签 */
 const getColumnLabel = (key) => {
   const col = availableColumns.find(c => c.key === key)
   return col ? col.label : key
 }
 
-// 简单的前端混淆实现，与ApiManagePage保持一致
+/** 卡密混淆函数（与ApiManagePage保持一致） */
 const obfuscateCardKey = (rawKey) => {
   if (!rawKey) return rawKey
   try {
@@ -611,6 +631,7 @@ const obfuscateCardKey = (rawKey) => {
   }
 }
 
+/** 处理导出数据：根据选中列映射字段值 */
 const processExportData = (data) => {
   return data.map(item => {
     const processed = {}
@@ -666,6 +687,7 @@ const processExportData = (data) => {
   })
 }
 
+/** 按机器码搜索关键字过滤后的卡密列表 */
 const filteredKeys = computed(() => {
   const list = props.keys || []
   const q = (machineCodeSearch.value || '').trim().toLowerCase()
@@ -676,6 +698,7 @@ const filteredKeys = computed(() => {
   })
 })
 
+/** 符合导出条件的卡密列表（按使用状态范围筛选） */
 const keysForExport = computed(() => {
   let keys = filteredKeys.value
   if (exportUsageScope.value === 'unused') {
@@ -686,12 +709,14 @@ const keysForExport = computed(() => {
   return keys
 })
 
+/** 导出预览数据（前5条） */
 const previewData = computed(() => {
   const src = keysForExport.value
   if (!src.length) return []
   return processExportData(src.slice(0, 5))
 })
 
+/** 执行导出（生成Excel/CSV文件并下载） */
 const exportData = async () => {
   if (selectedColumns.value.length === 0) return
 

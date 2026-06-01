@@ -13,6 +13,11 @@ import org.xxg.backend.backend.util.CustomCardObfuscator;
 import java.time.LocalDateTime;
 import java.util.*;
 
+/**
+ * 卡密业务服务。
+ * <p>提供卡密的生成、验证、绑定/解绑机器码、启停用、删除及统计等功能。
+ * 卡密分为时长卡和次数卡两种类型，支持 AES-GCM 加密存储和 HMAC 签名校验。</p>
+ */
 @Service
 public class CardService {
 
@@ -37,6 +42,22 @@ public class CardService {
         this.webhookService = webhookService;
     }
 
+    /**
+     * 生成卡密。
+     * <p>创建卡密主记录、加密数据（Cipher）和状态信息，支持时长卡和次数卡。</p>
+     *
+     * @param cardType     卡密类型（time/count）
+     * @param duration     时长（分钟）
+     * @param totalCount   总次数（次数卡）
+     * @param creatorType  创建者类型（admin/user/system）
+     * @param creatorId    创建者 ID
+     * @param creatorName  创建者名称
+     * @param verifyMethod 验证方式
+     * @param days         有效天数（时长卡）
+     * @param apiKeyId     关联的 API Key ID
+     * @return 生成的卡密实体
+     * @throws Exception 加密过程中的异常
+     */
     @Transactional
     public Card generateCard(String cardType, Integer duration, Integer totalCount,
                              String creatorType, Integer creatorId, String creatorName,
@@ -112,6 +133,16 @@ public class CardService {
         return cardRepository.save(card);
     }
 
+    /**
+     * 验证卡密。
+     * <p>校验卡密是否存在、是否停用、机器码是否匹配，并根据卡密类型检查有效期或扣减次数。
+     * 首次验证时自动绑定机器码。</p>
+     *
+     * @param cardKey    卡密明文
+     * @param machineCode 机器码（可为 null）
+     * @param apiKeyId   API Key ID（用于触发 Webhook 回调）
+     * @return 验证结果 Map，包含 success、message、statusCode 等字段
+     */
     @Transactional
     public Map<String, Object> verifyCard(String cardKey, String machineCode, Long apiKeyId) {
         Map<String, Object> result = new HashMap<>();
@@ -203,10 +234,24 @@ public class CardService {
         return result;
     }
 
+    /**
+     * 根据卡密明文查询卡密。
+     *
+     * @param cardKey 卡密明文
+     * @return 卡密实体，不存在时返回 null
+     */
     public Card getCardByKey(String cardKey) {
         return cardRepository.findByCardKey(cardKey).orElse(null);
     }
 
+    /**
+     * 分页查询指定创建者的卡密列表。
+     *
+     * @param creatorType 创建者类型
+     * @param creatorId   创建者 ID
+     * @param pageable    分页参数
+     * @return 卡密分页结果
+     */
     public Page<Card> getCardsByCreator(String creatorType, Integer creatorId, Pageable pageable) {
         Card.CreatorType type;
         try {
@@ -217,6 +262,13 @@ public class CardService {
         return cardRepository.findByCreatorTypeAndCreatorId(type, creatorId, pageable);
     }
 
+    /**
+     * 查询指定创建者的全部卡密列表（不分页）。
+     *
+     * @param creatorType 创建者类型
+     * @param creatorId   创建者 ID
+     * @return 卡密列表
+     */
     public List<Card> getCardsByCreator(String creatorType, Integer creatorId) {
         Card.CreatorType type;
         try {
@@ -227,6 +279,11 @@ public class CardService {
         return cardRepository.findByCreatorTypeAndCreatorId(type, creatorId);
     }
 
+    /**
+     * 停用卡密。
+     *
+     * @param cardId 卡密 ID
+     */
     @Transactional
     public void disableCard(Integer cardId) {
         Card card = cardRepository.findById(cardId)
@@ -235,6 +292,11 @@ public class CardService {
         cardRepository.save(card);
     }
 
+    /**
+     * 启用卡密（恢复为未使用状态）。
+     *
+     * @param cardId 卡密 ID
+     */
     @Transactional
     public void enableCard(Integer cardId) {
         Card card = cardRepository.findById(cardId)
@@ -243,6 +305,11 @@ public class CardService {
         cardRepository.save(card);
     }
 
+    /**
+     * 解绑卡密的机器码。
+     *
+     * @param cardId 卡密 ID
+     */
     @Transactional
     public void unbindMachineCode(Integer cardId) {
         Card card = cardRepository.findById(cardId)
@@ -251,6 +318,12 @@ public class CardService {
         cardRepository.save(card);
     }
 
+    /**
+     * 获取卡密统计信息。
+     * <p>包含总数、各状态数量、各类型数量、今日新增数量。</p>
+     *
+     * @return 统计数据 Map
+     */
     public Map<String, Object> getStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalCards", cardRepository.count());
@@ -263,6 +336,11 @@ public class CardService {
         return stats;
     }
 
+    /**
+     * 删除卡密及其关联的加密数据和状态记录。
+     *
+     * @param cardId 卡密 ID
+     */
     @Transactional
     public void deleteCard(Integer cardId) {
         Card card = cardRepository.findById(cardId)

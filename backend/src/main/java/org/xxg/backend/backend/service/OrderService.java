@@ -14,6 +14,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
+/**
+ * 订单业务服务。
+ * <p>提供订单的创建、完成、失败、查询及统计功能，
+ * 支持卡密购买场景下的订单全生命周期管理。</p>
+ */
 @Service
 public class OrderService {
 
@@ -35,6 +40,13 @@ public class OrderService {
         this.userRepository = userRepository;
     }
 
+    /**
+     * 创建订单。
+     * <p>校验用户和价格配置后生成订单号，计算总价，状态为 pending。</p>
+     *
+     * @param request 创建订单请求 DTO
+     * @return 创建的订单实体
+     */
     @Transactional
     public Order createOrder(CreateOrderRequest request) {
         // Validate user exists
@@ -62,6 +74,12 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
+    /**
+     * 完成订单（支付成功后调用）。
+     *
+     * @param orderNo  订单号
+     * @param cardKeys 生成的卡密明文（多个以逗号分隔）
+     */
     @Transactional
     public void completeOrder(String orderNo, String cardKeys) {
         Order order = orderRepository.findByOrderNo(orderNo)
@@ -72,6 +90,11 @@ public class OrderService {
         orderRepository.save(order);
     }
 
+    /**
+     * 标记订单为失败状态。
+     *
+     * @param orderNo 订单号
+     */
     @Transactional
     public void failOrder(String orderNo) {
         Order order = orderRepository.findByOrderNo(orderNo)
@@ -80,22 +103,53 @@ public class OrderService {
         orderRepository.save(order);
     }
 
+    /**
+     * 根据订单号查询订单。
+     *
+     * @param orderNo 订单号
+     * @return 订单实体，不存在时返回 null
+     */
     public Order getOrderByNo(String orderNo) {
         return orderRepository.findByOrderNo(orderNo).orElse(null);
     }
 
+    /**
+     * 查询指定用户的全部订单列表（不分页）。
+     *
+     * @param userId 用户 ID
+     * @return 订单列表
+     */
     public List<Order> getOrdersByUserId(Integer userId) {
         return orderRepository.findByUserId(userId);
     }
 
+    /**
+     * 分页查询指定用户的订单。
+     *
+     * @param userId   用户 ID
+     * @param pageable 分页参数
+     * @return 订单分页结果
+     */
     public Page<Order> getOrdersByUserId(Integer userId, Pageable pageable) {
         return orderRepository.findByUserId(userId, pageable);
     }
 
+    /**
+     * 分页查询全部订单。
+     *
+     * @param pageable 分页参数
+     * @return 订单分页结果
+     */
     public Page<Order> getAllOrders(Pageable pageable) {
         return orderRepository.findAll(pageable);
     }
 
+    /**
+     * 获取订单统计信息。
+     * <p>包含总数、待支付/已完成/已失败订单数、今日新增订单数。</p>
+     *
+     * @return 统计数据 Map
+     */
     public Map<String, Object> getOrderStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalOrders", orderRepository.count());

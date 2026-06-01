@@ -1,3 +1,8 @@
+/**
+ * 卡密代码高亮工具函数
+ * 为核销接口多语言代码示例提供语法高亮支持
+ * 使用 highlight.js 按需加载各语言包，避免打包体积过大
+ */
 import hljs from 'highlight.js/lib/core'
 import bash from 'highlight.js/lib/languages/bash'
 import powershell from 'highlight.js/lib/languages/powershell'
@@ -14,6 +19,7 @@ import dart from 'highlight.js/lib/languages/dart'
 import rust from 'highlight.js/lib/languages/rust'
 import swift from 'highlight.js/lib/languages/swift'
 
+// 注册各语言高亮支持（按项目实际需要的语言裁剪）
 hljs.registerLanguage('bash', bash)
 hljs.registerLanguage('powershell', powershell)
 hljs.registerLanguage('javascript', javascript)
@@ -29,7 +35,10 @@ hljs.registerLanguage('dart', dart)
 hljs.registerLanguage('rust', rust)
 hljs.registerLanguage('swift', swift)
 
-/** 与 apiUseCardCodeExamples.js 中各条目的 id 对应 */
+/**
+ * 示例ID到 highlight.js 语言标识的映射表
+ * 与 apiUseCardCodeExamples.js 中各条目的 id 一一对应
+ */
 const EXAMPLE_ID_TO_LANG = {
   curl: 'bash',
   'curl-post-form': 'bash',
@@ -59,6 +68,13 @@ const EXAMPLE_ID_TO_LANG = {
  * @param {string} exampleId
  * @returns {string} 已转义并由 highlight.js 生成的 HTML
  */
+/**
+ * 对核销接口代码示例进行语法高亮
+ * 先按示例ID查找对应语言，找不到则自动检测，最终回退为HTML转义
+ * @param {string} code - 待高亮的源代码字符串
+ * @param {string} exampleId - 示例ID（对应 EXAMPLE_ID_TO_LANG 中的键）
+ * @returns {string} 高亮后的 HTML 字符串
+ */
 export function highlightUseCardExample(code, exampleId) {
   if (!code) return ''
   const lang = EXAMPLE_ID_TO_LANG[exampleId] || 'bash'
@@ -73,6 +89,7 @@ export function highlightUseCardExample(code, exampleId) {
   }
 }
 
+/** 将纯文本中的HTML特殊字符转义，作为高亮失败时的兜底方案 */
 function escapeHtml(text) {
   return text
     .replace(/&/g, '&amp;')

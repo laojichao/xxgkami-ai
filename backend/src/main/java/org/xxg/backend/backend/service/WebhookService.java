@@ -17,6 +17,11 @@ import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Webhook 回调服务。
+ * <p>在卡密验证等事件发生时，异步通知第三方配置的回调 URL。
+ * 内置 SSRF 防护，禁止向内网/回环地址发送请求。</p>
+ */
 @Service
 public class WebhookService {
 
@@ -29,6 +34,15 @@ public class WebhookService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 异步触发 Webhook 回调。
+     * <p>根据 API Key 中配置的 Webhook URL 和请求方法，发送事件通知。
+     * 包含 SSRF 防护，拒绝向内网地址发送请求。</p>
+     *
+     * @param apiKeyId API Key ID
+     * @param card     触发事件的卡密
+     * @param event    事件名称（如 "verify"）
+     */
     @Async
     @SuppressWarnings("unchecked")
     public void triggerWebhook(Long apiKeyId, Card card, String event) {
@@ -83,6 +97,14 @@ public class WebhookService {
         }
     }
 
+    /**
+     * 检测 URL 是否指向内网/回环地址（SSRF 防护）。
+     * <p>检查项包括：回环地址、站点本地地址、链路本地地址、
+     * 常见内网网段（10.x、172.16-31.x、192.168.x、169.254.x）。</p>
+     *
+     * @param url 待检测的 URL
+     * @return true 表示为内网地址，应阻止请求
+     */
     private boolean isInternalUrl(String url) {
         try {
             URI uri = URI.create(url);

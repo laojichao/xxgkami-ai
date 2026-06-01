@@ -1,3 +1,4 @@
+<!-- 系统信息页面：展示系统版本、开发团队、开源协议、赞助入口及版本更新历史 -->
 <template>
   <div class="system-info-container">
     <div class="page-header">
@@ -5,6 +6,7 @@
       <p class="subtitle">查看系统版本、作者信息及开源协议</p>
     </div>
 
+    <!-- 基本信息/开发团队/开源协议/赞助卡片 -->
     <div class="info-content">
       <el-card class="info-card">
         <template #header>
@@ -83,6 +85,7 @@
       </el-card>
     </div>
 
+    <!-- 版本更新历史时间轴 -->
     <!-- 更新时间轴 -->
     <div class="timeline-section">
       <el-card>
@@ -174,6 +177,7 @@
       </el-card>
     </div>
 
+    <!-- 检查更新结果弹窗（新版本信息及更新脚本） -->
     <!-- 更新提示弹窗 -->
     <el-dialog v-model="showUpdateDialog" title="发现新版本" width="500px">
       <div v-if="updateInfo">
@@ -217,11 +221,16 @@ import { ElMessage } from 'element-plus'
 import { copyToClipboard } from '../utils/clipboard.js'
 import { monitorApi } from '../services/api.js'
 
+/** 当前系统版本号 */
 const currentVersion = 'v1.0.6'
+/** 检查更新按钮加载状态 */
 const checking = ref(false)
+/** 更新提示弹窗是否可见 */
 const showUpdateDialog = ref(false)
+/** 远程获取的更新信息（版本号、更新日志、更新脚本等） */
 const updateInfo = ref(null)
 
+/** 复制更新脚本到剪贴板 */
 const copyScript = async (text) => {
   const success = await copyToClipboard(text)
   if (success) {
@@ -231,6 +240,7 @@ const copyScript = async (text) => {
   }
 }
 
+/** 检查远程是否有新版本，若有则弹窗展示更新信息 */
 const checkUpdate = async () => {
   checking.value = true
   try {
@@ -252,6 +262,7 @@ const checkUpdate = async () => {
   }
 }
 
+/** 跳转到项目仓库页面 */
 const goToRepo = () => {
   if (updateInfo.value && updateInfo.value.repoUrl) {
     window.open(updateInfo.value.repoUrl, '_blank')

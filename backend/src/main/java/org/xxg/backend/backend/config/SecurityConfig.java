@@ -11,6 +11,11 @@ import org.xxg.backend.backend.filter.JwtRequestFilter;
 import org.xxg.backend.backend.filter.RateLimitFilter;
 import org.xxg.backend.backend.filter.RequestMonitorFilter;
 
+/**
+ * Spring Security 安全配置。
+ * <p>配置无状态会话管理、请求授权规则（公开接口/管理员接口/用户接口）、
+ * 以及 JWT 认证、请求监控、限流等过滤器的注册顺序。</p>
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -26,6 +31,22 @@ public class SecurityConfig {
         this.rateLimitFilter = rateLimitFilter;
     }
 
+    /**
+     * 配置安全过滤器链。
+     * <p>规则说明：</p>
+     * <ul>
+     *   <li>禁用 CSRF（REST API 无状态认证）</li>
+     *   <li>会话策略为 STATELESS（不创建 HttpSession）</li>
+     *   <li>公开接口（/auth/login、/public/**、/payment/notify 等）允许匿名访问</li>
+     *   <li>管理接口（/admin/**、/cards/admin/** 等）需 ADMIN 角色</li>
+     *   <li>用户接口（/user/**、/wallet/** 等）需 USER 或 ADMIN 角色</li>
+     *   <li>过滤器顺序：请求监控 -> 限流 -> JWT 认证</li>
+     * </ul>
+     *
+     * @param http HttpSecurity 配置对象
+     * @return 构建好的 SecurityFilterChain
+     * @throws Exception 配置异常
+     */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http

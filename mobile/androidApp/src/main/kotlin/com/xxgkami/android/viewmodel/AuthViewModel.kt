@@ -10,29 +10,50 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * 认证相关 ViewModel，管理用户登录、注册、登出等认证状态。
+ *
+ * 通过 [StateFlow] 暴露 UI 状态（加载中、登录结果、用户信息、错误信息），
+ * 供 Compose 或 XML 界面层观察和响应。
+ *
+ * Token 的持久化存储由 [TokenStore] 统一管理，避免与 ApiClient 回调冲突。
+ */
 class AuthViewModel : ViewModel() {
     private val apiClient = ApiProvider.apiClient
     private val authApi = AuthApi(apiClient)
 
+    /** 登录响应状态，包含成功/失败信息及登录数据 */
     private val _loginState = MutableStateFlow<ApiResponse<LoginResponse>?>(null)
     val loginState: StateFlow<ApiResponse<LoginResponse>?> = _loginState
 
+    /** 是否正在加载中，用于 UI 显示加载指示器 */
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    /** 当前登录用户信息，登出或未登录时为 null */
     private val _userInfo = MutableStateFlow<User?>(null)
     val userInfo: StateFlow<User?> = _userInfo
 
+    /** 错误信息，用于 UI 展示提示；null 表示无错误 */
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    /** 注册是否成功，UI 观察此值以跳转登录页或显示成功提示 */
     private val _registerSuccess = MutableStateFlow(false)
     val registerSuccess: StateFlow<Boolean> = _registerSuccess
 
     init {
-        // Token callbacks are managed by TokenStore to avoid conflicts
+        // Token 回调由 TokenStore 统一管理，避免与 ApiClient 的 onTokenRefreshed/onLogout 冲突
     }
 
+    /**
+     * 用户登录。
+     *
+     * 成功后自动保存 Token 和用户基本信息到 [TokenStore]。
+     *
+     * @param username 用户名
+     * @param password 密码
+     */
     fun login(username: String, password: String) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -46,6 +67,14 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 管理员登录。
+     *
+     * 与普通用户登录共用 [handleLoginSuccess] 处理 Token 持久化。
+     *
+     * @param username 管理员用户名
+     * @param password 管理员密码
+     */
     fun adminLogin(username: String, password: String) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -73,6 +102,16 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 用户注册。
+     *
+     * 注册成功后设置 [_registerSuccess] 为 true，UI 层可据此跳转至登录页。
+     *
+     * @param username 用户名
+     * @param password 密码
+     * @param email 邮箱地址
+     * @param code 邮箱验证码
+     */
     fun register(username: String, password: String, email: String, code: String) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -88,6 +127,12 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 发送邮箱验证码。
+     *
+     * @param email 目标邮箱地址
+     * @param type 验证码类型，默认 "register"（注册），也可为 "reset"（重置密码）
+     */
     fun sendCode(email: String, type: String = "register") {
         viewModelScope.launch {
             _error.value = null
@@ -99,6 +144,9 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 获取当前登录用户信息，更新 [_userInfo] 状态。
+     */
     fun getUserInfo() {
         viewModelScope.launch {
             try {
@@ -110,6 +158,15 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 用户登出。
+     *
+     * 调用服务端登出接口后，清除本地 Token 和用户状态。
+     * 即使服务端请求失败也会清理本地状态。
+     *
+     * @param userId 用户 ID
+     * @param role 用户角色（"user" 或 "admin"）
+     */
     fun logout(userId: Int, role: String) {
         viewModelScope.launch {
             try { authApi.logout(userId, role) } catch (_: Exception) {}
@@ -119,6 +176,9 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 清除当前错误状态，UI 层在展示错误提示后应调用此方法。
+     */
     fun clearError() {
         _error.value = null
     }

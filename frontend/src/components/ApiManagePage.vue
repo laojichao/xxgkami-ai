@@ -1,5 +1,7 @@
+<!-- API密钥管理页面：管理API密钥的增删改查、卡密分配、用户绑定、接口回调配置 -->
 <template>
   <div class="api-manage-page">
+    <!-- 页面头部：标题 + 代码实例/接口文档/生成密钥按钮 -->
     <div class="section-header">
       <h2>API密钥管理</h2>
       <div class="header-actions">
@@ -18,6 +20,7 @@
       </div>
     </div>
     
+    <!-- API密钥卡片列表 -->
     <div class="api-keys-list">
       <div class="api-key-card" v-for="apiKey in apiKeys" :key="apiKey.id">
         <div class="api-key-info">
@@ -95,6 +98,7 @@
       </div>
     </div>
 
+    <!-- 创建API密钥弹窗 -->
     <!-- 创建API密钥模态框 -->
     <div v-if="showCreateModal" class="modal-overlay" @click="showCreateModal = false">
       <div class="modal-content" @click.stop>
@@ -134,6 +138,7 @@
       </div>
     </div>
 
+    <!-- 编辑API密钥弹窗（名称/描述/加密/机器码/同机同规格配置） -->
     <!-- 编辑API密钥模态框 -->
     <div v-if="showEditModal" class="modal-overlay" @click="showEditModal = false">
       <div class="modal-content" @click.stop>
@@ -193,6 +198,7 @@
       </div>
     </div>
 
+    <!-- API专属卡密管理弹窗（生成/查看/删除卡密） -->
     <!-- 卡密管理模态框 -->
     <div v-if="showCardCodesModal" class="modal-overlay" @click="showCardCodesModal = false">
       <div class="modal-content large-modal" @click.stop>
@@ -297,6 +303,7 @@
       </div>
     </div>
 
+    <!-- API绑定用户管理弹窗（分配/移除用户） -->
     <!-- 用户管理模态框 -->
     <div v-if="showUsersModal" class="modal-overlay" @click="showUsersModal = false">
       <div class="modal-content large-modal" @click.stop>
@@ -357,6 +364,7 @@
       </div>
     </div>
 
+    <!-- API接口文档弹窗（接口参数/响应说明） -->
     <!-- API Documentation Modal -->
     <div v-if="showDocsModal" class="modal-overlay" @click="showDocsModal = false">
       <div class="modal-content large-modal" @click.stop>
@@ -429,6 +437,7 @@
       </div>
     </div>
 
+    <!-- 核销接口多语言代码示例弹窗（支持语言切换/一键复制/语法高亮） -->
     <!-- 核销接口多语言代码示例 -->
     <div v-if="showUseCardCodeModal" class="modal-overlay" @click="showUseCardCodeModal = false">
       <div class="modal-content large-modal code-examples-modal" @click.stop>
@@ -471,6 +480,7 @@
       </div>
     </div>
 
+    <!-- 接口回调设置弹窗（Webhook URL/请求方式/自定义参数/返回配置/状态码） -->
     <!-- Interface Settings Modal -->
     <div v-if="showInterfaceModal" class="modal-overlay" @click="showInterfaceModal = false">
       <div class="modal-content large-modal" @click.stop>
@@ -699,6 +709,7 @@
       </div>
     </div>
 
+    <!-- 接口回调配置说明面板（可拖动/缩放/全屏的浮动文档窗口） -->
     <Teleport to="body">
       <div
         v-if="showInterfaceModal && interfaceDocVisible"
@@ -788,23 +799,34 @@ const emit = defineEmits([
   // ...
 ])
 
-// Data
+/* ========== 数据状态 ========== */
+
+/** API密钥列表 */
 const apiKeys = ref([])
+/** 所有用户列表（用于分配用户） */
 const allUsers = ref([])
 
+/* 各弹窗的显示状态 */
 const showEditModal = ref(false)
 const showCreateModal = ref(false)
 const showDocsModal = ref(false)
 const showUseCardCodeModal = ref(false)
+/** 当前选中的代码示例语言ID */
 const selectedUseCardExampleId = ref(API_USE_CARD_EXAMPLES[0]?.id ?? 'curl')
 const showInterfaceModal = ref(false)
 const showCardCodesModal = ref(false)
 const showUsersModal = ref(false)
+/** 当前操作的API密钥对象 */
 const currentApiKey = ref({})
+/** 用户管理弹窗中选中的待分配用户ID */
 const selectedUserId = ref('')
+/** 生成卡密数量 */
 const newCardCodeCount = ref(10)
+/** 生成卡密类型（time/count） */
 const newCardCodeType = ref('time')
-const newCardCodeValue = ref(30) // duration or count
+/** 生成卡密的时长或次数 */
+const newCardCodeValue = ref(30)
+/** 是否开启同机时长叠加 */
 const newCardStackTime = ref(false)
 
 /** 接口回调设置 — 右下角可拖动/缩放/全屏的说明面板 */
@@ -818,6 +840,9 @@ const docPanelLayout = reactive({
   h: 420
 })
 
+/* ========== 计算属性：代码示例相关 ========== */
+
+/** 当前环境的API根路径（用于示例代码中的BASE_URL替换） */
 const apiBaseUrlHint = computed(() => {
   const raw = import.meta.env?.VITE_API_BASE_URL
   let base = typeof raw === 'string' && raw.trim() ? raw.trim() : '/api'
@@ -847,11 +872,15 @@ const highlightedUseCardCodeHtml = computed(() => {
   return highlightUseCardExample(ex.code, ex.id)
 })
 
+/* ========== 代码示例弹窗操作 ========== */
+
+/** 打开核销接口代码示例弹窗 */
 function openUseCardCodeModal() {
   selectedUseCardExampleId.value = API_USE_CARD_EXAMPLES[0]?.id ?? 'curl'
   showUseCardCodeModal.value = true
 }
 
+/** 复制当前选中语言的示例代码到剪贴板 */
 async function copyUseCardExampleCode() {
   const code = currentUseCardExample.value?.code
   if (!code) return
@@ -987,6 +1016,9 @@ function startDocPanelResize(e) {
   document.addEventListener('mouseup', onUp)
 }
 
+/* ========== 接口回调配置 ========== */
+
+/** 接口回调设置表单数据（URL/请求方式/输入参数/返回配置/状态码） */
 const interfaceConfig = reactive({
   url: '',
   method: 'GET',
@@ -1011,7 +1043,7 @@ const interfaceConfig = reactive({
 
 
 
-// Helper to generate default URL
+/** 根据当前环境自动生成默认的回调URL */
 const generateDefaultUrl = () => {
   const protocol = window.location.protocol
   const host = window.location.host
@@ -1025,6 +1057,7 @@ watch(() => interfaceConfig.isCustomUrl, (isCustom) => {
   }
 })
 
+/** 编辑API密钥表单数据 */
 const editingKey = reactive({
   id: null,
   name: '',
@@ -1035,13 +1068,16 @@ const editingKey = reactive({
   machineSpecOnceConfig: ''
 })
 
+/** 新建API密钥表单数据 */
 const newApiKey = reactive({
   name: '',
   description: '',
   enableCardEncryption: false
 })
 
-// Methods
+/* ========== API密钥CRUD方法 ========== */
+
+/** 从后端获取所有API密钥及其关联的卡密和用户数据 */
 const fetchApiKeys = async () => {
   try {
     const data = await apiKeyApi.getAllApiKeys()
@@ -1089,6 +1125,7 @@ const fetchApiKeys = async () => {
   }
 }
 
+/** 获取所有用户列表（用于分配用户到API密钥） */
 const fetchUsers = async () => {
   try {
     const data = await apiKeyApi.getAllUsers()
@@ -1099,6 +1136,7 @@ const fetchUsers = async () => {
   }
 }
 
+/** 创建新的API密钥 */
 const createApiKey = async () => {
   if (!newApiKey.name.trim()) return
   
@@ -1120,6 +1158,7 @@ const createApiKey = async () => {
   }
 }
 
+/** 保存编辑后的API密钥配置 */
 const saveApiKey = async () => {
   try {
     await apiKeyApi.updateApiKey(editingKey.id, {
@@ -1150,6 +1189,7 @@ const saveApiKey = async () => {
   }
 }
 
+/** 删除API密钥（二次确认） */
 const deleteApiKey = async (id) => {
   try {
     await ElMessageBox.confirm('确定要删除这个API密钥吗？此操作不可恢复。', '警告', {
@@ -1169,6 +1209,7 @@ const deleteApiKey = async (id) => {
   }
 }
 
+/** 切换API密钥启用/禁用状态 */
 const toggleApiKey = async (apiKey) => {
   try {
     const newStatus = !apiKey.isActive
@@ -1186,6 +1227,7 @@ const toggleApiKey = async (apiKey) => {
   }
 }
 
+/** 将用户分配到当前API密钥 */
 const assignUser = async () => {
   if (!selectedUserId.value || !currentApiKey.value.id) return
   
@@ -1206,6 +1248,7 @@ const assignUser = async () => {
   }
 }
 
+/** 从当前API密钥移除用户 */
 const unassignUser = async (userId) => {
   if (!currentApiKey.value.id) return
   
@@ -1224,7 +1267,9 @@ const unassignUser = async (userId) => {
   }
 }
 
-// Card Code Management
+/* ========== API专属卡密管理 ========== */
+
+/** 获取指定API密钥下的卡密列表 */
 const fetchCardCodes = async (apiKeyId) => {
   if (!apiKeyId) return
   try {
@@ -1256,6 +1301,7 @@ const fetchCardCodes = async (apiKeyId) => {
   }
 }
 
+/** 为当前API密钥批量生成卡密 */
 const generateCardCodes = async () => {
   if (!currentApiKey.value.id) return
   
@@ -1280,6 +1326,7 @@ const generateCardCodes = async () => {
   }
 }
 
+/** 删除指定卡密（二次确认） */
 const deleteCardCode = async (cardId) => {
   try {
     await ElMessageBox.confirm('确定要删除这个卡密吗？此操作不可恢复！', '确认删除', {
@@ -1304,6 +1351,7 @@ const deleteCardCode = async (cardId) => {
   }
 }
 
+/** 复制卡密明文到剪贴板 */
 const copyCardCode = async (code) => {
   const success = await copyToClipboard(code)
   if (success) {
@@ -1313,8 +1361,10 @@ const copyCardCode = async (code) => {
   }
 }
 
-// 简单的前端混淆实现，与后端 CustomCardObfuscator 保持一致
-// 算法：URL编码 -> 反转 -> Base64 -> 替换字符
+/**
+ * 卡密混淆函数（与后端 CustomCardObfuscator 保持一致）
+ * 算法：URL编码 -> 反转 -> Base64 -> 替换字符
+ */
 const obfuscateCardKey = (rawKey) => {
   if (!rawKey) return rawKey
   try {
@@ -1332,6 +1382,7 @@ const obfuscateCardKey = (rawKey) => {
   }
 }
 
+/** 复制混淆后的加密卡密到剪贴板 */
 const copyEncryptedCardCode = async (code) => {
   const encrypted = obfuscateCardKey(code)
   const success = await copyToClipboard(encrypted)
@@ -1342,6 +1393,7 @@ const copyEncryptedCardCode = async (code) => {
   }
 }
 
+/** 获取卡密状态的中文文本 */
 const getCardCodeStatusText = (status) => {
   const map = {
     'unused': '未使用',
@@ -1352,7 +1404,9 @@ const getCardCodeStatusText = (status) => {
   return map[status] || status
 }
 
-// Interface Config Management
+/* ========== 接口回调配置管理 ========== */
+
+/** 打开接口回调设置弹窗，加载已有配置或使用默认值 */
 const openInterfaceSettings = (apiKey) => {
   currentApiKey.value = apiKey
   if (apiKey.webhookConfig) {
@@ -1416,6 +1470,7 @@ const openInterfaceSettings = (apiKey) => {
   showInterfaceModal.value = true
 }
 
+/** 添加自定义请求参数 */
 const addInterfaceParam = () => {
   interfaceConfig.params.push({
     key: '',
@@ -1424,10 +1479,12 @@ const addInterfaceParam = () => {
   })
 }
 
+/** 移除指定索引的请求参数 */
 const removeInterfaceParam = (index) => {
   interfaceConfig.params.splice(index, 1)
 }
 
+/** 上移/下移请求参数 */
 const moveParam = (index, direction) => {
   const newIndex = index + direction
   if (newIndex >= 0 && newIndex < interfaceConfig.params.length) {
@@ -1437,6 +1494,7 @@ const moveParam = (index, direction) => {
   }
 }
 
+/** 添加自定义返回字段 */
 const addResponseParam = () => {
   interfaceConfig.response.push({
     key: '',
@@ -1445,10 +1503,12 @@ const addResponseParam = () => {
   })
 }
 
+/** 移除指定索引的返回字段 */
 const removeResponseParam = (index) => {
   interfaceConfig.response.splice(index, 1)
 }
 
+/** 上移/下移返回字段 */
 const moveResponseParam = (index, direction) => {
   const newIndex = index + direction
   if (newIndex >= 0 && newIndex < interfaceConfig.response.length) {
@@ -1458,6 +1518,7 @@ const moveResponseParam = (index, direction) => {
   }
 }
 
+/** 恢复状态码为系统默认值 */
 const restoreDefaultStatusCodes = () => {
   interfaceConfig.statusCodes = [
     { key: 'success', label: '验证成功', value: '200' },
@@ -1475,6 +1536,7 @@ const restoreDefaultStatusCodes = () => {
   ]
 }
 
+/** 保存接口回调配置到后端 */
 const saveInterfaceConfig = async () => {
   // Validate that 'card_key' is mapped
   const hasCardKey = interfaceConfig.params.some(p => p.type === 'variable' && p.value === 'card_key')

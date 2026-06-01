@@ -13,6 +13,12 @@ import org.xxg.backend.backend.mapper.CardRepository;
 
 import java.util.*;
 
+/**
+ * 公开接口控制器。
+ * <p>提供无需登录即可访问的公开 API，包括功能特性列表、轮播图查询、
+ * 以及卡密机器码的自助查询与解绑。</p>
+ * <p>基础路径：{@code /public}</p>
+ */
 @RestController
 @RequestMapping("/public")
 public class PublicController {
@@ -27,16 +33,32 @@ public class PublicController {
         this.cardRepository = cardRepository;
     }
 
+    /**
+     * 获取已启用的功能特性列表，按排序顺序返回。
+     *
+     * @return 功能特性列表
+     */
     @GetMapping("/features")
     public ResponseEntity<ApiResponse<List<Feature>>> getFeatures() {
         return ResponseEntity.ok(ApiResponse.ok(featureRepository.findByStatusTrueOrderBySortOrderAsc()));
     }
 
+    /**
+     * 获取已启用的轮播图列表，按排序顺序返回。
+     *
+     * @return 轮播图列表
+     */
     @GetMapping("/slides")
     public ResponseEntity<ApiResponse<List<Slide>>> getSlides() {
         return ResponseEntity.ok(ApiResponse.ok(slideRepository.findByStatusTrueOrderBySortOrderAsc()));
     }
 
+    /**
+     * 查询卡密的机器码绑定状态。
+     *
+     * @param body 请求体，包含 card_key 字段
+     * @return 包含 bound（是否已绑定）的结果
+     */
     @PostMapping("/cards/machine-bind/query")
     public ResponseEntity<ApiResponse<Map<String, Object>>> machineBindQuery(@RequestBody Map<String, String> body) {
         String cardKey = body.get("card_key");
@@ -52,6 +74,13 @@ public class PublicController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
+    /**
+     * 自助解绑卡密的机器码。
+     * <p>需要卡密允许自助解绑，且必须提供当前绑定的机器码进行验证。</p>
+     *
+     * @param body 请求体，包含 card_key 和 machine_code 字段
+     * @return 操作结果
+     */
     @PostMapping("/cards/machine-bind/unbind")
     public ResponseEntity<ApiResponse<Void>> machineUnbind(@RequestBody Map<String, String> body) {
         String cardKey = body.get("card_key");

@@ -1,3 +1,4 @@
+<!-- 用户设置页面：提供移动端App绑定功能，通过扫码二维码连接服务器 -->
 <template>
   <div class="user-settings-page">
     <el-card shadow="never">
@@ -21,6 +22,7 @@
       </div>
     </el-card>
 
+    <!-- 二维码绑定弹窗 -->
     <el-dialog v-model="qrDialogVisible" title="绑定手机App" width="360px" center destroy-on-close>
       <div class="qr-container">
         <div class="qr-code-wrapper">
@@ -44,9 +46,15 @@ import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { authApi } from '../services/api'
 
+/** 二维码弹窗是否可见 */
 const qrDialogVisible = ref(false)
+/** 生成的二维码图片URL（Base64） */
 const qrCodeUrl = ref('')
 
+/**
+ * 显示绑定二维码：获取绑定Token，构造服务器连接信息，
+ * 使用AES加密后生成二维码供手机App扫描
+ */
 const showBindQRCode = async () => {
   try {
     qrDialogVisible.value = true

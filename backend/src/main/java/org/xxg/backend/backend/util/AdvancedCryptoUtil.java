@@ -12,14 +12,29 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.Base64;
 
+/**
+ * 高级加密工具类。
+ * <p>提供 AES-GCM 对称加密/解密、ECC 椭圆曲线签名/验签、HMAC-SHA256 摘要签名等能力，
+ * 所有密钥和密文均以 Base64 编码传输。</p>
+ */
 @Component
 public class AdvancedCryptoUtil {
 
+    /** AES-GCM 算法标识 */
     private static final String AES_ALGORITHM = "AES/GCM/NoPadding";
+    /** GCM 认证标签长度（比特） */
     private static final int GCM_TAG_LENGTH = 128;
+    /** GCM 初始向量长度（字节） */
     private static final int GCM_IV_LENGTH = 12;
+    /** 全局盐值，用于卡密签名场景 */
     private static final String GLOBAL_SALT = "global";
 
+    /**
+     * 生成 256 位 AES 密钥。
+     *
+     * @return Base64 编码的 AES 密钥
+     * @throws NoSuchAlgorithmException 如果 AES 算法不可用
+     */
     public String generateAesKey() throws NoSuchAlgorithmException {
         KeyGenerator keyGen = KeyGenerator.getInstance("AES");
         keyGen.init(256);
@@ -27,6 +42,11 @@ public class AdvancedCryptoUtil {
         return Base64.getEncoder().encodeToString(key.getEncoded());
     }
 
+    /**
+     * 生成随机的 GCM 初始向量（IV）。
+     *
+     * @return Base64 编码的 IV（12 字节）
+     */
     public String generateIv() {
         byte[] iv = new byte[GCM_IV_LENGTH];
         SecureRandom random = new SecureRandom();
@@ -34,6 +54,15 @@ public class AdvancedCryptoUtil {
         return Base64.getEncoder().encodeToString(iv);
     }
 
+    /**
+     * 使用 AES-GCM 模式加密明文。
+     *
+     * @param plaintext 明文字符串
+     * @param base64Key Base64 编码的 AES 密钥
+     * @param base64Iv  Base64 编码的初始向量
+     * @return Base64 编码的密文（含认证标签）
+     * @throws Exception 加密过程中的异常
+     */
     public String encrypt(String plaintext, String base64Key, String base64Iv) throws Exception {
         byte[] keyBytes = Base64.getDecoder().decode(base64Key);
         byte[] ivBytes = Base64.getDecoder().decode(base64Iv);
@@ -46,6 +75,15 @@ public class AdvancedCryptoUtil {
         return Base64.getEncoder().encodeToString(encrypted);
     }
 
+    /**
+     * 使用 AES-GCM 模式解密密文。
+     *
+     * @param base64Ciphertext Base64 编码的密文
+     * @param base64Key        Base64 编码的 AES 密钥
+     * @param base64Iv         Base64 编码的初始向量
+     * @return 解密后的明文字符串
+     * @throws Exception 解密过程中的异常（密文被篡改时会抛出认证异常）
+     */
     public String decrypt(String base64Ciphertext, String base64Key, String base64Iv) throws Exception {
         byte[] keyBytes = Base64.getDecoder().decode(base64Key);
         byte[] ivBytes = Base64.getDecoder().decode(base64Iv);
@@ -59,6 +97,12 @@ public class AdvancedCryptoUtil {
         return new String(decrypted, StandardCharsets.UTF_8);
     }
 
+    /**
+     * 生成 ECC（椭圆曲线）密钥对。
+     *
+     * @return 公钥和私钥的 Base64 编码，以 "|" 分隔（公钥|私钥）
+     * @throws NoSuchAlgorithmException 如果 EC 算法不可用
+     */
     public String generateEccKeyPair() throws NoSuchAlgorithmException {
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("EC");
         keyGen.initialize(256);
@@ -67,6 +111,14 @@ public class AdvancedCryptoUtil {
                 + "|" + Base64.getEncoder().encodeToString(keyPair.getPrivate().getEncoded());
     }
 
+    /**
+     * 使用 ECC 私钥对数据进行数字签名（SHA256withECDSA）。
+     *
+     * @param data            待签名的数据
+     * @param base64PrivateKey Base64 编码的 ECC 私钥（PKCS8 格式）
+     * @return Base64 编码的签名值
+     * @throws Exception 签名过程中的异常
+     */
     public String sign(String data, String base64PrivateKey) throws Exception {
         byte[] keyBytes = Base64.getDecoder().decode(base64PrivateKey);
         KeyFactory keyFactory = KeyFactory.getInstance("EC");
@@ -80,6 +132,15 @@ public class AdvancedCryptoUtil {
         return Base64.getEncoder().encodeToString(signed);
     }
 
+    /**
+     * 使用 ECC 公钥验证数字签名（SHA256withECDSA）。
+     *
+     * @param data            原始数据
+     * @param base64Signature Base64 编码的签名值
+     * @param base64PublicKey Base64 编码的 ECC 公钥（X509 格式）
+     * @return 签名是否有效
+     * @throws Exception 验签过程中的异常
+     */
     public boolean verify(String data, String base64Signature, String base64PublicKey) throws Exception {
         byte[] keyBytes = Base64.getDecoder().decode(base64PublicKey);
         KeyFactory keyFactory = KeyFactory.getInstance("EC");
@@ -92,6 +153,11 @@ public class AdvancedCryptoUtil {
         return signature.verify(Base64.getDecoder().decode(base64Signature));
     }
 
+    /**
+     * 获取全局盐值。
+     *
+     * @return 全局盐值字符串
+     */
     public String getGlobalSalt() {
         return GLOBAL_SALT;
     }
