@@ -4,6 +4,11 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 在线用户管理服务
+ * 基于内存ConcurrentHashMap追踪在线用户状态，30分钟无活动自动判定为离线
+ * 提供用户上线/下线状态管理和在线用户列表查询功能
+ */
 @Service
 public class OnlineUserService {
     private final Map<String, Long> onlineUsers = new ConcurrentHashMap<>();

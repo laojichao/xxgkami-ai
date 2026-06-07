@@ -6,6 +6,11 @@ import java.io.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * 数据库备份服务
+ * 提供MySQL数据库的备份功能，支持定时备份和手动备份
+ * 备份文件存储在用户主目录下的backups文件夹中
+ */
 @Service
 public class BackupService {
     @Value("${spring.datasource.url:}")

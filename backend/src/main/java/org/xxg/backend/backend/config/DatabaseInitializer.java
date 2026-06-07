@@ -9,6 +9,15 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import org.xxg.backend.backend.entity.MaintenanceSettings;
 
+/**
+ * 数据库初始化器
+ * <p>应用启动时自动执行，负责：</p>
+ * <ul>
+ *   <li>验证关键安全配置（JWT_SECRET、DB_PASSWORD）是否存在且符合要求</li>
+ *   <li>初始化系统维护设置（如果尚未创建）</li>
+ *   <li>确保管理员密码已使用BCrypt加密存储</li>
+ * </ul>
+ */
 @Component
 public class DatabaseInitializer implements CommandLineRunner {
 

@@ -4,6 +4,11 @@ import org.springframework.stereotype.Component;
 import java.util.Base64;
 import java.util.UUID;
 
+/**
+ * 卡密混淆工具类
+ * <p>提供卡密的生成、加密键生成和混淆/反混淆功能。</p>
+ * <p>卡密格式为16位大写字母数字组合，加密键使用SHA-256哈希。</p>
+ */
 @Component
 public class CustomCardObfuscator {
 

@@ -5,6 +5,11 @@ import java.util.*;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 
+/**
+ * 支付工具类
+ * <p>提供易支付接口的签名生成、签名验证和订单号生成功能。</p>
+ * <p>签名算法：将参数按key排序拼接后附加密钥，进行MD5哈希并转大写。</p>
+ */
 @Component
 public class PaymentUtil {
 

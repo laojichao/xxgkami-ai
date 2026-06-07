@@ -14,6 +14,12 @@ import org.xxg.backend.backend.service.CardService;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 卡密管理接口控制器
+ * <p>提供卡密的生成、验证、查询、启停用、机器码解绑及统计等功能。</p>
+ * <p>基础路径：/cards</p>
+ * <p>包含前端兼容接口和标准REST接口两套端点。</p>
+ */
 @RestController
 @RequestMapping("/cards")
 public class CardController {

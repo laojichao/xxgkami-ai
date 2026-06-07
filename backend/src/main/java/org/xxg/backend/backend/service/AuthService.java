@@ -16,6 +16,19 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 认证服务 - 处理用户/管理员的登录、注册、验证码和令牌刷新等认证相关业务逻辑
+ * <p>主要功能包括:</p>
+ * <ul>
+ *   <li>管理员登录认证</li>
+ *   <li>用户登录认证(含账号状态校验)</li>
+ *   <li>用户注册(含邮箱验证码校验)</li>
+ *   <li>邮箱验证码发送与管理</li>
+ *   <li>JWT令牌刷新</li>
+ *   <li>密码重置(含验证码校验)</li>
+ *   <li>绑定令牌管理(第三方登录场景)</li>
+ * </ul>
+ */
 @Service
 public class AuthService {
 

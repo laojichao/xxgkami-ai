@@ -8,6 +8,12 @@ import org.xxg.backend.backend.service.EmailService;
 
 import java.util.Map;
 
+/**
+ * 系统设置接口控制器
+ * <p>提供系统配置的查询和更新功能，包括支付配置、邮件配置等。</p>
+ * <p>基础路径：/settings</p>
+ * <p>权限：查询接口公开访问，更新接口仅管理员</p>
+ */
 @RestController
 @RequestMapping("/settings")
 public class SettingsController {

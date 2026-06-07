@@ -7,6 +7,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Arrays;
 
+/**
+ * Web MVC 配置
+ * <p>配置CORS跨域资源共享策略，支持通过环境变量 CORS_ALLOWED_ORIGINS 配置允许的源。</p>
+ * <p>默认允许 localhost:3000 和 localhost:5173，启用凭据传递，最大缓存1小时。</p>
+ */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 

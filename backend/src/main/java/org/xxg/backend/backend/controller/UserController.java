@@ -13,6 +13,11 @@ import org.xxg.backend.backend.service.UserService;
 
 import java.util.Map;
 
+/**
+ * 用户管理接口控制器
+ * <p>提供用户个人信息管理（个人资料、密码修改、头像上传、社交绑定）和管理员用户管理功能。</p>
+ * <p>基础路径：/user, /admin/users</p>
+ */
 @RestController
 public class UserController {
     private final UserService userService;
