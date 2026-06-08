@@ -32,11 +32,16 @@ public class BackupService {
         }
 
         String dbName = extractDbName(dbUrl);
+        // Validate dbName to prevent command injection via JDBC URL manipulation
+        if (dbName == null || !dbName.matches("^[a-zA-Z0-9_\\-\\.]+$")) {
+            throw new Exception("Invalid database name extracted from URL: " + dbName);
+        }
         ProcessBuilder pb = new ProcessBuilder(
             "mysqldump", "--user=" + dbUser, dbName);
         if (!dbPass.isEmpty()) pb.environment().put("MYSQL_PWD", dbPass);
         pb.redirectOutput(new File(backupDir + "/" + filename));
-        pb.redirectErrorStream(true);
+        // 错误输出重定向到单独文件，避免与备份数据混合导致 SQL 文件损坏
+        pb.redirectError(new File(backupDir + "/" + filename + ".err"));
         Process process = pb.start();
         int exitCode = process.waitFor();
         if (exitCode != 0) throw new Exception("Backup failed with exit code: " + exitCode);

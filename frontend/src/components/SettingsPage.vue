@@ -554,6 +554,7 @@ const saveSettings = async () => {
     payload.qqLogin = String(payload.qqLogin)
     payload.authenticatorLogin = String(payload.authenticatorLogin)
     payload.aggregatedLogin = String(payload.aggregatedLogin)
+    payload.payment_enabled = String(payload.payment_enabled)
     
     // Construct oauth_login_types string
     const types = []
@@ -567,10 +568,8 @@ const saveSettings = async () => {
     if (res.success) {
       emit('save-settings', payload)
       showToast('设置已保存', 'success')
-      // 延迟1秒后刷新页面
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+      // 重新加载设置数据
+      await loadSettings()
     } else {
       showToast(res.message || '保存失败', 'error')
     }
@@ -638,30 +637,7 @@ const createBackup = async () => {
 }
 
 const showToast = (message, type = 'info') => {
-  const colors = {
-    success: '#28a745',
-    info: '#17a2b8',
-    warning: '#ffc107',
-    error: '#dc3545'
-  }
-  
-  const toast = document.createElement('div')
-  toast.textContent = message
-  toast.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: ${colors[type]};
-    color: white;
-    padding: 12px 20px;
-    border-radius: 6px;
-    z-index: 10000;
-    animation: slideInRight 0.3s ease;
-  `
-  document.body.appendChild(toast)
-  setTimeout(() => {
-    toast.remove()
-  }, 3000)
+  ElMessage({ message, type, duration: 3000 })
 }
 
 // 初始化数据

@@ -43,5 +43,11 @@
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**
 
-# Keep the application class
--keep class com.xxgkami.android.** { *; }
+# Keep the application class and entry point
+-keep class com.xxgkami.android.MainActivity { *; }
+
+# Keep ViewModels (used by Compose viewModel() which uses reflection)
+-keep class com.xxgkami.android.viewmodel.** { *; }
+
+# Keep data store (used by reflection for SharedPreferences)
+-keep class com.xxgkami.android.data.** { *; }

@@ -27,7 +27,19 @@ const checkLoginStatus = async () => {
 
     // 1. 优先尝试恢复登录状态
     if (storedToken && storedUserInfo && storedIsLoggedIn === 'true') {
-      const parsedUserInfo = JSON.parse(storedUserInfo)
+      let parsedUserInfo;
+      try {
+        parsedUserInfo = JSON.parse(storedUserInfo);
+      } catch (parseError) {
+        console.error('localStorage userInfo 数据损坏，清除登录状态:', parseError);
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        isLoggedIn.value = false;
+        userInfo.value = null;
+        return;
+      }
       isLoggedIn.value = true
       userInfo.value = parsedUserInfo
 
@@ -139,9 +151,11 @@ const handleOAuthCallback = async () => {
   // If not found in search, try hash (e.g. #/oauth/callback?token=...)
   if (!token && window.location.hash.includes('?')) {
       const hashQuery = window.location.hash.split('?')[1];
-      const hashParams = new URLSearchParams(hashQuery);
-      token = hashParams.get('token');
-      refreshToken = hashParams.get('refreshToken');
+      if (hashQuery) {
+          const hashParams = new URLSearchParams(hashQuery);
+          token = hashParams.get('token');
+          refreshToken = hashParams.get('refreshToken');
+      }
   }
 
   // If still not found, check if it's in the path (some routers might do this)
@@ -178,10 +192,12 @@ const handleOAuthCallback = async () => {
     }
   } else if (window.location.pathname.includes('/oauth/callback') || window.location.hash.includes('/oauth/callback')) {
       // Check for needRegister param
-      const needRegister = urlParams.get('needRegister') || new URLSearchParams(window.location.hash.split('?')[1]).get('needRegister');
+      const hashQueryString = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const needRegister = urlParams.get('needRegister') || (hashQueryString ? new URLSearchParams(hashQueryString).get('needRegister') : null);
       if (needRegister === 'true') {
-           const registerToken = urlParams.get('registerToken') || new URLSearchParams(window.location.hash.split('?')[1]).get('registerToken');
-           const nickname = urlParams.get('nickname') || new URLSearchParams(window.location.hash.split('?')[1]).get('nickname');
+           const hashQs = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+           const registerToken = urlParams.get('registerToken') || (hashQs ? new URLSearchParams(hashQs).get('registerToken') : null);
+           const nickname = urlParams.get('nickname') || (hashQs ? new URLSearchParams(hashQs).get('nickname') : null);
 
            if (isBinding && registerToken) {
                try {
@@ -221,7 +237,8 @@ const handleOAuthCallback = async () => {
                return true;
            }
       } else {
-          const error = urlParams.get('error') || new URLSearchParams(window.location.hash.split('?')[1]).get('error');
+          const hashQs2 = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+          const error = urlParams.get('error') || (hashQs2 ? new URLSearchParams(hashQs2).get('error') : null);
           if (error) {
               console.error('OAuth Error from provider:', error);
               ElMessage.error('登录失败: ' + error);
@@ -247,8 +264,12 @@ onMounted(async () => {
     loading.value = false
   }
 
-  // 每30秒检查一次维护状态
-  maintenanceInterval = setInterval(checkMaintenance, 30000)
+  // 每60秒检查一次维护状态（仅在未登录或非管理员时需要）
+  maintenanceInterval = setInterval(() => {
+    if (!isLoggedIn.value || userInfo.value?.role !== 'admin') {
+      checkMaintenance()
+    }
+  }, 60000)
 })
 
 onUnmounted(() => {

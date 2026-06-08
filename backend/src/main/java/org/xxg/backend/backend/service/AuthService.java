@@ -11,6 +11,7 @@ import org.xxg.backend.backend.mapper.*;
 import org.xxg.backend.backend.util.JwtUtil;
 import org.xxg.backend.backend.util.PasswordUtil;
 
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -39,19 +40,22 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final PasswordUtil passwordUtil;
     private final EmailService emailService;
+    private final TotpService totpService;
 
     // 内存存储 bind token，生产环境建议用 Redis
     private final Map<String, LocalDateTime> bindTokens = new ConcurrentHashMap<>();
 
     public AuthService(AdminRepository adminRepository, UserRepository userRepository,
                        VerificationCodeRepository verificationCodeRepository,
-                       JwtUtil jwtUtil, PasswordUtil passwordUtil, EmailService emailService) {
+                       JwtUtil jwtUtil, PasswordUtil passwordUtil, EmailService emailService,
+                       TotpService totpService) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
         this.verificationCodeRepository = verificationCodeRepository;
         this.jwtUtil = jwtUtil;
         this.passwordUtil = passwordUtil;
         this.emailService = emailService;
+        this.totpService = totpService;
     }
 
     public LoginResponse adminLogin(LoginRequest request) {
@@ -60,6 +64,16 @@ public class AuthService {
 
         if (!passwordUtil.matches(request.getPassword(), admin.getPassword())) {
             throw new BusinessException("密码错误");
+        }
+
+        // 强制 TOTP 二次验证：管理员启用 TOTP 后必须提供验证码
+        if (Boolean.TRUE.equals(admin.getTotpEnabled())) {
+            if (request.getTotpCode() == null || request.getTotpCode().isBlank()) {
+                throw new BusinessException("请输入 TOTP 验证码");
+            }
+            if (!totpService.verifyCode(admin.getTotpSecret(), request.getTotpCode())) {
+                throw new BusinessException("TOTP 验证码错误");
+            }
         }
 
         String accessToken = jwtUtil.generateAccessToken(admin.getUsername(), "admin");
@@ -138,7 +152,7 @@ public class AuthService {
         if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException("验证码已过期");
         }
-        if (!vCode.getCode().equals(request.getCode())) {
+        if (!constantTimeEquals(vCode.getCode(), request.getCode())) {
             throw new BusinessException("验证码错误");
         }
         // 删除已使用的验证码，防止重复使用
@@ -188,8 +202,38 @@ public class AuthService {
         String username = jwtUtil.extractUsername(refreshToken);
         String role = jwtUtil.extractRole(refreshToken);
 
+        // 验证 refresh token 是否与数据库中存储的一致，防止已失效的 token 被重复使用
+        if ("admin".equals(role)) {
+            Admin admin = adminRepository.findByUsername(username).orElse(null);
+            if (admin == null || admin.getRefreshToken() == null
+                    || !admin.getRefreshToken().equals(refreshToken)) {
+                throw new BusinessException("Refresh token 已失效，请重新登录");
+            }
+        } else {
+            User user = userRepository.findByUsername(username).orElse(null);
+            if (user == null || user.getRefreshToken() == null
+                    || !user.getRefreshToken().equals(refreshToken)) {
+                throw new BusinessException("Refresh token 已失效，请重新登录");
+            }
+        }
+
         String newAccessToken = jwtUtil.generateAccessToken(username, role);
         String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
+
+        // 更新数据库中的 token，使旧 refresh token 失效
+        if ("admin".equals(role)) {
+            adminRepository.findByUsername(username).ifPresent(admin -> {
+                admin.setAccessToken(newAccessToken);
+                admin.setRefreshToken(newRefreshToken);
+                adminRepository.save(admin);
+            });
+        } else {
+            userRepository.findByUsername(username).ifPresent(user -> {
+                user.setAccessToken(newAccessToken);
+                user.setRefreshToken(newRefreshToken);
+                userRepository.save(user);
+            });
+        }
 
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put("username", username);
@@ -202,16 +246,22 @@ public class AuthService {
                 .build();
     }
 
-    private Map<String, Object> generateBindToken() {
+    // bind token 到 userId 的映射，用于验证 token 归属
+    private final Map<String, Integer> bindTokenUsers = new ConcurrentHashMap<>();
+
+    private Map<String, Object> generateBindToken(Integer userId) {
         String token = UUID.randomUUID().toString();
         bindTokens.put(token, LocalDateTime.now().plusMinutes(10));
+        if (userId != null) {
+            bindTokenUsers.put(token, userId);
+        }
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
         return result;
     }
 
-    public Map<String, Object> getBindToken() {
-        return generateBindToken();
+    public Map<String, Object> getBindToken(Integer userId) {
+        return generateBindToken(userId);
     }
 
     public boolean validateBindToken(Integer userId, String token) {
@@ -220,9 +270,16 @@ public class AuthService {
         if (expireTime == null) return false;
         if (expireTime.isBefore(LocalDateTime.now())) {
             bindTokens.remove(token);
+            bindTokenUsers.remove(token);
+            return false;
+        }
+        // 验证 token 归属：只有生成该 token 的用户才能使用
+        Integer tokenOwner = bindTokenUsers.get(token);
+        if (tokenOwner != null && userId != null && !tokenOwner.equals(userId)) {
             return false;
         }
         bindTokens.remove(token); // 一次性使用
+        bindTokenUsers.remove(token);
         return true;
     }
 
@@ -235,11 +292,16 @@ public class AuthService {
         if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException("验证码已过期");
         }
-        if (!vCode.getCode().equals(request.getCode())) {
+        if (!constantTimeEquals(vCode.getCode(), request.getCode())) {
             throw new BusinessException("验证码错误");
         }
         // 删除已使用的验证码，防止重复使用
         verificationCodeRepository.delete(vCode);
+
+        // 密码强度校验：至少6位
+        if (request.getNewPassword() == null || request.getNewPassword().length() < 6) {
+            throw new BusinessException("新密码长度不能少于6位");
+        }
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("用户不存在"));
@@ -247,5 +309,16 @@ public class AuthService {
         user.setPassword(passwordUtil.encode(request.getNewPassword()));
         user.setUpdateTime(LocalDateTime.now());
         userRepository.save(user);
+    }
+
+    /**
+     * 常量时间字符串比较，防止时序攻击。
+     * 使用 MessageDigest.isEqual 对字节数组进行比较，耗时与内容无关。
+     */
+    private boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) return false;
+        return MessageDigest.isEqual(
+                a.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                b.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 }

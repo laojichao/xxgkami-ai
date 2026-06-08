@@ -1112,7 +1112,7 @@ const fetchApiKeys = async () => {
         lastUsed: null, // Not implemented yet
         requestCount: 0, // Not implemented yet
         cardCodes: cardCodes, 
-        webhookConfig: key.webhook_config ? JSON.parse(key.webhook_config) : null,
+        webhookConfig: (() => { try { return key.webhook_config ? JSON.parse(key.webhook_config) : null } catch(e) { console.warn('Invalid webhook_config JSON:', e); return null } })(),
         assignedUsers: key.assignedUsers || [],
         enableCardEncryption: key.enable_card_encryption || false,
         requireMachineCode: key.require_machine_code || false,

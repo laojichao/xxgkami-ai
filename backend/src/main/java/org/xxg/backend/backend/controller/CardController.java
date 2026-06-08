@@ -70,6 +70,7 @@ public class CardController {
     public ResponseEntity<ApiResponse<Page<Card>>> getAdminCards(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
         return ResponseEntity.ok(ApiResponse.ok(
                 cardService.getCardsByCreator("admin", null, PageRequest.of(page, size))));
     }
@@ -81,12 +82,28 @@ public class CardController {
 
     @PatchMapping("/admin/{id}/status")
     public ResponseEntity<ApiResponse<Void>> updateCardStatus(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
-        Number statusNum = (Number) body.get("status");
-        Integer status = statusNum != null ? statusNum.intValue() : null;
-        if (status != null && status == 2) {
+        Object statusObj = body.get("status");
+        Integer status = null;
+        if (statusObj instanceof Number) {
+            status = ((Number) statusObj).intValue();
+        } else if (statusObj instanceof String) {
+            try {
+                status = Integer.parseInt((String) statusObj);
+            } catch (NumberFormatException e) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("无效的状态值"));
+            }
+        }
+        if (status == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("状态值不能为空"));
+        }
+        // 只接受合法的状态值：0(未使用)、1(已使用)、2(已停用)
+        if (status != 0 && status != 1 && status != 2) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无效的状态值，仅支持 0(未使用)、1(已使用)、2(已停用)"));
+        }
+        if (status == 2) {
             cardService.disableCard(id);
         } else {
-            cardService.enableCard(id);
+            cardService.setCardStatus(id, status);
         }
         return ResponseEntity.ok(ApiResponse.ok("状态已更新"));
     }
@@ -153,7 +170,9 @@ public class CardController {
         result.put("duration", card.getDuration());
         result.put("totalCount", card.getTotalCount());
         result.put("remainingCount", card.getRemainingCount());
-        result.put("machineCode", card.getMachineCode());
+        // 机器码脱敏：仅返回是否已绑定，不暴露完整机器码
+        String mc = card.getMachineCode();
+        result.put("machineCodeBound", mc != null && !mc.isEmpty());
         result.put("verifyMethod", card.getVerifyMethod() != null ? card.getVerifyMethod().name() : null);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }

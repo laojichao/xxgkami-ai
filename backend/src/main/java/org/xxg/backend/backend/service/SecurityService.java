@@ -35,6 +35,7 @@ public class SecurityService {
      * @return true 表示已被封禁
      */
     public boolean isIpBlocked(String ip) {
+        if (ip == null || ip.isBlank()) return false;
         return blacklistRepository.isBlocked(ip, LocalDateTime.now());
     }
 

@@ -5,6 +5,8 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.UpdateTimestamp;
+
 /**
  * 钱包实体 - 用户账户余额及资金统计
  */
@@ -32,5 +34,6 @@ public class Wallet {
     private LocalDateTime createTime = LocalDateTime.now();
 
     @Column(name = "update_time")
-    private LocalDateTime updateTime = LocalDateTime.now();
+    @UpdateTimestamp
+    private LocalDateTime updateTime;
 }

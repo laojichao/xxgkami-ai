@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -21,6 +22,7 @@ public class User {
     @Column(unique = true, length = 100)
     private String email; // 邮箱地址(唯一, 用于找回密码等)
 
+    @JsonIgnore
     @Column(nullable = false, length = 255)
     private String password; // 加密后的登录密码
 
@@ -56,9 +58,11 @@ public class User {
     @Column(name = "update_time")
     private LocalDateTime updateTime = LocalDateTime.now();
 
+    @JsonIgnore
     @Column(name = "access_token", length = 512)
     private String accessToken; // JWT访问令牌
 
+    @JsonIgnore
     @Column(name = "refresh_token", length = 512)
     private String refreshToken; // JWT刷新令牌
 }

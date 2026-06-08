@@ -176,10 +176,12 @@ public class AdvancedCryptoUtil {
     }
 
     /**
-     * HMAC-SHA256 验签。
+     * HMAC-SHA256 验签（常量时间比较，防止时序攻击）。
      */
     public boolean hmacVerify(String data, String base64Signature, String base64AesKey) throws Exception {
         String calculated = hmacSign(data, base64AesKey);
-        return calculated.equals(base64Signature);
+        return MessageDigest.isEqual(
+                calculated.getBytes(StandardCharsets.UTF_8),
+                base64Signature.getBytes(StandardCharsets.UTF_8));
     }
 }

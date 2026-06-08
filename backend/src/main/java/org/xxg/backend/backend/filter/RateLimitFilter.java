@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.filter;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,8 +10,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 请求限流过滤器
@@ -24,6 +30,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final ConcurrentHashMap<String, RequestCounter> loginAttempts = new ConcurrentHashMap<>();
     /** 卡密验证接口的请求计数器（按IP分组） */
     private final ConcurrentHashMap<String, RequestCounter> verifyAttempts = new ConcurrentHashMap<>();
+    /** 敏感认证接口（注册/邮箱验证码/密码重置）的请求计数器（按IP分组） */
+    private final ConcurrentHashMap<String, RequestCounter> sensitiveAttempts = new ConcurrentHashMap<>();
+
+    /** 定时清理过期计数器，防止内存泄漏（每5分钟执行一次） */
+    private static final long CLEANUP_INTERVAL_MINUTES = 5;
+    /** 计数器过期时间（10分钟无活动即清理） */
+    private static final long ENTRY_EXPIRE_MS = 10 * 60 * 1000L;
 
     /** 登录接口：每窗口最大请求数 */
     private static final int LOGIN_MAX_REQUESTS = 10;
@@ -33,6 +46,50 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final int VERIFY_MAX_REQUESTS = 30;
     /** 验证接口：滑动窗口时长（秒） */
     private static final int VERIFY_WINDOW_SECONDS = 60;
+    /** 敏感认证接口：每窗口最大请求数 */
+    private static final int SENSITIVE_MAX_REQUESTS = 5;
+    /** 敏感认证接口：滑动窗口时长（秒） */
+    private static final int SENSITIVE_WINDOW_SECONDS = 60;
+
+    /** 定时清理调度器 */
+    private final ScheduledExecutorService cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "rate-limit-cleanup");
+        t.setDaemon(true);
+        return t;
+    });
+
+    {
+        // 启动定时清理任务，每5分钟清理一次过期的限流计数器
+        cleanupScheduler.scheduleAtFixedRate(this::cleanupExpiredEntries,
+                CLEANUP_INTERVAL_MINUTES, CLEANUP_INTERVAL_MINUTES, TimeUnit.MINUTES);
+    }
+
+    /** 应用关闭时清理定时器线程，防止资源泄漏 */
+    @PreDestroy
+    public void destroy() {
+        cleanupScheduler.shutdownNow();
+    }
+
+    /**
+     * 清理过期的限流计数器条目，防止内存无限增长。
+     * 遍历两个计数器 Map，移除超过 ENTRY_EXPIRE_MS 未更新的条目。
+     */
+    private void cleanupExpiredEntries() {
+        long now = System.currentTimeMillis();
+        cleanupMap(loginAttempts, now);
+        cleanupMap(verifyAttempts, now);
+        cleanupMap(sensitiveAttempts, now);
+    }
+
+    private void cleanupMap(ConcurrentHashMap<String, RequestCounter> map, long now) {
+        Iterator<Map.Entry<String, RequestCounter>> it = map.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, RequestCounter> entry = it.next();
+            if (now - entry.getValue().windowStart > ENTRY_EXPIRE_MS) {
+                it.remove();
+            }
+        }
+    }
 
     /**
      * 过滤器核心逻辑：根据请求URI和客户端IP进行限流判断
@@ -63,6 +120,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
             }
         }
 
+        // 敏感认证接口限流：同一IP每分钟最多5次（防止邮箱轰炸和验证码暴力破解）
+        if (uri.contains("/auth/register") || uri.contains("/auth/email-code")
+                || uri.contains("/auth/reset-code") || uri.contains("/auth/reset-password")) {
+            if (!tryAcquire(sensitiveAttempts, clientIp, SENSITIVE_MAX_REQUESTS, SENSITIVE_WINDOW_SECONDS)) {
+                response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"success\":false,\"message\":\"请求过于频繁，请稍后再试\"}");
+                return;
+            }
+        }
+
         // 未触发限流，放行请求
         filterChain.doFilter(request, response);
     }
@@ -80,7 +148,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long now = System.currentTimeMillis();
         long windowMs = windowSeconds * 1000L;
 
-        // 使用compute原子操作获取或重置计数器
+        // 使用 compute 原子操作获取或重置计数器，消除竞态条件
         RequestCounter counter = counters.compute(key, (k, v) -> {
             if (v == null || now - v.windowStart > windowMs) {
                 return new RequestCounter(now);
@@ -88,34 +156,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return v;
         });
 
-        // 二次检查：防止并发场景下窗口过期未重置
-        if (now - counter.windowStart > windowMs) {
-            counters.put(key, new RequestCounter(now));
-            counter = counters.get(key);
-        }
-
         // 原子递增并判断是否超出限制
         return counter.count.incrementAndGet() <= maxRequests;
     }
 
     /**
-     * 获取客户端真实IP地址
-     * 优先从X-Forwarded-For、X-Real-IP头部获取，兜底使用remoteAddr
-     * 支持多级代理场景（取第一个IP）
+     * 获取客户端IP地址。
+     * <p>安全策略：优先使用 remoteAddr（TCP 连接的直接来源）。
+     * X-Forwarded-For / X-Real-IP 仅在配置了可信反向代理时才应使用，
+     * 否则攻击者可通过伪造头部绕过限流。</p>
      */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // 多个代理时取第一个IP（即客户端真实IP）
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
+        return request.getRemoteAddr();
     }
 
     /**

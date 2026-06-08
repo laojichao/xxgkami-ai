@@ -72,6 +72,7 @@ public class UserController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword) {
+        size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
         return ResponseEntity.ok(ApiResponse.ok(userService.getAllUsers(PageRequest.of(page - 1, size))));
     }
 
@@ -104,6 +105,7 @@ public class UserController {
     public ResponseEntity<ApiResponse<Page<User>>> listUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
         return ResponseEntity.ok(ApiResponse.ok(userService.getAllUsers(PageRequest.of(page, size))));
     }
 

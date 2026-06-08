@@ -2,6 +2,7 @@ package org.xxg.backend.backend.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 /**
@@ -13,6 +14,7 @@ public class EmailCodeRequest {
     @NotBlank(message = "邮箱不能为空")
     @Email(message = "邮箱格式不正确")
     private String email;
-    /** 验证码用途类型，如 register/resetPassword，默认 register */
+    /** 验证码用途类型，如 register/reset，默认 register */
+    @Pattern(regexp = "^(register|reset)$", message = "type仅支持register或reset")
     private String type = "register";
 }

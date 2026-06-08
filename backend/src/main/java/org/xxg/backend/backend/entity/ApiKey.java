@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.UpdateTimestamp;
+
 /**
  * API密钥实体 - 管理第三方接口调用的密钥信息
  */
@@ -42,7 +44,8 @@ public class ApiKey {
     private String name = "API Key"; // 密钥别名
 
     @Column(name = "update_time")
-    private LocalDateTime updateTime = LocalDateTime.now();
+    @UpdateTimestamp
+    private LocalDateTime updateTime;
 
     @Column(name = "webhook_config", columnDefinition = "TEXT")
     private String webhookConfig; // Webhook回调配置(JSON格式)

@@ -10,6 +10,9 @@ import org.xxg.backend.backend.mapper.*;
 import org.xxg.backend.backend.util.AdvancedCryptoUtil;
 import org.xxg.backend.backend.util.CustomCardObfuscator;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -21,6 +24,7 @@ import java.util.*;
 @Service
 public class CardService {
 
+    private static final Logger log = LoggerFactory.getLogger(CardService.class);
     private final CardRepository cardRepository;
     private final CardCipherRepository cardCipherRepository;
     private final CardStatusRepository cardStatusRepository;
@@ -61,7 +65,7 @@ public class CardService {
     @Transactional
     public Card generateCard(String cardType, Integer duration, Integer totalCount,
                              String creatorType, Integer creatorId, String creatorName,
-                             String verifyMethod, Integer days, Long apiKeyId) throws Exception {
+                             String verifyMethod, Integer days, Integer apiKeyId) throws Exception {
         // 校验枚举参数
         Card.CardType type;
         Card.CreatorType creator;
@@ -144,7 +148,7 @@ public class CardService {
      * @return 验证结果 Map，包含 success、message、statusCode 等字段
      */
     @Transactional
-    public Map<String, Object> verifyCard(String cardKey, String machineCode, Long apiKeyId) {
+    public Map<String, Object> verifyCard(String cardKey, String machineCode, Integer apiKeyId) {
         Map<String, Object> result = new HashMap<>();
 
         Card card = cardRepository.findByCardKey(cardKey).orElse(null);
@@ -176,10 +180,11 @@ public class CardService {
             card.setMachineCode(machineCode);
         }
 
-        // Get status
-        CardStatus cardStatus = cardStatusRepository.findByCardHash(card.getEncryptedKey()).orElse(null);
+        // Get status with pessimistic lock to prevent stale reads on concurrent updates
+        CardStatus cardStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
 
         if (card.getCardType() == Card.CardType.time) {
+
             // Time card - check expiry
             if (cardStatus != null && cardStatus.getExpireTime() != null
                     && cardStatus.getExpireTime().isBefore(LocalDateTime.now())) {
@@ -195,20 +200,19 @@ public class CardService {
                 result.put("expire_time", cardStatus.getExpireTime().toString());
             }
         } else if (card.getCardType() == Card.CardType.count) {
-            // Count card - check remaining count
-            if (cardStatus != null && cardStatus.getRemainCount() <= 0) {
+            // Count card - use pessimistic lock to prevent concurrent double-spend
+            CardStatus lockedStatus = cardStatus;
+            if (lockedStatus == null || lockedStatus.getRemainCount() <= 0) {
                 result.put("success", false);
                 result.put("message", "次数已用尽");
                 result.put("statusCode", 403);
                 return result;
             }
-            // Decrement count
-            if (cardStatus != null) {
-                cardStatus.setRemainCount(cardStatus.getRemainCount() - 1);
-                cardStatus.setLastUseTime(LocalDateTime.now());
-                cardStatusRepository.save(cardStatus);
-                result.put("remaining_count", cardStatus.getRemainCount());
-            }
+            // Decrement count atomically under lock
+            lockedStatus.setRemainCount(lockedStatus.getRemainCount() - 1);
+            lockedStatus.setLastUseTime(LocalDateTime.now());
+            cardStatusRepository.save(lockedStatus);
+            result.put("remaining_count", lockedStatus.getRemainCount());
         }
 
         // Update card status
@@ -227,7 +231,8 @@ public class CardService {
             try {
                 webhookService.triggerWebhook(apiKeyId, card, "verify");
             } catch (Exception e) {
-                // Don't fail verification on webhook error
+                // Webhook failure should not block card verification, but must be logged
+                log.warn("Webhook trigger failed for card {} apiKeyId={}: {}", card.getId(), apiKeyId, e.getMessage(), e);
             }
         }
 
@@ -293,7 +298,9 @@ public class CardService {
     }
 
     /**
-     * 启用卡密（恢复为未使用状态）。
+     * 启用卡密（恢复为之前的状态）。
+     * <p>如果卡密之前是已使用状态(1)，恢复后仍为已使用；
+     * 如果之前是未使用状态(0)，恢复后仍为未使用。</p>
      *
      * @param cardId 卡密 ID
      */
@@ -301,7 +308,27 @@ public class CardService {
     public void enableCard(Integer cardId) {
         Card card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new BusinessException("卡密不存在"));
-        card.setStatus(0);
+        // 恢复为未使用状态(0)，因为停用的卡密通常是未使用的
+        // 如果卡密已绑定机器码且已使用，保持状态1
+        if (card.getMachineCode() != null && !card.getMachineCode().isEmpty() && card.getUseTime() != null) {
+            card.setStatus(1); // 已使用
+        } else {
+            card.setStatus(0); // 未使用
+        }
+        cardRepository.save(card);
+    }
+
+    /**
+     * 设置卡密为指定状态。
+     *
+     * @param cardId 卡密 ID
+     * @param status 目标状态（0=未使用，1=已使用）
+     */
+    @Transactional
+    public void setCardStatus(Integer cardId, int status) {
+        Card card = cardRepository.findById(cardId)
+                .orElseThrow(() -> new BusinessException("卡密不存在"));
+        card.setStatus(status);
         cardRepository.save(card);
     }
 
@@ -334,6 +361,83 @@ public class CardService {
         stats.put("countCards", cardRepository.countByCardType(Card.CardType.count));
         stats.put("todayCards", cardRepository.countByCreateTimeAfter(LocalDateTime.now().toLocalDate().atStartOfDay()));
         return stats;
+    }
+
+    /**
+     * 根据订单信息生成卡密（支付回调时调用）。
+     * <p>根据订单的卡密类型、数量、规格等信息批量生成卡密，返回卡密明文列表。</p>
+     *
+     * @param order 订单实体
+     * @return 生成的卡密明文（多个以逗号分隔）
+     */
+    @Transactional
+    public String generateCardsForOrder(Order order) {
+        List<String> cardKeys = new ArrayList<>();
+        int quantity = order.getQuantity() != null ? order.getQuantity() : 1;
+
+        for (int i = 0; i < quantity; i++) {
+            try {
+                Integer duration = null;
+                Integer totalCount = null;
+                Integer days = null;
+
+                if ("time".equals(order.getCardType())) {
+                    // 时间卡：cardSpec 格式如 "7天" 或 "30天"
+                    days = parseDaysFromSpec(order.getCardSpec());
+                    duration = days * 24 * 60; // 转换为分钟
+                } else if ("count".equals(order.getCardType())) {
+                    // 次数卡：cardSpec 格式如 "100次"
+                    totalCount = parseCountFromSpec(order.getCardSpec());
+                }
+
+                Card card = generateCard(
+                        order.getCardType(),
+                        duration,
+                        totalCount,
+                        "system",
+                        order.getUserId(),
+                        order.getUsername() != null ? order.getUsername() : "system",
+                        "web",
+                        days,
+                        null
+                );
+                cardKeys.add(card.getCardKey());
+            } catch (Exception e) {
+                log.error("为订单 {} 生成卡密失败: {}", order.getOrderNo(), e.getMessage(), e);
+                throw new BusinessException("卡密生成失败: " + e.getMessage());
+            }
+        }
+        return String.join(",", cardKeys);
+    }
+
+    /**
+     * 从卡密规格中解析天数
+     * @param spec 规格字符串，如 "7天"、"30天"
+     * @return 天数，默认7天
+     */
+    private Integer parseDaysFromSpec(String spec) {
+        if (spec == null || spec.isBlank()) return 7;
+        try {
+            String num = spec.replaceAll("[^0-9]", "");
+            return num.isEmpty() ? 7 : Integer.parseInt(num);
+        } catch (NumberFormatException e) {
+            return 7;
+        }
+    }
+
+    /**
+     * 从卡密规格中解析次数
+     * @param spec 规格字符串，如 "100次"
+     * @return 次数，默认100次
+     */
+    private Integer parseCountFromSpec(String spec) {
+        if (spec == null || spec.isBlank()) return 100;
+        try {
+            String num = spec.replaceAll("[^0-9]", "");
+            return num.isEmpty() ? 100 : Integer.parseInt(num);
+        } catch (NumberFormatException e) {
+            return 100;
+        }
     }
 
     /**

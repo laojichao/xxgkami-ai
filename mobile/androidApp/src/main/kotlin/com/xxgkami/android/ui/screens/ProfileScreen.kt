@@ -26,6 +26,8 @@ import com.xxgkami.android.viewmodel.AuthViewModel
 @Composable
 fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = viewModel(), onLogout: () -> Unit = {}) {
     val userInfo by authViewModel.userInfo.collectAsState()
+    val isLoading by authViewModel.isLoading.collectAsState()
+    val error by authViewModel.error.collectAsState()
 
     LaunchedEffect(Unit) {
         authViewModel.getUserInfo()
@@ -34,6 +36,21 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
     Scaffold(topBar = {
         TopAppBar(title = { Text("个人资料") })
     }) { padding ->
+        if (isLoading && userInfo == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (error != null && userInfo == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(error ?: "加载失败", color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { authViewModel.getUserInfo() }) {
+                        Text("重试")
+                    }
+                }
+            }
+        } else {
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -63,8 +80,10 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 onClick = {
                     val userId = userInfo?.id ?: 0
                     val role = userInfo?.role ?: "user"
-                    authViewModel.logout(userId, role)
+                    // 先清除本地 Token 并导航，服务端登出在后台完成（fire-and-forget）
+                    // 即使服务端请求失败也不影响本地状态清理
                     onLogout()
+                    authViewModel.logout(userId, role)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -72,6 +91,7 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 Text("退出登录")
             }
         }
+        } // end else
     }
 }
 

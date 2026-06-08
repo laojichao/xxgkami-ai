@@ -2,10 +2,12 @@ package com.xxgkami.android.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.xxgkami.shared.api.ApiProvider
 
 object TokenStore {
-    private const val PREFS_NAME = "xxgkami_auth"
+    private const val PREFS_NAME = "xxgkami_auth_encrypted"
     private const val KEY_ACCESS_TOKEN = "access_token"
     private const val KEY_REFRESH_TOKEN = "refresh_token"
     private const val KEY_USERNAME = "username"
@@ -14,7 +16,18 @@ object TokenStore {
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
-        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // 使用 EncryptedSharedPreferences 加密存储 Token，防止 root 设备提取明文
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        prefs = EncryptedSharedPreferences.create(
+            context,
+            PREFS_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
 
         // Restore tokens from storage
         val accessToken = prefs?.getString(KEY_ACCESS_TOKEN, null)
@@ -58,7 +71,13 @@ object TokenStore {
     fun isLoggedIn(): Boolean = getAccessToken() != null
 
     fun clearTokens() {
-        prefs?.edit()?.clear()?.apply()
+        prefs?.edit()?.apply {
+            remove(KEY_ACCESS_TOKEN)
+            remove(KEY_REFRESH_TOKEN)
+            remove(KEY_USERNAME)
+            remove(KEY_ROLE)
+            apply()
+        }
         ApiProvider.clearTokens()
     }
 }

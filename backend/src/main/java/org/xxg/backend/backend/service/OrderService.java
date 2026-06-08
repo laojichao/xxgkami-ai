@@ -49,11 +49,12 @@ public class OrderService {
      */
     @Transactional
     public Order createOrder(CreateOrderRequest request) {
-        // Validate user exists
-        if (request.getUserId() != null) {
-            userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new BusinessException("用户不存在"));
+        // 用户ID是必填项，不允许创建匿名订单
+        if (request.getUserId() == null) {
+            throw new BusinessException("用户ID不能为空");
         }
+        userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new BusinessException("用户不存在"));
 
         CardPricing pricing = cardPricingRepository.findById(request.getPricingId())
                 .orElseThrow(() -> new BusinessException("价格配置不存在"));
@@ -142,6 +143,17 @@ public class OrderService {
      */
     public Page<Order> getAllOrders(Pageable pageable) {
         return orderRepository.findAll(pageable);
+    }
+
+    /**
+     * 按状态分页查询订单。
+     *
+     * @param status   订单状态
+     * @param pageable 分页参数
+     * @return 订单分页结果
+     */
+    public Page<Order> getOrdersByStatus(String status, Pageable pageable) {
+        return orderRepository.findByStatus(status, pageable);
     }
 
     /**

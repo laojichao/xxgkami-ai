@@ -1,6 +1,7 @@
 package org.xxg.backend.backend.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.ApiKey;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.ApiKeyRepository;
@@ -27,6 +28,7 @@ public class ApiKeyService {
      * @param description 密钥描述
      * @return 创建成功的API密钥实体
      */
+    @Transactional
     public ApiKey createApiKey(String name, String description) {
         ApiKey apiKey = new ApiKey();
         apiKey.setKeyName(name);
@@ -74,6 +76,7 @@ public class ApiKeyService {
      * @param status 新状态，为null则不更新
      * @return 更新后的API密钥实体
      */
+    @Transactional
     public ApiKey updateApiKey(Integer id, String name, String description, Boolean status) {
         ApiKey apiKey = getApiKeyById(id);
         if (name != null) {
@@ -90,6 +93,7 @@ public class ApiKeyService {
      * 删除指定API密钥
      * @param id 密钥ID
      */
+    @Transactional
     public void deleteApiKey(Integer id) {
         apiKeyRepository.deleteById(id);
     }
@@ -98,8 +102,10 @@ public class ApiKeyService {
      * 增加API密钥使用次数并更新最后使用时间
      * @param id 密钥ID
      */
+    @Transactional
     public void incrementUseCount(Integer id) {
-        ApiKey apiKey = getApiKeyById(id);
+        ApiKey apiKey = apiKeyRepository.findById(id).orElse(null);
+        if (apiKey == null) return; // 密钥已删除，静默忽略
         apiKey.setUseCount(apiKey.getUseCount() + 1);
         apiKey.setLastUseTime(LocalDateTime.now());
         apiKeyRepository.save(apiKey);

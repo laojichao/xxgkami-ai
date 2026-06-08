@@ -6,6 +6,7 @@ import com.xxgkami.android.data.TokenStore
 import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.AuthApi
 import com.xxgkami.shared.model.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -60,10 +61,13 @@ class AuthViewModel : ViewModel() {
             try {
                 _loginState.value = authApi.userLogin(LoginRequest(username, password))
                 handleLoginSuccess(_loginState.value)
+            } catch (e: CancellationException) {
+                throw e // 协程取消异常必须向上传播，不能吞掉
             } catch (e: Exception) {
                 _loginState.value = ApiResponse(false, e.message)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
@@ -81,15 +85,19 @@ class AuthViewModel : ViewModel() {
             try {
                 _loginState.value = authApi.adminLogin(LoginRequest(username, password))
                 handleLoginSuccess(_loginState.value)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _loginState.value = ApiResponse(false, e.message)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
     private fun handleLoginSuccess(response: ApiResponse<LoginResponse>?) {
-        response?.data?.let { data ->
+        if (response?.success != true) return
+        response.data?.let { data ->
             if (data.token != null && data.refreshToken != null) {
                 TokenStore.saveTokens(data.token, data.refreshToken)
             }
@@ -120,10 +128,13 @@ class AuthViewModel : ViewModel() {
             try {
                 authApi.register(RegisterRequest(username, password, email, code))
                 _registerSuccess.value = true
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "注册失败"
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
@@ -135,11 +146,16 @@ class AuthViewModel : ViewModel() {
      */
     fun sendCode(email: String, type: String = "register") {
         viewModelScope.launch {
+            _isLoading.value = true
             _error.value = null
             try {
                 authApi.sendEmailCode(email, type)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "发送验证码失败"
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -149,11 +165,16 @@ class AuthViewModel : ViewModel() {
      */
     fun getUserInfo() {
         viewModelScope.launch {
+            _isLoading.value = true
             try {
                 val response = authApi.getUserInfo()
                 _userInfo.value = response.data
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "获取用户信息失败"
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -173,6 +194,8 @@ class AuthViewModel : ViewModel() {
             TokenStore.clearTokens()
             _loginState.value = null
             _userInfo.value = null
+            _registerSuccess.value = false
+            _error.value = null
         }
     }
 
@@ -181,5 +204,13 @@ class AuthViewModel : ViewModel() {
      */
     fun clearError() {
         _error.value = null
+    }
+
+    /**
+     * 消费登录状态，防止 LoginScreen 重复触发 onLoginSuccess。
+     * 在 LaunchedEffect 处理完登录成功后调用。
+     */
+    fun consumeLoginState() {
+        _loginState.value = null
     }
 }

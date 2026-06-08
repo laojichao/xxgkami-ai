@@ -305,7 +305,10 @@ const submitForm = async () => {
   try {
     loading.value = true
     if (isEditing.value) {
-      await userApi.updateUser(form.id, form)
+      // 编辑时排除空密码字段，避免覆盖用户密码
+      const { password, ...updateData } = form
+      const payload = password ? { ...updateData, password } : updateData
+      await userApi.updateUser(form.id, payload)
     } else {
       await userApi.createUser(form)
     }
@@ -320,11 +323,20 @@ const submitForm = async () => {
   }
 }
 
-/** 切换用户启用/禁用状态 */
-const toggleUserStatus = async (id, status) => {
+/** 切换用户启用/禁用状态（需二次确认） */
+const toggleUserStatus = async (id, currentStatus) => {
+  const action = currentStatus ? '禁用' : '启用'
   try {
-    await userApi.updateUserStatus(id, status)
+    await ElMessageBox.confirm(`确定要${action}该用户吗？`, '确认操作', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch { return }
+  try {
+    await userApi.updateUserStatus(id, currentStatus)
     fetchUsers()
+    ElMessage.success(`用户已${action}`)
   } catch (error) {
     console.error('Status update failed:', error)
     ElMessage.error('状态更新失败: ' + error.message)

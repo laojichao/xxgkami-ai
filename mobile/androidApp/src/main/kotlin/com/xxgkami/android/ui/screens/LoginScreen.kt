@@ -27,9 +27,12 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewMod
     val isLoading by viewModel.isLoading.collectAsState()
     val loginState by viewModel.loginState.collectAsState()
 
-    // 监听登录状态变化，登录成功时触发回调跳转
+    // 监听登录状态变化，登录成功时触发回调跳转并消费状态，防止重复触发
     LaunchedEffect(loginState) {
-        if (loginState?.success == true) onLoginSuccess()
+        if (loginState?.success == true) {
+            viewModel.consumeLoginState()
+            onLoginSuccess()
+        }
     }
 
     Scaffold(topBar = { TopAppBar(title = { Text("登录") }) }) { padding ->
@@ -38,7 +41,7 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewMod
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("密码") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(24.dp))
-            Button(onClick = { viewModel.login(username, password) }, enabled = !isLoading, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Button(onClick = { viewModel.login(username, password) }, enabled = !isLoading && username.isNotBlank() && password.isNotBlank(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp)) else Text("登录")
             }
             loginState?.let { if (!it.success) Text(it.message ?: "登录失败", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }

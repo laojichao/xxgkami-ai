@@ -200,9 +200,10 @@ const handleCommand = (command) => {
   }
 }
 
-/** 打开管理员账号设置弹窗，回填当前用户名 */
+/** 打开管理员账号设置弹窗，回填当前用户名和邮箱 */
 const openAdminModal = () => {
-  adminForm.username = props.userInfo.username
+  adminForm.username = props.userInfo?.username || ''
+  adminForm.email = props.userInfo?.email || ''
   adminForm.password = ''
   showAdminModal.value = true
 }

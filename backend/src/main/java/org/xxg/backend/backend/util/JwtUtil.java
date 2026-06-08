@@ -32,10 +32,17 @@ public class JwtUtil {
     private long refreshTokenExpiration;
 
     /**
-     * 根据配置的密钥字符串生成HMAC-SHA签名密钥
+     * 根据配置的密钥字符串生成HMAC-SHA签名密钥。
+     * HMAC-SHA256 要求密钥至少 256 位（32 字节），过短的密钥会导致安全风险。
      */
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException(
+                    "JWT secret 长度不足：HMAC-SHA256 要求至少 32 字节，当前 " + keyBytes.length + " 字节。" +
+                    "请在环境变量 JWT_SECRET 中设置足够长的密钥。");
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     /**

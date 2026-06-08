@@ -68,8 +68,20 @@ public class UserService {
     public User updateProfile(Integer userId, String nickname, String email, String phone) {
         User user = getUserById(userId);
         if (nickname != null) user.setNickname(nickname);
-        if (email != null) user.setEmail(email);
-        if (phone != null) user.setPhone(phone);
+        if (email != null && !email.equals(user.getEmail())) {
+            // 检查新邮箱是否已被其他用户占用
+            if (userRepository.existsByEmail(email)) {
+                throw new BusinessException("该邮箱已被其他用户使用");
+            }
+            user.setEmail(email);
+        }
+        if (phone != null && !phone.equals(user.getPhone())) {
+            // 检查新手机号是否已被其他用户占用
+            if (userRepository.existsByPhone(phone)) {
+                throw new BusinessException("该手机号已被其他用户使用");
+            }
+            user.setPhone(phone);
+        }
         user.setUpdateTime(LocalDateTime.now());
         return userRepository.save(user);
     }
@@ -85,6 +97,10 @@ public class UserService {
         User user = getUserById(userId);
         if (!passwordUtil.matches(oldPassword, user.getPassword())) {
             throw new BusinessException("原密码错误");
+        }
+        // 密码强度校验：至少6位
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BusinessException("新密码长度不能少于6位");
         }
         user.setPassword(passwordUtil.encode(newPassword));
         user.setUpdateTime(LocalDateTime.now());

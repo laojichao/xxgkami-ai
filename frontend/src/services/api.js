@@ -46,7 +46,17 @@ async function apiRequest(endpoint, options = {}) {
   }
 
   try {
-    const response = await fetch(url, config);
+    // 添加请求超时控制（30秒）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    config.signal = controller.signal;
+
+    let response;
+    try {
+      response = await fetch(url, config);
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (response.status === 401) {
        if (endpoint.includes('/login') || endpoint.includes('/refresh')) {
@@ -58,9 +68,11 @@ async function apiRequest(endpoint, options = {}) {
            failedQueue.push({ resolve, reject });
          }).then(newToken => {
            config.headers['Authorization'] = `Bearer ${newToken}`;
-           return fetch(url, config).then(res => res.json());
-         }).catch(err => {
-           throw err;
+           return fetch(url, config).then(res => {
+             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+             const ct = res.headers.get("content-type");
+             return ct && ct.includes("application/json") ? res.json() : res.text();
+           });
          });
        }
 
@@ -94,13 +106,21 @@ async function apiRequest(endpoint, options = {}) {
                // Retry original request
                config.headers['Authorization'] = `Bearer ${newToken}`;
                const retryResponse = await fetch(url, config);
-               return await retryResponse.json();
+               if (!retryResponse.ok) {
+                 const errText = await retryResponse.text().catch(() => '');
+                 throw new Error(errText || `HTTP error! status: ${retryResponse.status}`);
+               }
+               const retryCt = retryResponse.headers.get("content-type");
+               return retryCt && retryCt.includes("application/json")
+                 ? await retryResponse.json()
+                 : { success: true, data: await retryResponse.text() };
            } else {
                throw new Error('Refresh failed');
            }
        } catch (refreshError) {
-           processQueue(refreshError, null);
+           // 先重置标志再处理队列，防止队列中的回调再次触发刷新循环
            isRefreshing = false;
+           processQueue(refreshError, null);
            // Clear auth data
            const storedUserInfo = localStorage.getItem('userInfo');
            let isAdmin = false;
@@ -167,8 +187,9 @@ async function apiRequest(endpoint, options = {}) {
     if (contentType && contentType.includes("application/json")) {
       return await response.json();
     } else {
-      // For non-JSON responses (like simple strings), return text
-      return await response.text();
+      // 非 JSON 响应包装为统一格式，避免调用方访问 .success 时报错
+      const text = await response.text();
+      return { success: true, data: text, message: text };
     }
   } catch (error) {
     console.error('API request failed:', error);

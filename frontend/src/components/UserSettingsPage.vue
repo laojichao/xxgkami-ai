@@ -98,9 +98,9 @@ const showBindQRCode = async () => {
     
     const jsonString = JSON.stringify(data)
 
-    // AES加密
+    // AES加密 — 使用随机 IV 增强安全性，防止相同明文产生相同密文
     const key = CryptoJS.enc.Utf8.parse('xxgyyds-github-1')
-    const iv = CryptoJS.enc.Utf8.parse('xxgyyds-github-1')
+    const iv = CryptoJS.lib.WordArray.random(16)
 
     const encrypted = CryptoJS.AES.encrypt(jsonString, key, {
       iv: iv,
@@ -108,7 +108,8 @@ const showBindQRCode = async () => {
       padding: CryptoJS.pad.Pkcs7
     })
 
-    const encryptedString = encrypted.toString()
+    // 将 IV 和密文一起编码，解密端需要先提取 IV
+    const encryptedString = iv.toString(CryptoJS.enc.Base64) + ':' + encrypted.toString()
     
     // 3. 生成二维码
     qrCodeUrl.value = await QRCode.toDataURL(encryptedString, {

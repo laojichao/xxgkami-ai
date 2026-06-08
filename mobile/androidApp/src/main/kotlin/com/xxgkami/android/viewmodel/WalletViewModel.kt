@@ -6,8 +6,11 @@ import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.WalletApi
 import com.xxgkami.shared.model.Wallet
 import com.xxgkami.shared.model.WalletTransaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -28,9 +31,9 @@ class WalletViewModel : ViewModel() {
     private val _transactions = MutableStateFlow<List<WalletTransaction>>(emptyList())
     val transactions: StateFlow<List<WalletTransaction>> = _transactions
 
-    // 加载状态
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    // 加载状态（使用计数器支持并发操作，如同时加载钱包和交易记录）
+    private val _loadingCount = MutableStateFlow(0)
+    val isLoading: StateFlow<Boolean> = _loadingCount.map { it > 0 }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), false)
 
     // 错误信息
     private val _error = MutableStateFlow<String?>(null)
@@ -42,15 +45,18 @@ class WalletViewModel : ViewModel() {
      */
     fun loadWallet() {
         viewModelScope.launch {
-            _isLoading.value = true
+            _loadingCount.value++
             _error.value = null
             try {
                 val response = walletApi.getWallet()
                 _wallet.value = response.data
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "加载钱包失败"
+            } finally {
+                _loadingCount.value--
             }
-            _isLoading.value = false
         }
     }
 
@@ -59,16 +65,25 @@ class WalletViewModel : ViewModel() {
      * @param amount 充值金额（字符串格式）
      */
     fun recharge(amount: String) {
+        // 客户端校验充值金额
+        val parsedAmount = amount.toDoubleOrNull()
+        if (parsedAmount == null || parsedAmount <= 0) {
+            _error.value = "请输入有效的充值金额"
+            return
+        }
         viewModelScope.launch {
-            _isLoading.value = true
+            _loadingCount.value++
             _error.value = null
             try {
                 val response = walletApi.recharge(amount)
                 _wallet.value = response.data
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "充值失败"
+            } finally {
+                _loadingCount.value--
             }
-            _isLoading.value = false
         }
     }
 
@@ -78,11 +93,17 @@ class WalletViewModel : ViewModel() {
      */
     fun loadTransactions() {
         viewModelScope.launch {
+            _loadingCount.value++
+            _error.value = null
             try {
                 val response = walletApi.getTransactions()
                 _transactions.value = response.data ?: emptyList()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "加载交易记录失败"
+            } finally {
+                _loadingCount.value--
             }
         }
     }

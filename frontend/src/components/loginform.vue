@@ -30,7 +30,7 @@
           </button>
         </div>
         <div class="register-link">
-          <button type="button" @click="isOAuthRegister = false" class="link-button">
+          <button type="button" @click="cancelOAuthRegister" class="link-button">
             取消注册
           </button>
         </div>
@@ -540,6 +540,16 @@ onMounted(async () => {
   }
 })
 
+// 组件卸载时清理所有定时器和 watcher，防止内存泄漏
+onUnmounted(() => {
+  if (recoveryTimerInterval) clearInterval(recoveryTimerInterval)
+  if (timerInterval) clearInterval(timerInterval)
+  if (forgotTimerInterval) clearInterval(forgotTimerInterval)
+  // 清理 autoDismiss 创建的 watcher 和 setTimeout
+  autoDismissWatchers.forEach(stop => stop())
+  autoDismissTimers.forEach(t => clearTimeout(t))
+})
+
 /** 跳转到第三方OAuth登录页面 */
 const handleOAuthLogin = (type) => {
     const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -673,17 +683,22 @@ const forgotPasswordLoading = ref(false)
 /**
  * 自动清除消息提示（3秒后淡出）
  * 统一应用于所有错误/成功消息ref
+ * 返回 stop 函数用于在组件卸载时清理 watcher 和 timer
  */
+const autoDismissTimers = []
+const autoDismissWatchers = []
 const autoDismiss = (messageRef) => {
   let timer = null
-  watch(messageRef, (newVal) => {
+  const stopWatch = watch(messageRef, (newVal) => {
     if (newVal) {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         messageRef.value = ''
       }, 3000)
+      autoDismissTimers.push(timer)
     }
   })
+  autoDismissWatchers.push(stopWatch)
 }
 
 [errorMessage, successMessage, registerError, registerSuccess, forgotPasswordError, forgotPasswordSuccess, recoveryError, recoverySuccess].forEach(autoDismiss)

@@ -60,16 +60,9 @@ public class RequestMonitorFilter extends OncePerRequestFilter {
      * @return 客户端 IP 地址
      */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
+        // 安全策略：优先使用 remoteAddr（TCP 连接的直接来源）。
+        // X-Forwarded-For / X-Real-IP 仅在配置了可信反向代理时才应使用，
+        // 否则攻击者可通过伪造头部绕过限流和 IP 黑名单。
+        return request.getRemoteAddr();
     }
 }

@@ -35,6 +35,7 @@ public class MaintenanceService {
      * @return 维护模式开启返回true，否则返回false
      */
     public boolean isMaintenanceMode() {
-        return getSettings().getEnabled();
+        Boolean enabled = getSettings().getEnabled();
+        return Boolean.TRUE.equals(enabled);
     }
 }

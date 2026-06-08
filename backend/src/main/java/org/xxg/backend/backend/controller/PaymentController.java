@@ -1,8 +1,13 @@
 package org.xxg.backend.backend.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
+import org.xxg.backend.backend.entity.Order;
+import org.xxg.backend.backend.exception.BusinessException;
+import org.xxg.backend.backend.mapper.UserRepository;
+import org.xxg.backend.backend.service.OrderService;
 import org.xxg.backend.backend.service.PaymentService;
 import java.util.Map;
 
@@ -15,7 +20,14 @@ import java.util.Map;
 @RequestMapping("/payment")
 public class PaymentController {
     private final PaymentService paymentService;
-    public PaymentController(PaymentService paymentService) { this.paymentService = paymentService; }
+    private final OrderService orderService;
+    private final UserRepository userRepository;
+
+    public PaymentController(PaymentService paymentService, OrderService orderService, UserRepository userRepository) {
+        this.paymentService = paymentService;
+        this.orderService = orderService;
+        this.userRepository = userRepository;
+    }
 
     /**
      * 创建支付订单
@@ -25,8 +37,10 @@ public class PaymentController {
      * @return 支付平台返回的支付信息（如支付链接等）
      */
     @PostMapping("/pay")
-    public ResponseEntity<Map<String, String>> pay(@RequestBody Map<String, String> body) {
-        return ResponseEntity.ok(paymentService.createPayment(body.get("orderNo")));
+    public ResponseEntity<Map<String, String>> pay(@RequestBody Map<String, String> body, Authentication auth) {
+        String orderNo = body.get("orderNo");
+        verifyOrderOwnership(orderNo, auth);
+        return ResponseEntity.ok(paymentService.createPayment(orderNo));
     }
 
     /**
@@ -37,8 +51,26 @@ public class PaymentController {
      * @return 支付平台返回的支付信息
      */
     @PostMapping("/create")
-    public ResponseEntity<Map<String, String>> createPayment(@RequestBody Map<String, String> body) {
-        return ResponseEntity.ok(paymentService.createPayment(body.get("orderNo")));
+    public ResponseEntity<Map<String, String>> createPayment(@RequestBody Map<String, String> body, Authentication auth) {
+        String orderNo = body.get("orderNo");
+        verifyOrderOwnership(orderNo, auth);
+        return ResponseEntity.ok(paymentService.createPayment(orderNo));
+    }
+
+    /** 验证订单归属：只有订单所有者才能发起支付 */
+    private void verifyOrderOwnership(String orderNo, Authentication auth) {
+        if (orderNo == null || orderNo.isBlank()) {
+            throw new BusinessException("订单号不能为空");
+        }
+        Integer userId = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new BusinessException("用户不存在")).getId();
+        Order order = orderService.getOrderByNo(orderNo);
+        if (order == null) {
+            throw new BusinessException("订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException("无权操作此订单");
+        }
     }
 
     /**

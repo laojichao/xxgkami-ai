@@ -488,26 +488,43 @@ const stats = computed(() => {
 const getOrders = async () => {
   loading.value = true
   try {
+    // 后端仅支持 page/size/status 筛选，其他筛选参数在前端处理
     const params = {
-      orderId: searchParams.orderId,
-      username: searchParams.username,
-      status: searchParams.status === 'all' ? '' : searchParams.status,
-      cardType: searchParams.cardType === 'all' ? '' : searchParams.cardType,
-      startTime: dateRange.start,
-      endTime: dateRange.end
+      page: 0,
+      size: 9999,
+      status: searchParams.status === 'all' ? '' : searchParams.status
     }
-    
+
     const response = await orderApi.getAllOrders(params)
     if (response.success) {
+      // 后端返回 Page 对象，取 content 数组；兼容直接返回数组的情况
+      const rawList = Array.isArray(response.data) ? response.data : (response.data.content || response.data)
       // 处理数据，添加 card_keys 数组转换
-      const fetchedOrders = response.data.map(order => ({
+      let fetchedOrders = rawList.map(order => ({
         ...order,
         card_keys: order.card_keys ? order.card_keys.split(',') : []
       }))
 
+      // 前端筛选：订单号、用户名、卡密类型、时间范围
+      if (searchParams.orderId) {
+        fetchedOrders = fetchedOrders.filter(o => o.orderNo && o.orderNo.includes(searchParams.orderId))
+      }
+      if (searchParams.username) {
+        fetchedOrders = fetchedOrders.filter(o => o.username && o.username.includes(searchParams.username))
+      }
+      if (searchParams.cardType && searchParams.cardType !== 'all') {
+        fetchedOrders = fetchedOrders.filter(o => o.cardType === searchParams.cardType)
+      }
+      if (dateRange.start) {
+        fetchedOrders = fetchedOrders.filter(o => o.createTime && o.createTime >= dateRange.start)
+      }
+      if (dateRange.end) {
+        fetchedOrders = fetchedOrders.filter(o => o.createTime && o.createTime <= dateRange.end + ' 23:59:59')
+      }
+
       allOrders.value = fetchedOrders
       pagination.total = allOrders.value.length
-      
+
       updatePagedOrders()
     }
   } catch (error) {
@@ -546,6 +563,8 @@ const resetSearch = () => {
 
 // 处理页面大小变化
 const handleSizeChange = () => {
+  // <select> 的 v-model 会将值设为字符串，需要转回数字以避免算术运算错误
+  pagination.pageSize = Number(pagination.pageSize) || 10
   pagination.page = 1
   updatePagedOrders()
 }

@@ -245,10 +245,8 @@ const saveSettings = async () => {
     
     if (res.success) {
         showToast('通知设置已保存', 'success')
-        // 延迟1秒后刷新页面
-        setTimeout(() => {
-          window.location.reload()
-        }, 1000)
+        // 重新加载设置数据
+        await loadSettings()
     } else {
         showToast(res.message || '保存失败', 'error')
     }

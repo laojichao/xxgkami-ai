@@ -39,11 +39,7 @@
       <OverviewPage
         v-if="activeTab === 'overview'"
         :stats="stats"
-        :carousel-data="carouselData"
         :features="features"
-        @prev-slide="prevSlide"
-        @next-slide="nextSlide"
-        @slide-change="handleSlideChange"
       />
 
       <!-- 卡密管理页面 -->
@@ -140,8 +136,6 @@ const sidebarCollapsed = ref(false)
 const handleSidebarCollapse = (collapsed) => {
   sidebarCollapsed.value = collapsed
 }
-const currentSlide = ref(0)
-
 const stats = reactive({
   totalKeys: 0,
   usedKeys: 0,
@@ -149,7 +143,6 @@ const stats = reactive({
   totalUsers: 0
 })
 
-const carouselData = ref([])
 const features = ref([])
 const keys = ref([])
 const apiKeys = ref([])
@@ -185,18 +178,6 @@ const handleTabChange = (tab, section) => {
 
 const formatDate = (timestamp) => {
   return new Date(timestamp).toLocaleString('zh-CN')
-}
-
-const prevSlide = () => {
-  currentSlide.value = currentSlide.value === 0 ? carouselData.value.length - 1 : currentSlide.value - 1
-}
-
-const nextSlide = () => {
-  currentSlide.value = currentSlide.value === carouselData.value.length - 1 ? 0 : currentSlide.value + 1
-}
-
-const handleSlideChange = (index) => {
-  currentSlide.value = index
 }
 
 const handleCreateKeys = async (keyData) => {
@@ -309,11 +290,11 @@ const handleToggleKeyStatus = async ({ id, status }) => {
 const loadDashboardStats = async () => {
   try {
     const result = await statsApi.getDashboardStats()
-    if (result) {
-      stats.totalKeys = result.totalKeys
-      stats.usedKeys = result.usedKeys
-      stats.activeKeys = result.activeKeys
-      stats.totalUsers = result.totalUsers
+    if (result && result.success) {
+      stats.totalKeys = result.totalKeys ?? result.data?.totalKeys ?? 0
+      stats.usedKeys = result.usedKeys ?? result.data?.usedKeys ?? 0
+      stats.activeKeys = result.activeKeys ?? result.data?.activeKeys ?? 0
+      stats.totalUsers = result.totalUsers ?? result.data?.totalUsers ?? 0
     }
   } catch (error) {
     console.error('加载统计数据失败:', error)
@@ -423,17 +404,13 @@ const handleCreateBackup = async () => {
 
 
 // 初始化数据
-let carouselInterval = null
-
 onMounted(async () => {
   // 从 API 加载数据
   try {
-    const [slidesRes, featuresRes, apiKeysRes] = await Promise.all([
-      publicApi.getSlides().catch(() => ({ data: [] })),
+    const [featuresRes, apiKeysRes] = await Promise.all([
       publicApi.getFeatures().catch(() => ({ data: [] })),
       apiKeyApi.getAllApiKeys().catch(() => ({ data: [] }))
     ])
-    carouselData.value = slidesRes.data || []
     features.value = featuresRes.data || []
     apiKeys.value = apiKeysRes.data || []
   } catch (e) {
@@ -442,18 +419,6 @@ onMounted(async () => {
 
   // 异步加载卡密数据
   await loadKeys()
-
-  // 自动轮播
-  carouselInterval = setInterval(() => {
-    nextSlide()
-  }, 5000)
-})
-
-onUnmounted(() => {
-  if (carouselInterval) {
-    clearInterval(carouselInterval)
-    carouselInterval = null
-  }
 })
 </script>
 

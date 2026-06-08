@@ -2,6 +2,7 @@ package org.xxg.backend.backend.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -54,33 +55,36 @@ public class SecurityConfig {
             .cors(cors -> cors.configure(http))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // === 公开接口 ===
                 .requestMatchers(
-                    // Auth endpoints
                     "/auth/login", "/auth/register", "/auth/register-bind",
                     "/auth/user/login", "/auth/admin/login",
                     "/auth/email-code", "/auth/reset-code", "/auth/reset-password",
                     "/auth/bind/validate", "/auth/refresh",
-                    // Public endpoints
                     "/public/**",
-                    // Payment callbacks
                     "/payment/notify", "/payment/return",
-                    // System
-                    "/actuator/**", "/error",
-                    "/system/health", "/monitor/check-update",
-                    // Card use (open API)
+                    "/system/health", "/error",
                     "/cards/use", "/cards/verify",
-                    // Custom/open API
                     "/custom/**", "/open/**"
                 ).permitAll()
-                // Admin-only endpoints
+                // === Pricing：GET 公开，写操作仅管理员 ===
+                .requestMatchers(HttpMethod.GET, "/pricing", "/pricing/**").permitAll()
+                .requestMatchers("/pricing", "/pricing/**").hasRole("ADMIN")
+                // === 卡密管理：DELETE/PUT 写操作仅管理员 ===
+                .requestMatchers(HttpMethod.DELETE, "/cards/*").hasRole("ADMIN")
+                .requestMatchers("/cards/*/disable", "/cards/*/enable", "/cards/*/unbind").hasRole("ADMIN")
+                // === 管理员专属接口 ===
                 .requestMatchers("/admin/**", "/cards/admin/**", "/cards/generate",
                         "/cards/stats", "/cards/trend", "/users/admin/**",
                         "/settings/**", "/stats/**", "/monitor/**",
                         "/maintenance/**", "/backup/**", "/security/**",
                         "/online-users/**", "/card-pricing/admin/**",
-                        "/system/**", "/orders/admin/**").hasRole("ADMIN")
-                // User endpoints
-                .requestMatchers("/user/**", "/wallet/**", "/orders/**").hasAnyRole("USER", "ADMIN")
+                        "/system/**", "/orders/admin/**",
+                        "/user/admin/**", "/user/stats",
+                        "/actuator/**").hasRole("ADMIN")
+                // === 用户接口 ===
+                .requestMatchers("/user/profile", "/user/password", "/user/avatar",
+                        "/user/social/**", "/wallet/**", "/orders").hasAnyRole("USER", "ADMIN")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(requestMonitorFilter, UsernamePasswordAuthenticationFilter.class)

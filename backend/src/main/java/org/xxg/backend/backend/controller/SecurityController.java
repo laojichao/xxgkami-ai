@@ -44,7 +44,8 @@ public class SecurityController {
      */
     @PostMapping("/blacklist")
     public ResponseEntity<ApiResponse<IpBlacklist>> blockIp(@RequestBody Map<String, Object> body) {
-        String ip = (String) body.get("ip");
+        Object ipObj = body.get("ip");
+        String ip = ipObj != null ? ipObj.toString() : null;
         if (ip == null || ip.isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("IP 地址不能为空"));
         }
@@ -83,6 +84,7 @@ public class SecurityController {
             @RequestParam(required = false) String username,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
+        size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
         return ResponseEntity.ok(ApiResponse.ok(
                 securityService.getAccessLogs(ip, username, PageRequest.of(page, size))));
     }

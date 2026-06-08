@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
@@ -9,5 +10,6 @@ import lombok.Data;
 @Data
 public class TokenRefreshRequest {
     /** 刷新令牌 */
+    @NotBlank(message = "refreshToken不能为空")
     private String refreshToken;
 }

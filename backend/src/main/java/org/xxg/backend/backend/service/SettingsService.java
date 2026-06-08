@@ -1,6 +1,7 @@
 package org.xxg.backend.backend.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.Setting;
 import org.xxg.backend.backend.mapper.SettingRepository;
 
@@ -46,6 +47,7 @@ public class SettingsService {
      * @param name 配置项名称
      * @param value 配置项值
      */
+    @Transactional
     public void updateSetting(String name, String value) {
         Setting setting = settingRepository.findByName(name)
                 .orElse(new Setting());
@@ -58,6 +60,7 @@ public class SettingsService {
      * 批量更新配置项
      * @param settings 配置项名称到值的映射Map
      */
+    @Transactional
     public void updateSettings(Map<String, String> settings) {
         for (Map.Entry<String, String> entry : settings.entrySet()) {
             updateSetting(entry.getKey(), entry.getValue());

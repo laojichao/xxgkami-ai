@@ -170,7 +170,7 @@
         </div>
 
         <!-- 卡密查询 -->
-        <div v-if="activeMenu === 'card-query'" class="content-section">
+        <div v-else-if="activeMenu === 'card-query'" class="content-section">
           <div class="section-header">
             <h2>卡密查询</h2>
             <p>查询卡密状态和详细信息</p>
@@ -212,14 +212,14 @@
         </div>
 
         <!-- 使用记录 -->
-        <div v-if="activeMenu === 'usage-records'" class="content-section">
+        <div v-else-if="activeMenu === 'usage-records'" class="content-section">
           <div class="section-header">
             <h2>使用记录</h2>
             <p>查看所有卡密使用记录</p>
           </div>
           
           <el-card shadow="never">
-            <el-table :data="usageRecords" style="width: 100%" v-loading="loading">
+            <el-table :data="paginatedRecords" style="width: 100%" v-loading="loading">
               <el-table-column prop="cardKey" label="卡密" width="200" show-overflow-tooltip />
               <el-table-column prop="useTime" label="使用时间" width="180" />
               <el-table-column prop="deviceId" label="设备ID" show-overflow-tooltip />
@@ -249,7 +249,7 @@
         </div>
 
         <!-- 我的卡密 -->
-        <div v-if="activeMenu === 'my-cards'" class="content-section">
+        <div v-else-if="activeMenu === 'my-cards'" class="content-section">
           <div class="section-header">
             <h2>我的卡密</h2>
             <p>管理您拥有的所有卡密</p>
@@ -480,7 +480,7 @@
         </div>
 
         <!-- 个人信息 -->
-        <div v-if="activeMenu === 'profile'" class="content-section">
+        <div v-else-if="activeMenu === 'profile'" class="content-section">
           <div class="section-header">
             <h2>个人信息</h2>
             <p>管理您的个人资料和账户设置</p>
@@ -613,7 +613,7 @@
         </div>
 
         <!-- 系统设置 -->
-        <div v-if="activeMenu === 'settings'" class="content-section">
+        <div v-else-if="activeMenu === 'settings'" class="content-section">
           <UserSettingsPage />
         </div>
       </el-main>
@@ -699,7 +699,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi } from '../services/api.js'
 import UserSettingsPage from './UserSettingsPage.vue'
@@ -723,16 +723,32 @@ export default {
     const loading = ref(false)
     const currentPage = ref(1)
     const pageSize = ref(10)
-    const total = ref(0)
+    // 使用记录总数（响应式）
+    const total = computed(() => usageRecords.value.length)
 
-    // 用户信息 - 使用props传入的数据
+    // 用户信息 - 使用props传入的数据，并监听props变化保持同步
     const userInfo = reactive({
       id: props.userInfo.id,
       username: props.userInfo.username || '普通用户',
       avatar: props.userInfo.avatar || '',
       email: props.userInfo.email || 'user@example.com',
-      phone: props.userInfo.phone || '138****8888'
+      phone: props.userInfo.phone || '138****8888',
+      hasPassword: props.userInfo.hasPassword
     })
+
+    // 监听 props.userInfo 变化，同步到本地 reactive 对象
+    watch(() => props.userInfo, (newVal) => {
+      if (newVal) {
+        Object.assign(userInfo, {
+          id: newVal.id,
+          username: newVal.username || userInfo.username,
+          avatar: newVal.avatar || userInfo.avatar,
+          email: newVal.email || userInfo.email,
+          phone: newVal.phone || userInfo.phone,
+          hasPassword: newVal.hasPassword
+        })
+      }
+    }, { deep: true })
 
     // 统计数据
     const stats = reactive({
@@ -878,12 +894,16 @@ export default {
     const fetchUserProfile = async () => {
         try {
             const result = await userProfileApi.getProfile();
-            Object.assign(userInfo, result);
-            Object.assign(profileForm, {
-                nickname: result.nickname,
-                email: result.email,
-                phone: result.phone
-            });
+            if (result && result.success && result.data) {
+                Object.assign(userInfo, result.data);
+                Object.assign(profileForm, {
+                    nickname: result.data.nickname,
+                    email: result.data.email,
+                    phone: result.data.phone
+                });
+            } else {
+                ElMessage.error(result?.message || '获取个人信息失败');
+            }
         } catch (error) {
             console.error('Failed to fetch user profile:', error);
             ElMessage.error('获取个人信息失败');
@@ -1058,29 +1078,39 @@ export default {
       }
     }
 
-    // 轮询订单状态
+    // 轮询订单状态（保存 interval 引用以便组件卸载时清理）
+    let pollTimer = null;
+
     const pollOrderStatus = async (orderId) => {
+      // 先清理之前的轮询（如有）
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+
       // 立即检查一次
       await fetchOrders();
-      
+
       const maxAttempts = 20; // 最多轮询20次
       let attempts = 0;
-      
-      const poll = setInterval(async () => {
+
+      pollTimer = setInterval(async () => {
         attempts++;
         if (attempts > maxAttempts) {
-          clearInterval(poll);
+          clearInterval(pollTimer);
+          pollTimer = null;
           return;
         }
-        
+
         await fetchOrders();
-        
+
         // 检查订单是否已完成
         const order = purchaseHistory.value.find(o => o.orderNo === orderId);
         if (order && order.status === 'completed') {
-          clearInterval(poll);
+          clearInterval(pollTimer);
+          pollTimer = null;
           ElMessageBox.alert(
-            `订单号：${order.orderNo}\n购买成功！\n\n您可以在“我的卡密”中查看和使用卡密。`,
+            `订单号：${order.orderNo}\n购买成功！\n\n您可以在”我的卡密”中查看和使用卡密。`,
             '支付成功',
             {
               confirmButtonText: '查看卡密',
@@ -1093,6 +1123,14 @@ export default {
         }
       }, 3000); // 每3秒轮询一次
     }
+
+    // 组件卸载前清理轮询定时器，防止内存泄漏
+    onBeforeUnmount(() => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    })
 
     onMounted(() => {
         fetchOrders();
@@ -1244,13 +1282,18 @@ export default {
 
     const handleSizeChange = (val) => {
       pageSize.value = val
-      // 重新加载数据
+      currentPage.value = 1
     }
 
     const handleCurrentChange = (val) => {
       currentPage.value = val
-      // 重新加载数据
     }
+
+    // 分页后的使用记录
+    const paginatedRecords = computed(() => {
+      const start = (currentPage.value - 1) * pageSize.value
+      return usageRecords.value.slice(start, start + pageSize.value)
+    })
 
     // 购买卡密相关方法
     const purchaseCard = async (cardType) => {
@@ -1297,13 +1340,29 @@ export default {
         
         if (result.success) {
           if (result.paymentUrl) {
-            // Redirect to payment
-             ElMessage.success('订单创建成功，正在跳转支付...');
-             // 开始轮询该订单状态，防止用户在手机端支付后切回来页面未刷新
-             pollOrderStatus(result.data.order_id);
-             
-             window.location.href = result.paymentUrl;
-             return;
+            // 安全校验：防止开放重定向漏洞，只允许相对路径或受信域名
+            const url = result.paymentUrl;
+            const isRelativeUrl = url.startsWith('/') && !url.startsWith('//');
+            let isTrustedUrl = isRelativeUrl;
+            if (!isRelativeUrl) {
+              try {
+                const parsed = new URL(url);
+                // 只允许当前站点同源的绝对 URL
+                isTrustedUrl = parsed.origin === window.location.origin;
+              } catch (e) {
+                isTrustedUrl = false;
+              }
+            }
+            if (!isTrustedUrl) {
+              ElMessage.error('支付链接异常，请联系管理员');
+              return;
+            }
+            ElMessage.success('订单创建成功，正在跳转支付...');
+            // 开始轮询该订单状态，防止用户在手机端支付后切回来页面未刷新
+            pollOrderStatus(result.data.order_id);
+
+            window.location.href = url;
+            return;
           }
         
           ElMessage.success(result.message)
@@ -1388,6 +1447,7 @@ export default {
         profileForm,
         recentRecords,
         usageRecords,
+        paginatedRecords,
         myCards,
         // 购买卡密相关
         timeCardOptions,

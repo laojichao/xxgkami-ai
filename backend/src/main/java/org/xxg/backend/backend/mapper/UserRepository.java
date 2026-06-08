@@ -20,6 +20,8 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     boolean existsByUsername(String username);
     /** 判断指定邮箱是否存在 */
     boolean existsByEmail(String email);
+    /** 判断指定手机号是否存在 */
+    boolean existsByPhone(String phone);
     /** 统计指定时间之后注册的用户数量 */
     long countByCreateTimeAfter(LocalDateTime time);
     /** 统计指定状态的用户数量 */

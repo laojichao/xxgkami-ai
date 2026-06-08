@@ -28,6 +28,11 @@ public class WebhookService {
     private static final Logger log = LoggerFactory.getLogger(WebhookService.class);
     private final ApiKeyRepository apiKeyRepository;
     private final ObjectMapper objectMapper;
+    // 复用 HttpClient 实例，避免每次请求创建新的连接池
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .followRedirects(HttpClient.Redirect.NEVER) // 禁止跟随重定向，防止 SSRF 重定向绕过
+            .build();
 
     public WebhookService(ApiKeyRepository apiKeyRepository, ObjectMapper objectMapper) {
         this.apiKeyRepository = apiKeyRepository;
@@ -45,9 +50,9 @@ public class WebhookService {
      */
     @Async
     @SuppressWarnings("unchecked")
-    public void triggerWebhook(Long apiKeyId, Card card, String event) {
+    public void triggerWebhook(Integer apiKeyId, Card card, String event) {
         try {
-            ApiKey apiKey = apiKeyRepository.findById(apiKeyId.intValue()).orElse(null);
+            ApiKey apiKey = apiKeyRepository.findById(apiKeyId).orElse(null);
             if (apiKey == null || apiKey.getWebhookConfig() == null || apiKey.getWebhookConfig().isEmpty()) {
                 return;
             }
@@ -66,14 +71,19 @@ public class WebhookService {
 
             Map<String, Object> payload = new HashMap<>();
             payload.put("event", event);
-            payload.put("card_key", card.getCardKey());
+            // 不发送明文卡密，仅发送脱敏后的标识（前4位 + *** + 后4位）
+            String cardKey = card.getCardKey();
+            if (cardKey != null && cardKey.length() > 8) {
+                payload.put("card_key", cardKey.substring(0, 4) + "***" + cardKey.substring(cardKey.length() - 4));
+            } else {
+                payload.put("card_key", "***");
+            }
             payload.put("card_type", card.getCardType().name());
             payload.put("status", card.getStatus());
             payload.put("timestamp", System.currentTimeMillis());
 
             String jsonBody = objectMapper.writeValueAsString(payload);
 
-            HttpClient client = HttpClient.newHttpClient();
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json");
@@ -84,7 +94,7 @@ public class WebhookService {
                 requestBuilder.GET();
             }
 
-            client.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofString())
+            httpClient.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
                         log.debug("[WEBHOOK] Response: {}", response.statusCode());
                     })
@@ -111,14 +121,22 @@ public class WebhookService {
             String host = uri.getHost();
             if (host == null) return true;
 
+            // 阻止明确的内部主机名
+            String lowerHost = host.toLowerCase();
+            if (lowerHost.equals("localhost") || lowerHost.equals("0.0.0.0")) {
+                return true;
+            }
+
+            // 解析 IP 地址（包括 IPv6）
             InetAddress addr = InetAddress.getByName(host);
-            return addr.isLoopbackAddress() || addr.isSiteLocalAddress()
-                    || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()
-                    || host.equals("localhost") || host.equals("0.0.0.0")
-                    || host.matches("10\\..*") || host.matches("172\\.(1[6-9]|2[0-9]|3[01])\\..*")
-                    || host.matches("192\\.168\\..*") || host.matches("169\\.254\\..*");
+            // 使用已解析的 IP 重新检查，防止 DNS rebinding
+            String resolvedIp = addr.getHostAddress();
+            InetAddress resolvedAddr = InetAddress.getByName(resolvedIp);
+
+            return resolvedAddr.isLoopbackAddress() || resolvedAddr.isSiteLocalAddress()
+                    || resolvedAddr.isLinkLocalAddress() || resolvedAddr.isAnyLocalAddress();
         } catch (Exception e) {
-            return true; // block on parse failure
+            return true; // 解析失败时阻止请求
         }
     }
 }

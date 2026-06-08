@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -20,6 +22,8 @@ import org.xxg.backend.backend.entity.MaintenanceSettings;
  */
 @Component
 public class DatabaseInitializer implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(DatabaseInitializer.class);
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -56,7 +60,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 entityManager.persist(settings);
             }
         } catch (Exception e) {
-            // Table might not exist yet, skip
+            log.debug("维护设置初始化跳过（表可能尚不存在）: {}", e.getMessage());
         }
 
         // Ensure admin password is BCrypt encrypted
@@ -76,7 +80,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 }
             }
         } catch (Exception e) {
-            // Admin might not exist yet
+            log.debug("管理员密码迁移跳过（管理员可能尚不存在）: {}", e.getMessage());
         }
     }
 }

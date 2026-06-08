@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.OrderApi
 import com.xxgkami.shared.model.Order
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -42,10 +43,13 @@ class OrderViewModel : ViewModel() {
             try {
                 val response = orderApi.getMyOrders()
                 _orders.value = response.data ?: emptyList()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "加载订单失败"
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 }

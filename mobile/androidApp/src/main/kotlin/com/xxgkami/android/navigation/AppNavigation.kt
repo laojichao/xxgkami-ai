@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.xxgkami.android.data.TokenStore
 import com.xxgkami.android.ui.screens.*
 
 /**
@@ -84,9 +85,13 @@ fun MainScreen(onLogout: () -> Unit) {
 fun AppNavigation() {
     val navController = rememberNavController()
     // 全局登录状态，控制页面路由切换
-    var isLoggedIn by remember { mutableStateOf(false) }
+    // 从 TokenStore 恢复登录状态，防止进程死亡后丢失登录态
+    var isLoggedIn by remember { mutableStateOf(TokenStore.isLoggedIn()) }
 
-    NavHost(navController = navController, startDestination = "home") {
+    // 根据登录状态选择起始目的地，避免启动时闪屏
+    val startDestination = if (isLoggedIn) "main" else "home"
+
+    NavHost(navController = navController, startDestination = startDestination) {
         composable("home") { HomeScreen(navController) }
         // 登录成功后清除回退栈并跳转到主页
         composable("login") { LoginScreen(navController, onLoginSuccess = { isLoggedIn = true; navController.navigate("main") { popUpTo(0) { inclusive = true } } }) }

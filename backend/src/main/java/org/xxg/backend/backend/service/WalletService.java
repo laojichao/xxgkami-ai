@@ -10,6 +10,9 @@ import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.WalletRepository;
 import org.xxg.backend.backend.mapper.WalletTransactionRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -22,6 +25,8 @@ import java.util.*;
 public class WalletService {
     private final WalletRepository walletRepository;
     private final WalletTransactionRepository transactionRepository;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public WalletService(WalletRepository walletRepository, WalletTransactionRepository transactionRepository) {
         this.walletRepository = walletRepository;
@@ -52,6 +57,9 @@ public class WalletService {
      */
     @Transactional
     public Wallet recharge(Integer userId, BigDecimal amount, String description, String orderNo) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("充值金额必须大于0");
+        }
         Wallet wallet = getOrCreateWallet(userId);
         wallet.setBalance(wallet.getBalance().add(amount));
         wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
@@ -73,7 +81,14 @@ public class WalletService {
      */
     @Transactional
     public Wallet consume(Integer userId, BigDecimal amount, String description, String orderNo) {
-        Wallet wallet = getOrCreateWallet(userId);
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("消费金额必须大于0");
+        }
+        // 使用悲观锁防止并发消费导致余额为负
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException("钱包不存在"));
+        entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
+
         if (wallet.getBalance().compareTo(amount) < 0) {
             throw new BusinessException("余额不足");
         }

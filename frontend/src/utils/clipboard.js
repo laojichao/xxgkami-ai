@@ -17,27 +17,30 @@ export async function copyToClipboard(text) {
   }
 
   // Fallback using document.execCommand('copy')
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+
+  // Ensure the textarea is not visible but part of the DOM
+  textArea.style.position = "fixed";
+  textArea.style.left = "-9999px";
+  textArea.style.top = "0";
+  textArea.setAttribute('readonly', '');
+
+  document.body.appendChild(textArea);
+
   try {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-
-    // Ensure the textarea is not visible but part of the DOM
-    textArea.style.position = "fixed";
-    textArea.style.left = "-9999px";
-    textArea.style.top = "0";
-    textArea.setAttribute('readonly', '');
-
-    document.body.appendChild(textArea);
-
     textArea.focus();
     textArea.select();
 
     const successful = document.execCommand('copy');
-    document.body.removeChild(textArea);
-
     return successful;
   } catch (err) {
     console.error('Fallback copy failed:', err);
     return false;
+  } finally {
+    // 确保 textarea 无论成功与否都从 DOM 中移除，防止内存泄漏
+    if (textArea.parentNode) {
+      document.body.removeChild(textArea);
+    }
   }
 }

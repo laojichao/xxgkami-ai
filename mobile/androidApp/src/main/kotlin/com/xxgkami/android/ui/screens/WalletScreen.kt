@@ -25,6 +25,7 @@ import com.xxgkami.android.viewmodel.WalletViewModel
 fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel = viewModel()) {
     val wallet by walletViewModel.wallet.collectAsState()
     val transactions by walletViewModel.transactions.collectAsState()
+    val isLoading by walletViewModel.isLoading.collectAsState()
 
     // 页面首次加载时并行请求钱包信息和交易记录
     LaunchedEffect(Unit) {
@@ -35,6 +36,11 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
     Scaffold(topBar = {
         TopAppBar(title = { Text("钱包") })
     }) { padding ->
+        if (isLoading && wallet == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
         LazyColumn(modifier = Modifier.padding(padding).padding(16.dp)) {
             item {
                 Card(Modifier.fillMaxWidth()) {
@@ -66,7 +72,7 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
                     }
                 }
             } else {
-                items(transactions) { tx ->
+                items(transactions, key = { tx -> tx.id ?: tx.hashCode() }) { tx ->
                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column {
@@ -86,5 +92,6 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
                 }
             }
         }
+        } // end else (not loading)
     }
 }

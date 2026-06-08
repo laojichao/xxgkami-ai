@@ -241,11 +241,20 @@ const chartData = ref({
 // 绘制使用趋势图
 const drawUsageChart = () => {
   if (!usageChart.value) return
-  
-  const ctx = usageChart.value.getContext('2d')
+
   const canvas = usageChart.value
-  const { width, height } = canvas
-  
+  const ctx = canvas.getContext('2d')
+
+  // 适配高DPI屏幕：根据设备像素比缩放canvas分辨率
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  ctx.scale(dpr, dpr)
+
+  const width = rect.width
+  const height = rect.height
+
   // 清空画布
   ctx.clearRect(0, 0, width, height)
   
@@ -255,7 +264,15 @@ const drawUsageChart = () => {
   ctx.lineWidth = 3
   
   const data = chartData.value.usage.data
-  const max = Math.max(...data)
+  // 处理空数据，避免 Math.max(...[]) 返回 -Infinity 导致 NaN
+  if (!data || data.length === 0) {
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = '14px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('暂无数据', width / 2, height / 2)
+    return
+  }
+  const max = Math.max(...data) || 1
   const padding = 40
   const chartWidth = width - padding * 2
   const chartHeight = height - padding * 2
@@ -326,11 +343,20 @@ const drawUsageChart = () => {
 // 绘制活跃度饼图
 const drawActivityChart = () => {
   if (!activityChart.value) return
-  
-  const ctx = activityChart.value.getContext('2d')
+
   const canvas = activityChart.value
-  const { width, height } = canvas
-  
+  const ctx = canvas.getContext('2d')
+
+  // 适配高DPI屏幕
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  ctx.scale(dpr, dpr)
+
+  const width = rect.width
+  const height = rect.height
+
   // 清空画布
   ctx.clearRect(0, 0, width, height)
   
@@ -456,19 +482,20 @@ const loadServerStatus = async () => {
   }
 }
 
-// 格式化时间
+// 格式化时间（保留供未来使用）
+// eslint-disable-next-line no-unused-vars
 const formatTime = (timeString) => {
   if (!timeString) return '未知'
-  
+
   try {
     const time = new Date(timeString)
     const now = new Date()
     const diff = now - time
-    
+
     const minutes = Math.floor(diff / (1000 * 60))
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-    
+
     if (days > 0) return `${days}天前`
     if (hours > 0) return `${hours}小时前`
     if (minutes > 0) return `${minutes}分钟前`

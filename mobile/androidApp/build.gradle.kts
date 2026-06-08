@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     kotlin("android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -16,7 +17,6 @@ android {
     }
 
     buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     buildTypes {
         release {
@@ -45,5 +45,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
+    // EncryptedSharedPreferences 依赖，用于安全存储 Token
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

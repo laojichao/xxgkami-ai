@@ -23,9 +23,6 @@ public class EmailService {
     @Value("${spring.mail.username:}")
     private String fromEmail;
 
-    @Value("${spring.mail.properties.mail.smtp.auth:false}")
-    private String smtpAuth;
-
     public EmailService(JavaMailSender mailSender) {
         this.mailSender = mailSender;
     }
@@ -40,7 +37,7 @@ public class EmailService {
     public void sendVerificationCode(String to, String code, String type) {
         try {
             if (fromEmail == null || fromEmail.isEmpty()) {
-                log.warn("[EMAIL] Mail not configured. Code for {}: {}", to, code);
+                log.warn("[EMAIL] Mail not configured. Verification code generated for {} but not sent.", to);
                 return;
             }
             SimpleMailMessage message = new SimpleMailMessage();

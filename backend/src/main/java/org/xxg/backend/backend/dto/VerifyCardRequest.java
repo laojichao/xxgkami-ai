@@ -15,5 +15,5 @@ public class VerifyCardRequest {
     /** 机器码，用于绑定设备 */
     private String machineCode;
     /** API密钥ID */
-    private Long apiKeyId;
+    private Integer apiKeyId;
 }

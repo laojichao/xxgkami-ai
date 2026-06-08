@@ -189,7 +189,9 @@ const savePricing = async () => {
     if (isEditing.value) {
       res = await pricingApi.updatePricing(form.id, form)
     } else {
-      res = await pricingApi.addPricing(form)
+      // 新建时排除 id 字段，避免后端处理 null id
+      const { id, ...newPricing } = form
+      res = await pricingApi.addPricing(newPricing)
     }
     
     if (res.success) {

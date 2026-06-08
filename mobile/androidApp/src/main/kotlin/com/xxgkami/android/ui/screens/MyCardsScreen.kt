@@ -25,17 +25,60 @@ import com.xxgkami.android.viewmodel.CardViewModel
 fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewModel(), authViewModel: AuthViewModel = viewModel()) {
     val cards by viewModel.cards.collectAsState()
     val userInfo by authViewModel.userInfo.collectAsState()
-    // 用户信息加载完成后，自动加载该用户的卡密列表
-    LaunchedEffect(userInfo) {
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    // 如果用户信息尚未加载（例如直接导航到此页面），先触发加载
+    LaunchedEffect(Unit) {
+        if (userInfo == null) {
+            authViewModel.getUserInfo()
+        }
+    }
+    // 用户信息加载完成后，自动加载该用户的卡密列表（使用 id 避免不必要的重复触发）
+    LaunchedEffect(userInfo?.id) {
         userInfo?.id?.let { viewModel.loadUserCards(it) }
     }
+
+    // 卡密状态码映射为中文
+    fun statusText(status: Int?): String = when (status) {
+        0 -> "未使用"
+        1 -> "已使用"
+        2 -> "已停用"
+        else -> "未知"
+    }
+
     Scaffold(topBar = { TopAppBar(title = { Text("我的卡密") }) }) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).padding(16.dp)) {
-            items(cards) { card ->
-                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("卡密: ${card.cardKey ?: ""}", style = MaterialTheme.typography.bodyMedium)
-                        Text("类型: ${card.cardType} | 状态: ${card.status}", style = MaterialTheme.typography.bodySmall)
+        when {
+            isLoading -> {
+                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            error != null -> {
+                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                        Text(error ?: "加载失败", color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(8.dp))
+                        Button(onClick = { userInfo?.id?.let { viewModel.loadUserCards(it) } }) {
+                            Text("重试")
+                        }
+                    }
+                }
+            }
+            cards.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    Text("暂无卡密", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            else -> {
+                LazyColumn(modifier = Modifier.padding(padding).padding(16.dp)) {
+                    items(cards, key = { card -> card.id ?: card.hashCode() }) { card ->
+                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text("卡密: ${card.cardKey ?: ""}", style = MaterialTheme.typography.bodyMedium)
+                                Text("类型: ${card.cardType ?: "未知"} | 状态: ${statusText(card.status)}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                 }
             }

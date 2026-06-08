@@ -1,10 +1,12 @@
 package com.xxgkami.android.ui.screens
 
+import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -25,6 +27,8 @@ fun VerifyScreen(navController: NavController, viewModel: CardViewModel = viewMo
     var machineCode by remember { mutableStateOf("") }
     val result by viewModel.verifyResult.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    // 使用设备型号作为默认机器码，避免所有用户共享同一个 "Android" 标识
+    val defaultMachineCode = "${Build.MANUFACTURER}_${Build.MODEL}"
 
     Scaffold(topBar = { TopAppBar(title = { Text("卡密验证") }) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -33,7 +37,7 @@ fun VerifyScreen(navController: NavController, viewModel: CardViewModel = viewMo
             OutlinedTextField(value = machineCode, onValueChange = { machineCode = it }, label = { Text("机器码（可选）") }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(24.dp))
             // 未输入机器码时使用默认值"Android"
-            Button(onClick = { viewModel.verify(cardKey, if (machineCode.isEmpty()) "Android" else machineCode) }, enabled = !isLoading && cardKey.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Button(onClick = { viewModel.verify(cardKey, machineCode.ifBlank { defaultMachineCode }) }, enabled = !isLoading && cardKey.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 if (isLoading) CircularProgressIndicator(Modifier.size(24.dp)) else Text("验证")
             }
             result?.let { r ->

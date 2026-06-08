@@ -31,7 +31,9 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
     var token: String? = null
+        private set
     var refreshToken: String? = null
+        private set
     var onTokenRefreshed: ((newToken: String, newRefreshToken: String) -> Unit)? = null
     var onLogout: (() -> Unit)? = null
 
@@ -85,8 +87,9 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
     private suspend fun tryRefreshToken(): Boolean {
         val currentRefreshToken = refreshToken ?: return false
         return refreshMutex.withLock {
-            // 获取锁后二次检查，防止其他协程已刷新成功
+            // 获取锁后二次检查：如果 token 已被其他协程刷新（值已变化），直接返回成功
             if (refreshToken == null) return@withLock false
+            if (refreshToken != currentRefreshToken) return@withLock true
 
             try {
                 val body = buildJsonObject {

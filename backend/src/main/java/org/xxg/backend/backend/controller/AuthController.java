@@ -127,7 +127,7 @@ public class AuthController {
      * @return 新的 Token 对
      */
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(@RequestBody TokenRefreshRequest request) {
+    public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(authService.refreshToken(request)));
     }
 
@@ -147,6 +147,12 @@ public class AuthController {
                 user.setRefreshToken(null);
                 userRepository.save(user);
             });
+            // 同时清除管理员表中的 token（管理员也可能通过此接口注销）
+            adminRepository.findByUsername(username).ifPresent(admin -> {
+                admin.setAccessToken(null);
+                admin.setRefreshToken(null);
+                adminRepository.save(admin);
+            });
         }
         return ResponseEntity.ok(ApiResponse.ok("已退出"));
     }
@@ -160,16 +166,31 @@ public class AuthController {
     @GetMapping("/user/info")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getUserInfo(Authentication auth) {
         if (auth == null) return ResponseEntity.ok(ApiResponse.error("未登录"));
-        User user = userRepository.findByUsername(auth.getName())
-                .orElseThrow(() -> new BusinessException("用户不存在"));
-        Map<String, Object> info = new java.util.HashMap<>();
-        info.put("id", user.getId());
-        info.put("username", user.getUsername());
-        info.put("email", user.getEmail());
-        info.put("nickname", user.getNickname());
-        info.put("avatar", user.getAvatar());
-        info.put("role", "user");
-        return ResponseEntity.ok(ApiResponse.ok(info));
+        String username = auth.getName();
+        // 先查用户表，再查管理员表，兼容两种角色
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user != null) {
+            Map<String, Object> info = new java.util.HashMap<>();
+            info.put("id", user.getId());
+            info.put("username", user.getUsername());
+            info.put("email", user.getEmail());
+            info.put("nickname", user.getNickname());
+            info.put("avatar", user.getAvatar());
+            info.put("role", "user");
+            return ResponseEntity.ok(ApiResponse.ok(info));
+        }
+        Admin admin = adminRepository.findByUsername(username).orElse(null);
+        if (admin != null) {
+            Map<String, Object> info = new java.util.HashMap<>();
+            info.put("id", admin.getId());
+            info.put("username", admin.getUsername());
+            info.put("email", admin.getEmail());
+            info.put("nickname", admin.getUsername());
+            info.put("avatar", "");
+            info.put("role", "admin");
+            return ResponseEntity.ok(ApiResponse.ok(info));
+        }
+        throw new BusinessException("用户不存在");
     }
 
     /**
@@ -181,11 +202,20 @@ public class AuthController {
      */
     @PostMapping("/admin/update")
     public ResponseEntity<ApiResponse<Void>> updateAdmin(Authentication auth, @RequestBody Map<String, Object> body) {
+        if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
         if (body.containsKey("email")) {
-            admin.setEmail((String) body.get("email"));
+            Object emailObj = body.get("email");
+            if (emailObj != null && !(emailObj instanceof String)) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("邮箱字段类型错误"));
+            }
+            String email = (String) emailObj;
+            if (email != null && !email.isBlank() && !email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("邮箱格式不正确"));
+            }
+            admin.setEmail(email);
         }
         adminRepository.save(admin);
         return ResponseEntity.ok(ApiResponse.ok("更新成功"));
@@ -197,8 +227,13 @@ public class AuthController {
      * @return 绑定 Token
      */
     @GetMapping("/bind/token")
-    public ResponseEntity<ApiResponse<?>> getBindToken() {
-        return ResponseEntity.ok(ApiResponse.ok(authService.getBindToken()));
+    public ResponseEntity<ApiResponse<?>> getBindToken(Authentication auth) {
+        Integer userId = null;
+        if (auth != null) {
+            userId = userRepository.findByUsername(auth.getName())
+                    .map(User::getId).orElse(null);
+        }
+        return ResponseEntity.ok(ApiResponse.ok(authService.getBindToken(userId)));
     }
 
     /**
@@ -221,6 +256,7 @@ public class AuthController {
      */
     @PostMapping("/totp/setup")
     public ResponseEntity<ApiResponse<Map<String, String>>> setupTotp(Authentication auth) {
+        if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
@@ -229,7 +265,7 @@ public class AuthController {
         adminRepository.save(admin);
         Map<String, String> result = new HashMap<>();
         result.put("secret", secret);
-        result.put("qrCode", "otpauth://totp/xxgkami:" + username + "?secret=" + secret + "&issuer=xxgkami");
+        result.put("qrCode", "otpauth://totp/xxgkami:" + java.net.URLEncoder.encode(username, java.nio.charset.StandardCharsets.UTF_8) + "?secret=" + secret + "&issuer=xxgkami");
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
@@ -242,6 +278,7 @@ public class AuthController {
      */
     @PostMapping("/totp/enable")
     public ResponseEntity<ApiResponse<Void>> enableTotp(Authentication auth, @RequestBody Map<String, String> body) {
+        if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
@@ -266,6 +303,7 @@ public class AuthController {
      */
     @PostMapping("/totp/disable")
     public ResponseEntity<ApiResponse<Void>> disableTotp(Authentication auth, @RequestBody Map<String, String> body) {
+        if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));

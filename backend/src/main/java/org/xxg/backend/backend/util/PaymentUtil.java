@@ -36,13 +36,14 @@ public class PaymentUtil {
     }
 
     public String generateOrderNo() {
-        return "ORD" + System.currentTimeMillis() + String.format("%04d", new SecureRandom().nextInt(10000));
+        // 使用时间戳+8位随机数，降低并发订单号碰撞风险
+        return "ORD" + System.currentTimeMillis() + String.format("%08d", new SecureRandom().nextInt(100000000));
     }
 
     private String md5(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(input.getBytes("UTF-8"));
+            byte[] digest = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : digest) {
                 sb.append(String.format("%02x", b));

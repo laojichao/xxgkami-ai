@@ -10,6 +10,9 @@ import org.xxg.backend.backend.mapper.OrderRepository;
 import org.xxg.backend.backend.mapper.SettingRepository;
 import org.xxg.backend.backend.util.PaymentUtil;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -20,6 +23,8 @@ import java.util.*;
  */
 @Service
 public class PaymentService {
+
+    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
     private final SettingRepository settingRepository;
     private final OrderRepository orderRepository;
@@ -75,7 +80,7 @@ public class PaymentService {
 
     /**
      * 处理易支付异步回调通知
-     * 验证签名并完成订单状态更新
+     * 验证签名并完成订单状态更新，包含幂等性保护和卡密生成
      * @param params 回调参数
      * @return "success"表示处理成功，"fail"表示处理失败
      */
@@ -83,17 +88,36 @@ public class PaymentService {
     public String handlePaymentCallback(Map<String, String> params) {
         String key = getSettingValue("epay_key", "");
         if (!paymentUtil.verifySign(params, key)) {
+            log.warn("支付回调签名校验失败");
             return "fail";
         }
 
         String tradeStatus = params.get("trade_status");
         String orderNo = params.get("out_trade_no");
 
+        // 防止 orderNo 为空导致异常
+        if (orderNo == null || orderNo.isBlank()) {
+            log.warn("支付回调缺少订单号参数");
+            return "fail";
+        }
+
         if ("TRADE_SUCCESS".equals(tradeStatus)) {
-            Order order = orderRepository.findByOrderNo(orderNo).orElse(null);
-            if (order != null && "pending".equals(order.getStatus())) {
-                orderService.completeOrder(orderNo, null);
+            // 使用悲观锁防止并发重复处理（幂等性保护）
+            Order order = orderRepository.findByOrderNoWithLock(orderNo).orElse(null);
+            if (order == null) {
+                log.warn("支付回调订单不存在: {}", orderNo);
+                return "fail";
             }
+            // 幂等性检查：只有待支付状态的订单才处理
+            if (!"pending".equals(order.getStatus())) {
+                log.info("订单已处理过，跳过: {}，当前状态: {}", orderNo, order.getStatus());
+                return "success";
+            }
+
+            // 根据订单信息生成卡密
+            String cardKeys = cardService.generateCardsForOrder(order);
+            orderService.completeOrder(orderNo, cardKeys);
+            log.info("订单支付完成: {}，生成卡密数量: {}", orderNo, order.getQuantity());
             return "success";
         }
         return "fail";

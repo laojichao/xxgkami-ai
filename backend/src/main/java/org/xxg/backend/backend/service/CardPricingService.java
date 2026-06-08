@@ -1,6 +1,7 @@
 package org.xxg.backend.backend.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.CardPricing;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.CardPricingRepository;
@@ -27,8 +28,15 @@ public class CardPricingService {
     }
 
     /** 保存或更新卡密定价信息 */
+    @Transactional
     public CardPricing save(CardPricing pricing) { return repository.save(pricing); }
 
-    /** 根据ID删除卡密定价 */
-    public void delete(Integer id) { repository.deleteById(id); }
+    /** 根据ID删除卡密定价，不存在则抛出异常 */
+    @Transactional
+    public void delete(Integer id) {
+        if (!repository.existsById(id)) {
+            throw new BusinessException("定价不存在");
+        }
+        repository.deleteById(id);
+    }
 }

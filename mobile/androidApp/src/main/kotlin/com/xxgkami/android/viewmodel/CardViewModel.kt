@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.CardApi
 import com.xxgkami.shared.model.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -46,11 +47,14 @@ class CardViewModel : ViewModel() {
             _error.value = null
             try {
                 _verifyResult.value = cardApi.useCard(cardKey, deviceId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "验证失败"
                 _verifyResult.value = CardVerifyResponse(false, e.message)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
@@ -65,10 +69,13 @@ class CardViewModel : ViewModel() {
             try {
                 val response = cardApi.getUserCards(userId)
                 _cards.value = response.data ?: emptyList()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "加载卡密失败"
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
@@ -82,6 +89,8 @@ class CardViewModel : ViewModel() {
             _error.value = null
             try {
                 cardApi.machineUnbind(cardKey, machineCode)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "解绑失败"
             }

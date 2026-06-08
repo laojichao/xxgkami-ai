@@ -27,17 +27,18 @@ public class SettingsController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, String>>> getAll() {
-        return ResponseEntity.ok(ApiResponse.ok(settingsService.getAllSettings()));
+        return getAllSettings();
     }
 
     @GetMapping("/all")
     public ResponseEntity<ApiResponse<Map<String, String>>> getAllSettings() {
         Map<String, String> settings = settingsService.getAllSettings();
-        // Mask sensitive fields
+        // 脱敏处理：掩码已知的敏感字段
         maskSensitiveField(settings, "epay_key");
         maskSensitiveField(settings, "mail_password");
         maskSensitiveField(settings, "smtp_password");
         maskSensitiveField(settings, "secret");
+        maskSensitiveField(settings, "jwt_secret");
         return ResponseEntity.ok(ApiResponse.ok(settings));
     }
 

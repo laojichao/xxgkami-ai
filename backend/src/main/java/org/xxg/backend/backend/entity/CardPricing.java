@@ -5,6 +5,8 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.UpdateTimestamp;
+
 /**
  * 卡密定价实体 - 定义不同类型和规格卡密的价格
  */
@@ -32,5 +34,6 @@ public class CardPricing {
     private LocalDateTime createTime = LocalDateTime.now();
 
     @Column(name = "update_time")
-    private LocalDateTime updateTime = LocalDateTime.now();
+    @UpdateTimestamp
+    private LocalDateTime updateTime;
 }

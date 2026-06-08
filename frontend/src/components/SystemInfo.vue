@@ -265,7 +265,21 @@ const checkUpdate = async () => {
 /** 跳转到项目仓库页面 */
 const goToRepo = () => {
   if (updateInfo.value && updateInfo.value.repoUrl) {
-    window.open(updateInfo.value.repoUrl, '_blank')
+    // 安全校验：只允许 HTTPS 的 GitHub/Gitee 仓库链接，防止开放重定向
+    const url = updateInfo.value.repoUrl
+    let isTrusted = false
+    try {
+      const parsed = new URL(url)
+      isTrusted = parsed.protocol === 'https:' &&
+        (parsed.hostname.endsWith('github.com') || parsed.hostname.endsWith('gitee.com'))
+    } catch (e) {
+      isTrusted = false
+    }
+    if (!isTrusted) {
+      ElMessage.warning('仓库链接不安全，无法打开')
+      return
+    }
+    window.open(url, '_blank')
     showUpdateDialog.value = false
   }
 }

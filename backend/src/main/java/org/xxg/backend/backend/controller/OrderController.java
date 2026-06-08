@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.controller;
 
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -39,7 +40,12 @@ public class OrderController {
      * @return 新创建的订单信息
      */
     @PostMapping
-    public ResponseEntity<ApiResponse<Order>> createOrder(@RequestBody CreateOrderRequest request) {
+    public ResponseEntity<ApiResponse<Order>> createOrder(@Valid @RequestBody CreateOrderRequest request, Authentication auth) {
+        // 使用认证用户的ID和用户名，忽略请求体中的userId/username，防止越权创建订单
+        Integer userId = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new BusinessException("用户不存在")).getId();
+        request.setUserId(userId);
+        request.setUsername(auth.getName());
         return ResponseEntity.ok(ApiResponse.ok("下单成功", orderService.createOrder(request)));
     }
 
@@ -69,6 +75,7 @@ public class OrderController {
     public ResponseEntity<ApiResponse<Page<Order>>> getAllOrders(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
         return ResponseEntity.ok(ApiResponse.ok(orderService.getAllOrders(PageRequest.of(page, size))));
     }
 
@@ -86,7 +93,12 @@ public class OrderController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status) {
-        return ResponseEntity.ok(ApiResponse.ok(orderService.getAllOrders(PageRequest.of(page, size))));
+        size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
+        PageRequest pageRequest = PageRequest.of(page, size);
+        if (status != null && !status.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.ok(orderService.getOrdersByStatus(status, pageRequest)));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(orderService.getAllOrders(pageRequest)));
     }
 
     /**
@@ -100,39 +112,51 @@ public class OrderController {
     public ResponseEntity<ApiResponse<Void>> updateOrderStatus(@RequestBody Map<String, String> body) {
         String orderNo = body.get("orderNo");
         String status = body.get("status");
+        if (orderNo == null || orderNo.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("订单号不能为空"));
+        }
         if ("completed".equals(status)) {
             orderService.completeOrder(orderNo, null);
         } else if ("failed".equals(status)) {
             orderService.failOrder(orderNo);
+        } else {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无效的状态值，仅支持 completed 或 failed"));
         }
         return ResponseEntity.ok(ApiResponse.ok("订单状态已更新"));
     }
 
     /**
-     * 根据订单号查询订单详情
+     * 根据订单号查询订单详情（需验证订单归属）
      * <p>GET /orders/{orderNo}</p>
-     * <p>权限：已认证用户</p>
+     * <p>权限：已认证用户（仅能查看自己的订单）</p>
      * @param orderNo 订单号
+     * @param auth 当前认证信息
      * @return 订单详情，不存在时返回错误信息
      */
     @GetMapping("/{orderNo}")
-    public ResponseEntity<ApiResponse<Order>> getOrderByNo(@PathVariable String orderNo) {
+    public ResponseEntity<ApiResponse<Order>> getOrderByNo(@PathVariable String orderNo, Authentication auth) {
+        Integer userId = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new BusinessException("用户不存在")).getId();
         Order order = orderService.getOrderByNo(orderNo);
-        return order != null ? ResponseEntity.ok(ApiResponse.ok(order))
-                : ResponseEntity.ok(ApiResponse.error("订单不存在"));
+        if (order == null) {
+            return ResponseEntity.ok(ApiResponse.error("订单不存在"));
+        }
+        // 验证订单归属：仅订单所有者可查看
+        if (!order.getUserId().equals(userId)) {
+            return ResponseEntity.ok(ApiResponse.error("无权查看此订单"));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(order));
     }
 
     /**
-     * 完成指定订单
-     * <p>PUT /orders/{orderNo}/complete</p>
-     * <p>权限：已认证用户</p>
-     * @param orderNo 订单号
-     * @return 操作结果
+     * 完成指定订单 — 已禁用。
+     * <p>订单完成只能通过支付回调（/payment/notify）触发，
+     * 防止用户绕过支付直接标记订单为已完成。</p>
      */
     @PutMapping("/{orderNo}/complete")
-    public ResponseEntity<ApiResponse<Void>> completeOrder(@PathVariable String orderNo) {
-        orderService.completeOrder(orderNo, null);
-        return ResponseEntity.ok(ApiResponse.ok("订单已完成"));
+    public ResponseEntity<ApiResponse<Void>> completeOrder(@PathVariable String orderNo, Authentication auth) {
+        // 安全修复：禁止用户直接完成订单，订单只能通过支付回调完成
+        return ResponseEntity.status(403).body(ApiResponse.error("不允许直接完成订单，请通过正常支付流程"));
     }
 
     /**

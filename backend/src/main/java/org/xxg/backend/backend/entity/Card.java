@@ -74,13 +74,13 @@ public class Card {
     private String machineCode; // 绑定的机器码
 
     @Column(name = "api_key_id")
-    private Long apiKeyId; // 通过API创建时关联的API密钥ID
+    private Integer apiKeyId; // 通过API创建时关联的API密钥ID
 
     @Column(name = "stack_time_if_same_machine")
     private Boolean stackTimeIfSameMachine = false; // 同机器码重复使用时是否叠加时长
 
     @Column(name = "merged_into_card_id")
-    private Long mergedIntoCardId; // 合并目标卡密ID(本卡密被合并到的目标)
+    private Integer mergedIntoCardId; // 合并目标卡密ID(本卡密被合并到的目标)
 
     @Column(name = "allow_self_unbind")
     private Boolean allowSelfUnbind = false; // 是否允许用户自行解绑设备

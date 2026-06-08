@@ -34,5 +34,5 @@ public class GenerateCardRequest {
     /** 有效期天数 */
     private Integer days;
     /** 关联的API密钥ID */
-    private Long apiKeyId;
+    private Integer apiKeyId;
 }

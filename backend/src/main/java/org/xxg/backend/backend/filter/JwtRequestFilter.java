@@ -4,6 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -12,7 +14,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.xxg.backend.backend.util.JwtUtil;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * JWT 认证过滤器。
@@ -22,6 +26,8 @@ import java.util.Collections;
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtRequestFilter.class);
+    private static final List<String> VALID_ROLES = Arrays.asList("admin", "user");
     private final JwtUtil jwtUtil;
 
     public JwtRequestFilter(JwtUtil jwtUtil) {
@@ -50,8 +56,10 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     String username = jwtUtil.extractUsername(token);
                     String role = jwtUtil.extractRole(token);
 
-                    // 当前上下文无认证信息时，构建认证对象并写入 SecurityContext
-                    if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    // 校验角色是否合法，防止 JWT 被伪造时注入任意权限
+                    if (role == null || !VALID_ROLES.contains(role.toLowerCase())) {
+                        log.warn("JWT 中包含无效角色: {}", role);
+                    } else if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role.toUpperCase());
                         UsernamePasswordAuthenticationToken authToken =
                                 new UsernamePasswordAuthenticationToken(username, null,
@@ -61,6 +69,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 }
             } catch (Exception e) {
                 // Token 无效，跳过认证，继续执行后续过滤器
+                log.debug("JWT validation failed: {}", e.getMessage());
             }
         }
 
