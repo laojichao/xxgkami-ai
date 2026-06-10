@@ -164,6 +164,11 @@ public class AuthService {
         // 删除已使用的验证码，防止重复使用
         verificationCodeRepository.delete(vCode);
 
+        // 密码强度校验：至少6位
+        if (request.getPassword() == null || request.getPassword().length() < 6) {
+            throw new BusinessException("密码长度不能少于6位");
+        }
+
         User user = new User();
         user.setUsername(request.getUsername());
         user.setPassword(passwordUtil.encode(request.getPassword()));
@@ -194,8 +199,9 @@ public class AuthService {
         try {
             emailService.sendVerificationCode(email, code, type);
         } catch (Exception e) {
-            // Log error but don't fail - code is saved in DB
             log.error("Failed to send email to {}: {}", email, e.getMessage());
+            verificationCodeRepository.delete(vCode);
+            throw new BusinessException("验证码发送失败，请稍后重试");
         }
     }
 

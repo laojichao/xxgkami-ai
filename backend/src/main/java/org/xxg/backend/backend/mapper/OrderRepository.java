@@ -39,4 +39,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     long countByCreateTimeAfter(LocalDateTime time);
     /** 分页查询所有订单 */
     Page<Order> findAll(Pageable pageable);
+
+    /** 查询指定状态且在指定时间之前创建的订单（用于超时取消） */
+    List<Order> findByStatusAndCreateTimeBefore(String status, LocalDateTime createTime);
 }

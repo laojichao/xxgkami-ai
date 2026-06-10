@@ -40,14 +40,18 @@ public class SecurityService {
     }
 
     /**
-     * 封禁指定 IP。
+     * 封禁指定 IP。如果该 IP 已在黑名单中，先删除旧记录再创建新记录，避免重复。
      *
      * @param ip     IP 地址
      * @param reason 封禁原因
      * @param hours  封禁时长（小时），为 null 或 <= 0 时永久封禁
      * @return 黑名单记录实体
      */
+    @Transactional
     public IpBlacklist blockIp(String ip, String reason, Integer hours) {
+        blacklistRepository.findByIpAddress(ip).ifPresent(existing -> {
+            blacklistRepository.delete(existing);
+        });
         IpBlacklist entry = new IpBlacklist();
         entry.setIpAddress(ip);
         entry.setReason(reason);
@@ -65,8 +69,9 @@ public class SecurityService {
      *
      * @param ip IP 地址
      */
+    @Transactional
     public void unblockIp(String ip) {
-        blacklistRepository.findByIpAddress(ip).ifPresent(blacklistRepository::delete);
+        blacklistRepository.deleteByIpAddress(ip);
     }
 
     /**

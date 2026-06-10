@@ -308,13 +308,8 @@ public class CardService {
     public void enableCard(Integer cardId) {
         Card card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new BusinessException("卡密不存在"));
-        // 恢复为未使用状态(0)，因为停用的卡密通常是未使用的
-        // 如果卡密已绑定机器码且已使用，保持状态1
-        if (card.getMachineCode() != null && !card.getMachineCode().isEmpty() && card.getUseTime() != null) {
-            card.setStatus(1); // 已使用
-        } else {
-            card.setStatus(0); // 未使用
-        }
+        // 恢复到暂停前的状态：有使用记录则恢复为已使用，否则恢复为未使用
+        card.setStatus(card.getUseTime() != null ? 1 : 0);
         cardRepository.save(card);
     }
 
@@ -341,6 +336,9 @@ public class CardService {
     public void unbindMachineCode(Integer cardId) {
         Card card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new BusinessException("卡密不存在"));
+        if (card.getStatus() == 2) {
+            throw new BusinessException("已停用的卡密不能解绑机器码");
+        }
         card.setMachineCode(null);
         cardRepository.save(card);
     }

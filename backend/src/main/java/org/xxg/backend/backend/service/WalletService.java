@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.service;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -60,22 +61,36 @@ public class WalletService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("充值金额必须大于0");
         }
-        // 使用悲观锁防止并发充值导致余额计算错误（与 consume 方法保持一致）
-        Wallet wallet = walletRepository.findByUserId(userId)
-                .orElseGet(() -> {
-                    Wallet w = new Wallet();
-                    w.setUserId(userId);
-                    w.setBalance(BigDecimal.ZERO);
-                    return walletRepository.save(w);
-                });
-        entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
-        wallet.setBalance(wallet.getBalance().add(amount));
-        wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
-        wallet.setUpdateTime(LocalDateTime.now());
-        walletRepository.save(wallet);
+        try {
+            // 先查询钱包，不存在则创建，避免 orElseGet 中 save 与后续 lock 的竞态条件
+            Wallet wallet = walletRepository.findByUserId(userId).orElse(null);
+            if (wallet == null) {
+                wallet = new Wallet();
+                wallet.setUserId(userId);
+                wallet.setBalance(BigDecimal.ZERO);
+                wallet = walletRepository.save(wallet);
+            }
+            entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
+            wallet.setBalance(wallet.getBalance().add(amount));
+            wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
+            wallet.setUpdateTime(LocalDateTime.now());
+            walletRepository.save(wallet);
 
-        recordTransaction(userId, "recharge", amount, wallet.getBalance(), description, orderNo);
-        return wallet;
+            recordTransaction(userId, "recharge", amount, wallet.getBalance(), description, orderNo);
+            return wallet;
+        } catch (DataIntegrityViolationException e) {
+            // 处理并发创建钱包的极端情况：另一个线程已创建了钱包，重新查询即可
+            Wallet wallet = walletRepository.findByUserId(userId)
+                    .orElseThrow(() -> new BusinessException("钱包创建失败"));
+            entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
+            wallet.setBalance(wallet.getBalance().add(amount));
+            wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
+            wallet.setUpdateTime(LocalDateTime.now());
+            walletRepository.save(wallet);
+
+            recordTransaction(userId, "recharge", amount, wallet.getBalance(), description, orderNo);
+            return wallet;
+        }
     }
 
     /**

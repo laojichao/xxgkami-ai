@@ -406,7 +406,7 @@ public class AuthController {
      *   <li>httpOnly=true: 禁止 JavaScript 读取，防止 XSS 窃取 Token</li>
      *   <li>secure=true: 仅通过 HTTPS 传输（开发环境可通过 localhost 豁免）</li>
      *   <li>sameSite=Lax: 防止 CSRF 攻击，允许顶级导航携带 Cookie</li>
-     *   <li>path: access_token 为 "/"（全局可用），refresh_token 为 "/api/auth/refresh"（最小权限）</li>
+     *   <li>path: access_token 为 "/"（全局可用），refresh_token 为 "/auth/refresh"（最小权限）</li>
      * </ul>
      */
     private void setTokenCookies(HttpServletResponse response, String accessToken, String refreshToken) {
@@ -420,7 +420,7 @@ public class AuthController {
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", refreshToken)
                 .httpOnly(true)
                 .secure(true)
-                .path("/api/auth/refresh")
+                .path("/auth/refresh")
                 .maxAge(604800)
                 .sameSite("Lax")
                 .build();
@@ -443,7 +443,7 @@ public class AuthController {
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", "")
                 .httpOnly(true)
                 .secure(true)
-                .path("/api/auth/refresh")
+                .path("/auth/refresh")
                 .maxAge(0)
                 .sameSite("Lax")
                 .build();

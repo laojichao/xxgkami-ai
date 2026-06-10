@@ -2,6 +2,7 @@ package org.xxg.backend.backend.service;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.dto.CreateOrderRequest;
@@ -49,6 +50,14 @@ public class OrderService {
      */
     @Transactional
     public Order createOrder(CreateOrderRequest request) {
+        // 校验卡密类型是否合法
+        if (!"time".equals(request.getCardType()) && !"count".equals(request.getCardType())) {
+            throw new BusinessException("无效的卡密类型，仅支持 time 或 count");
+        }
+        // 校验购买数量范围
+        if (request.getQuantity() == null || request.getQuantity() <= 0 || request.getQuantity() > 1000) {
+            throw new BusinessException("购买数量必须在 1-1000 之间");
+        }
         // 用户ID是必填项，不允许创建匿名订单
         if (request.getUserId() == null) {
             throw new BusinessException("用户ID不能为空");
@@ -85,6 +94,13 @@ public class OrderService {
     public void completeOrder(String orderNo, String cardKeys) {
         Order order = orderRepository.findByOrderNo(orderNo)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
+        // 幂等性检查：已完成的订单不重复处理，防止支付回调重复发送导致卡密重复生成
+        if ("completed".equals(order.getStatus())) {
+            return; // 已完成，直接返回
+        }
+        if (!"pending".equals(order.getStatus())) {
+            throw new BusinessException("订单状态不允许完成: " + order.getStatus());
+        }
         order.setStatus("completed");
         order.setPayTime(LocalDateTime.now());
         order.setCardKeys(cardKeys);
@@ -100,7 +116,12 @@ public class OrderService {
     public void failOrder(String orderNo) {
         Order order = orderRepository.findByOrderNo(orderNo)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
+        // 幂等性检查：已完成的订单不能标记为失败，防止误操作
+        if ("completed".equals(order.getStatus())) {
+            throw new BusinessException("已完成的订单不能标记为失败");
+        }
         order.setStatus("failed");
+        order.setUpdateTime(LocalDateTime.now());
         orderRepository.save(order);
     }
 
@@ -171,5 +192,23 @@ public class OrderService {
         stats.put("todayOrders", orderRepository.countByCreateTimeAfter(
                 LocalDateTime.now().toLocalDate().atStartOfDay()));
         return stats;
+    }
+
+    /**
+     * 定时取消超时未支付的订单。
+     * <p>每 5 分钟执行一次，将超过 30 分钟仍未支付的 pending 订单标记为 cancelled。</p>
+     */
+    @Scheduled(fixedRate = 300000) // 每5分钟执行一次
+    @Transactional
+    public void cancelExpiredOrders() {
+        LocalDateTime expireTime = LocalDateTime.now().minusMinutes(30);
+        List<Order> expiredOrders = orderRepository.findByStatusAndCreateTimeBefore("pending", expireTime);
+        for (Order order : expiredOrders) {
+            order.setStatus("cancelled");
+            order.setUpdateTime(LocalDateTime.now());
+        }
+        if (!expiredOrders.isEmpty()) {
+            orderRepository.saveAll(expiredOrders);
+        }
     }
 }

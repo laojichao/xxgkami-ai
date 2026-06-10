@@ -41,8 +41,10 @@ public class OnlineUserController {
      */
     @PostMapping("/online/login")
     public ResponseEntity<ApiResponse<Void>> userLogin(Authentication auth) {
-        String username = (auth != null) ? auth.getName() : "unknown";
-        service.userOnline(username);
+        if (auth == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
+        }
+        service.userOnline(auth.getName());
         return ResponseEntity.ok(ApiResponse.ok("用户上线"));
     }
 
@@ -56,8 +58,10 @@ public class OnlineUserController {
      */
     @PostMapping("/online/logout")
     public ResponseEntity<ApiResponse<Void>> userLogout(Authentication auth) {
-        String username = (auth != null) ? auth.getName() : "unknown";
-        service.userOffline(username);
+        if (auth == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
+        }
+        service.userOffline(auth.getName());
         return ResponseEntity.ok(ApiResponse.ok("用户下线"));
     }
 
@@ -71,8 +75,10 @@ public class OnlineUserController {
      */
     @PostMapping("/online/heartbeat")
     public ResponseEntity<ApiResponse<Void>> heartbeat(Authentication auth) {
-        String username = (auth != null) ? auth.getName() : "unknown";
-        service.userOnline(username);
+        if (auth == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
+        }
+        service.userOnline(auth.getName());
         return ResponseEntity.ok(ApiResponse.ok("心跳更新"));
     }
 

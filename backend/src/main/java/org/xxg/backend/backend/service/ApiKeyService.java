@@ -99,16 +99,12 @@ public class ApiKeyService {
     }
 
     /**
-     * 增加API密钥使用次数并更新最后使用时间
+     * 原子递增API密钥使用次数并更新最后使用时间
      * @param id 密钥ID
      */
     @Transactional
     public void incrementUseCount(Integer id) {
-        ApiKey apiKey = apiKeyRepository.findById(id).orElse(null);
-        if (apiKey == null) return; // 密钥已删除，静默忽略
-        apiKey.setUseCount(apiKey.getUseCount() + 1);
-        apiKey.setLastUseTime(LocalDateTime.now());
-        apiKeyRepository.save(apiKey);
+        apiKeyRepository.incrementUseCount(id, LocalDateTime.now());
     }
 
     /**

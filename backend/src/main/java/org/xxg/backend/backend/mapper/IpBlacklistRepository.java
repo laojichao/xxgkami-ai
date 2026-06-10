@@ -25,4 +25,7 @@ public interface IpBlacklistRepository extends JpaRepository<IpBlacklist, Long> 
     @Modifying
     @Query("DELETE FROM IpBlacklist i WHERE i.permanent = false AND i.blockedUntil < :now")
     void deleteExpired(@Param("now") LocalDateTime now);
+
+    /** 根据IP地址删除黑名单记录 */
+    void deleteByIpAddress(String ipAddress);
 }

@@ -109,7 +109,7 @@ public class SecurityConfig {
                         "/cards/stats", "/cards/trend", "/users/admin/**",
                         "/settings/**", "/stats/**", "/monitor/**",
                         "/maintenance/**", "/backup/**", "/security/**",
-                        "/online-users/**", "/card-pricing/admin/**",
+                        "/online-users/**", "/online/list", "/online/check/**", "/card-pricing/admin/**",
                         "/system/**", "/orders/admin/**",
                         "/user/admin/**", "/user/stats",
                         "/actuator/**").hasRole("ADMIN")
