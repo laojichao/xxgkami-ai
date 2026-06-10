@@ -66,5 +66,7 @@ class OrderViewModel : ViewModel() {
      */
     fun resetCache() {
         ordersLoaded = false
+        _orders.value = emptyList()
+        _error.value = null
     }
 }

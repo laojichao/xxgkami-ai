@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 验证码实体 - 存储邮箱验证码信息，用于注册、找回密码等场景
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "verification_codes", indexes = {
     @Index(name = "idx_vcode_email_type_time", columnList = "email, type, create_time")

@@ -1,6 +1,9 @@
 package org.xxg.backend.backend.mapper;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.xxg.backend.backend.entity.BindToken;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -21,5 +24,7 @@ public interface BindTokenRepository extends JpaRepository<BindToken, Integer> {
      * 删除指定时间之前的过期令牌，用于定期清理
      * @param time 过期截止时间
      */
-    void deleteByExpireTimeBefore(LocalDateTime time);
+    @Modifying
+    @Query("DELETE FROM BindToken b WHERE b.expireTime < :time")
+    void deleteByExpireTimeBefore(@Param("time") LocalDateTime time);
 }

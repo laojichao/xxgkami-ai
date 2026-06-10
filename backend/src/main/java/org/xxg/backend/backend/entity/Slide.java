@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 轮播图实体 - 首页轮播图/横幅广告管理
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "slides")
 public class Slide {

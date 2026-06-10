@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 操作日志实体 - 记录管理员在后台的所有操作行为
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "operation_logs", indexes = {
     @Index(name = "idx_oplog_admin", columnList = "admin_id"),

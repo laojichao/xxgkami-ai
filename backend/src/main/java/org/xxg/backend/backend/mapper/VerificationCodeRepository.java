@@ -23,4 +23,7 @@ public interface VerificationCodeRepository extends JpaRepository<VerificationCo
     /** 判断指定邮箱和类型在指定时间之后是否存在验证码（用于发送频率限制） */
     @Query("SELECT COUNT(v) > 0 FROM VerificationCode v WHERE v.email = :email AND v.type = :type AND v.createTime > :since")
     boolean existsRecentCode(@Param("email") String email, @Param("type") String type, @Param("since") LocalDateTime since);
+
+    /** 根据邮箱删除验证码 */
+    void deleteByEmail(String email);
 }

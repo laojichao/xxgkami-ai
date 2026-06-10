@@ -13,4 +13,6 @@ public interface SocialUserRepository extends JpaRepository<SocialUser, Integer>
     Optional<SocialUser> findBySocialUidAndSocialType(String socialUid, String socialType);
     /** 根据用户ID查询社交绑定记录 */
     Optional<SocialUser> findByUserId(Integer userId);
+    /** 根据用户ID删除社交绑定记录 */
+    void deleteByUserId(Integer userId);
 }

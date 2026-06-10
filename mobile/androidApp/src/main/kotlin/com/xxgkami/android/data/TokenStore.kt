@@ -38,11 +38,7 @@ object TokenStore {
             // Try to delete corrupted master key and retry
             try {
                 context.deleteSharedPreferences(PREFS_NAME)
-                MasterKey.Builder(context)
-                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                    .build()
-                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                // After deleting, recreate with encryption
+                // After deleting, recreate directly with encryption (no intermediate plain SharedPreferences)
                 val masterKey = MasterKey.Builder(context)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                     .build()

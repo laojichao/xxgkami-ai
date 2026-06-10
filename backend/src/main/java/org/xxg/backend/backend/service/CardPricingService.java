@@ -17,12 +17,15 @@ public class CardPricingService {
     public CardPricingService(CardPricingRepository repository) { this.repository = repository; }
 
     /** 获取所有卡密定价列表 */
+    @Transactional(readOnly = true)
     public List<CardPricing> getAll() { return repository.findAll(); }
 
     /** 根据卡密类型查询定价列表 */
+    @Transactional(readOnly = true)
     public List<CardPricing> getByType(String type) { return repository.findByType(type); }
 
     /** 根据ID获取定价信息，不存在则抛出异常 */
+    @Transactional(readOnly = true)
     public CardPricing getById(Integer id) {
         return repository.findById(id).orElseThrow(() -> new BusinessException("定价不存在"));
     }

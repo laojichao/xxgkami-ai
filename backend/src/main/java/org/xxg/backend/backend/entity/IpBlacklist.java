@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * IP黑名单实体 - 记录被封禁的IP地址及其封禁原因
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "ip_blacklist")
 public class IpBlacklist {

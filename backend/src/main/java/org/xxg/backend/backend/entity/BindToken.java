@@ -2,6 +2,7 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
  * </ul>
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "bind_tokens")
 public class BindToken {

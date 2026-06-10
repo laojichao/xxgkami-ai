@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 卡密状态实体 - 独立存储卡密的实时使用状态，用于快速查询验证
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "card_status")
 public class CardStatus {

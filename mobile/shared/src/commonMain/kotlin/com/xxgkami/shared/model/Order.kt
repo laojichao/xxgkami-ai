@@ -1,5 +1,6 @@
 package com.xxgkami.shared.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -19,12 +20,12 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Order(
     val id: Int? = null,
-    val orderNo: String? = null,
-    val cardType: String? = null,
-    val cardSpec: String? = null,
+    @SerialName("order_no") val orderNo: String? = null,
+    @SerialName("card_type") val cardType: String? = null,
+    @SerialName("card_spec") val cardSpec: String? = null,
     val quantity: Int? = null,
-    val totalPrice: String? = null,
+    @SerialName("total_price") val totalPrice: String? = null,
     val status: String? = null,
-    val paymentMethod: String? = null,
-    val createTime: String? = null
+    @SerialName("payment_method") val paymentMethod: String? = null,
+    @SerialName("create_time") val createTime: String? = null
 )

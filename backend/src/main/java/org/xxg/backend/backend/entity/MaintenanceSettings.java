@@ -2,11 +2,13 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 系统维护设置实体 - 单例模式，控制系统维护模式的开关和相关配置
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "system_maintenance")
 public class MaintenanceSettings {

@@ -61,6 +61,8 @@ class AuthViewModel : ViewModel() {
      */
     fun login(username: String, password: String) {
         viewModelScope.launch {
+            _loginState.value = null
+            _error.value = null
             _isLoading.value = true
             try {
                 _loginState.value = authApi.userLogin(LoginRequest(username, password))
@@ -171,6 +173,7 @@ class AuthViewModel : ViewModel() {
     fun getUserInfo(forceRefresh: Boolean = false) {
         if (userInfoLoaded && !forceRefresh) return
         viewModelScope.launch {
+            _error.value = null
             _isLoading.value = true
             try {
                 val response = authApi.getUserInfo()

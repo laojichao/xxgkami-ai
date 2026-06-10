@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.service;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,16 +29,17 @@ public class OnlineUserService {
         return System.currentTimeMillis() - lastSeen < 30 * 60 * 1000;
     }
 
-    public int getOnlineCount() {
-        // Clean up stale entries
+    @Scheduled(fixedRate = 300000)
+    public void cleanupStaleEntries() {
         long now = System.currentTimeMillis();
         onlineUsers.entrySet().removeIf(e -> now - e.getValue() > 30 * 60 * 1000);
-        return onlineUsers.size();
+    }
+
+    public int getOnlineCount() {
+        return (int) onlineUsers.mappingCount();
     }
 
     public List<String> getOnlineUsers() {
-        long now = System.currentTimeMillis();
-        onlineUsers.entrySet().removeIf(e -> now - e.getValue() > 30 * 60 * 1000);
         return new ArrayList<>(onlineUsers.keySet());
     }
 }

@@ -2,6 +2,7 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -11,6 +12,7 @@ import org.hibernate.annotations.UpdateTimestamp;
  * 钱包实体 - 用户账户余额及资金统计
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "wallets")
 public class Wallet {

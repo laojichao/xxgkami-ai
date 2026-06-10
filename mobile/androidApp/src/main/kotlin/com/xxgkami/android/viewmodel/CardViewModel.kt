@@ -113,5 +113,8 @@ class CardViewModel : ViewModel() {
     fun resetCache() {
         cardsLoaded = false
         cardsUserId = null
+        _cards.value = emptyList()
+        _verifyResult.value = null
+        _error.value = null
     }
 }

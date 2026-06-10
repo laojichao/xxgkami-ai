@@ -17,4 +17,6 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
     Page<WalletTransaction> findByUserId(Integer userId, Pageable pageable);
     /** 根据用户ID和交易类型查询交易记录 */
     List<WalletTransaction> findByUserIdAndType(Integer userId, String type);
+    /** 根据用户ID删除交易记录 */
+    void deleteByUserId(Integer userId);
 }

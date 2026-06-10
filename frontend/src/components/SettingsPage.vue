@@ -242,7 +242,10 @@
         </div>
         <div class="secret-text">
             <span>密钥:</span>
-            <code>{{ totpSecret }}</code>
+            <code>{{ showTotpSecret ? totpSecret : '••••••••••••••••' }}</code>
+            <button class="btn-icon-small" @click="showTotpSecret = !showTotpSecret" :title="showTotpSecret ? '隐藏密钥' : '显示密钥'">
+                <span style="font-size: 12px;">{{ showTotpSecret ? '隐藏' : '显示' }}</span>
+            </button>
             <button class="btn-icon-small" @click="copyToClipboard(totpSecret)" title="复制密钥">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             </button>
@@ -376,6 +379,7 @@ const totpQrCode = ref('')
 const totpSecret = ref('')
 const totpCode = ref('')
 const totpLoading = ref(false)
+const showTotpSecret = ref(false)
 
 const handleConfigureTotp = async () => {
     showTotpDialog.value = true;

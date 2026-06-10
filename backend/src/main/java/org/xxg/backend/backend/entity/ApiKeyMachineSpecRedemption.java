@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * API密钥机器码兑换记录 - 记录API密钥与机器码的一次性绑定关系
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "api_key_machine_spec_redemption")
 public class ApiKeyMachineSpecRedemption {

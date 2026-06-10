@@ -11,4 +11,7 @@ import java.util.Optional;
 public interface WalletRepository extends JpaRepository<Wallet, Long> {
     /** 根据用户ID查询钱包 */
     Optional<Wallet> findByUserId(Integer userId);
+
+    /** 根据用户ID删除钱包 */
+    void deleteByUserId(Integer userId);
 }

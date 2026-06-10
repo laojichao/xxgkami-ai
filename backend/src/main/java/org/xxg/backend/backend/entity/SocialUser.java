@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 社交账号绑定实体 - 记录用户与第三方社交账号的绑定关系
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "social_users")
 public class SocialUser {

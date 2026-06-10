@@ -127,5 +127,8 @@ class WalletViewModel : ViewModel() {
     fun resetCache() {
         walletLoaded = false
         transactionsLoaded = false
+        _wallet.value = null
+        _transactions.value = emptyList()
+        _error.value = null
     }
 }

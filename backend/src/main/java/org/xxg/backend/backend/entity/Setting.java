@@ -2,11 +2,13 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 系统设置实体 - 键值对形式存储系统配置项
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "settings")
 public class Setting {

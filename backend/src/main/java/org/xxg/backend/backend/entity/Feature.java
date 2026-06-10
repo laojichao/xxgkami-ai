@@ -2,11 +2,13 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 系统特性/功能展示实体 - 首页展示的系统功能亮点
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "features")
 public class Feature {

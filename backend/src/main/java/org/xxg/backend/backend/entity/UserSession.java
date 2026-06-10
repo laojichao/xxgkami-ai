@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 用户会话实体 - 管理用户的登录会话信息
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "user_sessions")
 public class UserSession {

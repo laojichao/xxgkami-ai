@@ -3,6 +3,7 @@ package org.xxg.backend.backend.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -12,6 +13,7 @@ import org.hibernate.annotations.UpdateTimestamp;
  * 卡密定价实体 - 定义不同类型和规格卡密的价格
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "card_pricing")
 public class CardPricing {

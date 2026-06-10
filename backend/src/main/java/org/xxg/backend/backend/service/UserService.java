@@ -7,6 +7,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.User;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.UserRepository;
+import org.xxg.backend.backend.mapper.WalletRepository;
+import org.xxg.backend.backend.mapper.WalletTransactionRepository;
+import org.xxg.backend.backend.mapper.SocialUserRepository;
+import org.xxg.backend.backend.mapper.VerificationCodeRepository;
 import org.xxg.backend.backend.util.PasswordUtil;
 
 import java.time.LocalDateTime;
@@ -20,10 +24,23 @@ import java.util.*;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final WalletRepository walletRepository;
+    private final WalletTransactionRepository walletTransactionRepository;
+    private final SocialUserRepository socialUserRepository;
+    private final VerificationCodeRepository verificationCodeRepository;
     private final PasswordUtil passwordUtil;
 
-    public UserService(UserRepository userRepository, PasswordUtil passwordUtil) {
+    public UserService(UserRepository userRepository,
+                       WalletRepository walletRepository,
+                       WalletTransactionRepository walletTransactionRepository,
+                       SocialUserRepository socialUserRepository,
+                       VerificationCodeRepository verificationCodeRepository,
+                       PasswordUtil passwordUtil) {
         this.userRepository = userRepository;
+        this.walletRepository = walletRepository;
+        this.walletTransactionRepository = walletTransactionRepository;
+        this.socialUserRepository = socialUserRepository;
+        this.verificationCodeRepository = verificationCodeRepository;
         this.passwordUtil = passwordUtil;
     }
 
@@ -129,6 +146,15 @@ public class UserService {
     @Transactional
     public void deleteUser(Integer userId) {
         User user = getUserById(userId);
+
+        // Clean up related records
+        walletRepository.deleteByUserId(userId);
+        walletTransactionRepository.deleteByUserId(userId);
+        socialUserRepository.deleteByUserId(userId);
+        verificationCodeRepository.deleteByEmail(user.getEmail());
+        // Note: orders are kept for audit trail
+        // Note: cards are kept for audit trail
+
         userRepository.delete(user);
     }
 

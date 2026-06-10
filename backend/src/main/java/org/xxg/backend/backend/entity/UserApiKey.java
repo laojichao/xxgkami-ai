@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 用户-API密钥关联实体 - 记录用户被分配的API密钥(多对多关系)
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "user_api_keys")
 public class UserApiKey {

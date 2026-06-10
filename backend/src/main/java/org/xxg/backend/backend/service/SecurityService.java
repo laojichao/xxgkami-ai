@@ -34,13 +34,14 @@ public class SecurityService {
      * @param ip IP 地址
      * @return true 表示已被封禁
      */
+    @Transactional(readOnly = true)
     public boolean isIpBlocked(String ip) {
         if (ip == null || ip.isBlank()) return false;
         return blacklistRepository.isBlocked(ip, LocalDateTime.now());
     }
 
     /**
-     * 封禁指定 IP。如果该 IP 已在黑名单中，先删除旧记录再创建新记录，避免重复。
+     * 封禁指定 IP。如果该 IP 已在黑名单中，更新现有记录；否则创建新记录。
      *
      * @param ip     IP 地址
      * @param reason 封禁原因
@@ -49,19 +50,29 @@ public class SecurityService {
      */
     @Transactional
     public IpBlacklist blockIp(String ip, String reason, Integer hours) {
-        blacklistRepository.findByIpAddress(ip).ifPresent(existing -> {
-            blacklistRepository.delete(existing);
-        });
-        IpBlacklist entry = new IpBlacklist();
-        entry.setIpAddress(ip);
-        entry.setReason(reason);
-        if (hours != null && hours > 0) {
-            entry.setBlockedUntil(LocalDateTime.now().plusHours(hours));
-            entry.setPermanent(false);
+        IpBlacklist existing = blacklistRepository.findByIpAddress(ip).orElse(null);
+        if (existing != null) {
+            existing.setReason(reason);
+            if (hours != null && hours > 0) {
+                existing.setBlockedUntil(LocalDateTime.now().plusHours(hours));
+                existing.setPermanent(false);
+            } else {
+                existing.setPermanent(true);
+                existing.setBlockedUntil(null);
+            }
+            return blacklistRepository.save(existing);
         } else {
-            entry.setPermanent(true);
+            IpBlacklist entry = new IpBlacklist();
+            entry.setIpAddress(ip);
+            entry.setReason(reason);
+            if (hours != null && hours > 0) {
+                entry.setBlockedUntil(LocalDateTime.now().plusHours(hours));
+                entry.setPermanent(false);
+            } else {
+                entry.setPermanent(true);
+            }
+            return blacklistRepository.save(entry);
         }
-        return blacklistRepository.save(entry);
     }
 
     /**
@@ -79,6 +90,7 @@ public class SecurityService {
      *
      * @return 黑名单列表
      */
+    @Transactional(readOnly = true)
     public List<IpBlacklist> getBlacklist() {
         return blacklistRepository.findAll();
     }

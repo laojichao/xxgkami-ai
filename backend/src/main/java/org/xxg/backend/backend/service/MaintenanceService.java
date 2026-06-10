@@ -15,6 +15,7 @@ public class MaintenanceService {
     public MaintenanceService(MaintenanceSettingsRepository repository) { this.repository = repository; }
 
     /** 获取系统维护设置，不存在则返回默认设置 */
+    @Transactional(readOnly = true)
     public MaintenanceSettings getSettings() {
         return repository.findById(1).orElse(new MaintenanceSettings());
     }
@@ -54,6 +55,7 @@ public class MaintenanceService {
      * 检查系统是否处于维护模式
      * @return 维护模式开启返回true，否则返回false
      */
+    @Transactional(readOnly = true)
     public boolean isMaintenanceMode() {
         Boolean enabled = getSettings().getEnabled();
         return Boolean.TRUE.equals(enabled);

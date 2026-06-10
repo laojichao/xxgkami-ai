@@ -8,6 +8,7 @@ import UserPage from './components/UserPage.vue'
 import NotificationPage from './components/NotificationPage.vue'
 import { authApi, maintenanceApi, userProfileApi } from './services/api.js'
 import { ElMessage } from 'element-plus'
+import logger from './utils/logger'
 
 // 响应式数据
 const currentPage = ref('home') // 默认为首页
@@ -30,7 +31,7 @@ const checkLoginStatus = async () => {
       try {
         parsedUserInfo = JSON.parse(storedUserInfo);
       } catch (parseError) {
-        console.error('localStorage userInfo 数据损坏，清除登录状态:', parseError);
+        logger.error('localStorage userInfo 数据损坏，清除登录状态:', parseError);
         clearLocalAuthState();
         return;
       }
@@ -61,7 +62,7 @@ const checkLoginStatus = async () => {
         }
       } catch (e) {
         // 请求失败（如 401），Cookie 已失效
-        console.error('验证登录状态失败:', e);
+        logger.error('验证登录状态失败:', e);
         clearLocalAuthState();
       }
     } else {
@@ -77,7 +78,7 @@ const checkLoginStatus = async () => {
       }
     }
   } catch (error) {
-    console.error('检查登录状态失败:', error)
+    logger.error('检查登录状态失败:', error)
     isLoggedIn.value = false
     userInfo.value = null
   } finally {
@@ -105,6 +106,15 @@ const showLogin = () => {
 const handleLoginSuccess = (data) => {
   isLoggedIn.value = true
   userInfo.value = data.userInfo
+  // 持久化登录状态到 localStorage
+  localStorage.setItem('isLoggedIn', 'true')
+  const minimalInfo = {
+    id: data.userInfo.id,
+    username: data.userInfo.username,
+    role: data.userInfo.role,
+    nickname: data.userInfo.nickname
+  }
+  localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
   // 根据用户角色跳转到对应页面
   if (data.userInfo.role === 'admin') {
     currentPage.value = 'dashboard'
@@ -121,7 +131,7 @@ const handleLogout = async () => {
       await authApi.logout(userInfo.value.id, userInfo.value.role)
     }
   } catch (error) {
-    console.error('登出失败:', error)
+    logger.error('登出失败:', error)
   } finally {
     // 无论后端是否成功，前端都清除状态
     // Token 存储在 httpOnly Cookie 中，由后端 logout 接口清除
@@ -154,7 +164,7 @@ const checkMaintenance = async () => {
       }
     }
   } catch (error) {
-    console.error('检查维护状态失败:', error)
+    logger.error('检查维护状态失败:', error)
   }
 }
 
@@ -199,12 +209,12 @@ const handleOAuthCallback = async () => {
 
       // 如果后端没有实现 OAuth set-cookies 接口，回退到直接使用 getUserInfo
       // （后端 OAuth 回调可能已直接设置了 Cookie）
-      localStorage.setItem('isLoggedIn', 'true')
-
       // 获取用户信息（通过 Cookie 认证）
       const res = await authApi.getUserInfo()
       if (res.success) {
         userInfo.value = res.data
+        isLoggedIn.value = true
+        localStorage.setItem('isLoggedIn', 'true')
         const minimalInfo = {
           id: res.data.id,
           username: res.data.username,
@@ -212,16 +222,15 @@ const handleOAuthCallback = async () => {
           nickname: res.data.nickname
         }
         localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
-        isLoggedIn.value = true
         // Clean URL
         window.history.replaceState({}, document.title, window.location.pathname);
         currentPage.value = 'user'
       } else {
-          console.error('OAuth login failed:', res);
+          logger.error('OAuth login failed:', res);
           handleLogout();
       }
     } catch (e) {
-      console.error('OAuth callback error:', e)
+      logger.error('OAuth callback error:', e)
       handleLogout()
     }
   } else if (window.location.pathname.includes('/oauth/callback') || window.location.hash.includes('/oauth/callback')) {
@@ -274,7 +283,7 @@ const handleOAuthCallback = async () => {
           const hashQs2 = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
           const error = urlParams.get('error') || (hashQs2 ? new URLSearchParams(hashQs2).get('error') : null);
           if (error) {
-              console.error('OAuth Error from provider:', error);
+              logger.error('OAuth Error from provider:', error);
               const errorMessages = {
                 'access_denied': '用户取消授权',
                 'invalid_token': '无效的授权令牌',

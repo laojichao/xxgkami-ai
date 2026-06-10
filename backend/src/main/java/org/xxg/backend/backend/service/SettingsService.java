@@ -38,9 +38,8 @@ public class SettingsService {
     @Transactional(readOnly = true)
     public String getValue(String name, String defaultValue) {
         // 先从缓存读取
-        if (settingsCache.containsKey(name)) {
-            return settingsCache.get(name);
-        }
+        String cached = settingsCache.get(name);
+        if (cached != null) return cached;
         // 缓存未命中，查数据库并回填缓存
         String value = settingRepository.findByName(name)
                 .map(Setting::getValue)
@@ -119,8 +118,10 @@ public class SettingsService {
      * 可在管理后台手动调用，或在初始化时自动调用
      */
     public void refreshCache() {
+        Map<String, String> newCache = new ConcurrentHashMap<>();
+        settingRepository.findAll().forEach(s -> newCache.put(s.getName(), s.getValue()));
         settingsCache.clear();
-        settingRepository.findAll().forEach(s -> settingsCache.put(s.getName(), s.getValue()));
+        settingsCache.putAll(newCache);
         cacheLoaded = true;
     }
 }

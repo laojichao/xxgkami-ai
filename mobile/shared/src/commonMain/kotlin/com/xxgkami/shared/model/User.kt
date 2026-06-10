@@ -1,5 +1,6 @@
 package com.xxgkami.shared.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -26,7 +27,7 @@ data class User(
     val phone: String? = null,
     val status: Boolean? = null,
     val role: String? = null,
-    val createTime: String? = null
+    @SerialName("create_time") val createTime: String? = null
 )
 
 /** 登录请求 */

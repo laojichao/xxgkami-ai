@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 访问日志实体 - 记录系统所有HTTP请求的访问信息
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "access_logs", indexes = {
     @Index(name = "idx_alog_ip", columnList = "ip"),

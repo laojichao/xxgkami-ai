@@ -2,6 +2,7 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -9,6 +10,7 @@ import java.time.LocalDateTime;
  * 钱包交易记录实体 - 记录用户钱包的所有资金变动明细
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "wallet_transactions", indexes = {
     @Index(name = "idx_wtx_user_time", columnList = "user_id, create_time")

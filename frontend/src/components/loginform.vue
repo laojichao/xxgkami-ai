@@ -921,8 +921,7 @@ const handleLogin = async () => {
       }
       
       emit('login-success', {
-        userInfo: resultData.userInfo,
-        token: resultData.token
+        userInfo: resultData.userInfo
       })
       
       setTimeout(() => {

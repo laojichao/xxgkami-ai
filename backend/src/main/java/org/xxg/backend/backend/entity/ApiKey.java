@@ -2,6 +2,7 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.UpdateTimestamp;
@@ -10,6 +11,7 @@ import org.hibernate.annotations.UpdateTimestamp;
  * API密钥实体 - 管理第三方接口调用的密钥信息
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "api_keys")
 public class ApiKey {

@@ -2,12 +2,14 @@ package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
  * 卡密加密数据实体 - 存储卡密的加密信息，用于安全验证
  */
 @Data
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "card_cipher")
 public class CardCipher {

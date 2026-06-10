@@ -158,6 +158,7 @@ public class WalletService {
      * @param userId 用户ID
      * @return 交易记录列表
      */
+    @Transactional(readOnly = true)
     public List<WalletTransaction> getTransactions(Integer userId) {
         return transactionRepository.findByUserIdOrderByCreateTimeDesc(userId);
     }
@@ -168,6 +169,7 @@ public class WalletService {
      * @param pageable 分页参数
      * @return 交易记录分页结果
      */
+    @Transactional(readOnly = true)
     public Page<WalletTransaction> getTransactions(Integer userId, Pageable pageable) {
         return transactionRepository.findByUserId(userId, pageable);
     }

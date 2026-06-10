@@ -80,10 +80,9 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 onClick = {
                     val userId = userInfo?.id ?: 0
                     val role = userInfo?.role ?: "user"
-                    // 先导航（立即响应用户），再在后台发起服务端登出请求
-                    // logout() 内部通过 viewModelScope 启动协程，token 清理在回调中完成
-                    onLogout()
+                    // 先发起服务端登出请求（确保 viewModelScope 中的协程启动），再导航
                     authViewModel.logout(userId, role)
+                    onLogout()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
