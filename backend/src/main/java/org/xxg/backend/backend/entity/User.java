@@ -2,13 +2,16 @@ package org.xxg.backend.backend.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import java.util.Objects;
 import java.time.LocalDateTime;
 
 /**
  * 用户实体 - 系统注册用户的基本信息和认证数据
  */
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "users")
 public class User {
@@ -65,4 +68,17 @@ public class User {
     @JsonIgnore
     @Column(name = "refresh_token", length = 512)
     private String refreshToken; // JWT刷新令牌
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User that = (User) o;
+        return id != null && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

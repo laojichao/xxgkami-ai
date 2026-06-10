@@ -25,6 +25,10 @@ public class SettingsController {
         this.emailService = emailService;
     }
 
+    /**
+     * @deprecated 此端点与 GET /settings/all 功能相同，请使用 GET /settings/all 替代
+     */
+    @Deprecated(since = "2026-06-10", forRemoval = false)
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, String>>> getAll() {
         return getAllSettings();
@@ -63,6 +67,10 @@ public class SettingsController {
         return value.substring(0, 2) + "****" + value.substring(value.length() - 2);
     }
 
+    /**
+     * @deprecated 此端点与 POST /settings/save 功能相同，请使用 POST /settings/save 替代
+     */
+    @Deprecated(since = "2026-06-10", forRemoval = false)
     @PutMapping
     public ResponseEntity<ApiResponse<Void>> update(@RequestBody Map<String, String> settings) {
         settingsService.updateSettings(settings);

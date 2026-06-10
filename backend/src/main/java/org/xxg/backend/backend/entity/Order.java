@@ -2,14 +2,17 @@ package org.xxg.backend.backend.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import java.util.Objects;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 订单实体 - 用户购买卡密的订单记录
  */
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "orders")
 public class Order {
@@ -58,4 +61,17 @@ public class Order {
     @JsonIgnore
     @Column(name = "card_keys", columnDefinition = "TEXT")
     private String cardKeys; // 购买的卡密内容(支付成功后填充, JSON格式)
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Order that = (Order) o;
+        return id != null && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

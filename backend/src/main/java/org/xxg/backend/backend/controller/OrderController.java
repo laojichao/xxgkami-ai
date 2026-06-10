@@ -67,6 +67,7 @@ public class OrderController {
      * 管理员获取所有订单（分页）
      * <p>GET /orders/admin</p>
      * <p>权限：管理员</p>
+     * <p>注意：此端点仅支持分页查询，如需按状态筛选请使用 GET /orders/admin/all（支持可选的 status 参数）</p>
      * @param page 页码，默认0
      * @param size 每页条数，默认20
      * @return 分页订单列表

@@ -1,13 +1,16 @@
 package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import java.util.Objects;
 import java.time.LocalDateTime;
 
 /**
  * 卡密实体 - 系统核心业务对象，存储所有卡密的完整信息
  */
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "cards")
 public class Card {
@@ -91,4 +94,17 @@ public class Card {
     public enum CardType { time, count }
     /** 创建者类型枚举 */
     public enum CreatorType { admin, user }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Card that = (Card) o;
+        return id != null && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

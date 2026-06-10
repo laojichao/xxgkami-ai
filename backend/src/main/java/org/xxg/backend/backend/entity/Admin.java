@@ -2,13 +2,16 @@ package org.xxg.backend.backend.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import java.util.Objects;
 import java.time.LocalDateTime;
 
 /**
  * 管理员实体 - 系统后台管理员账号信息
  */
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "admins")
 public class Admin {
@@ -46,4 +49,17 @@ public class Admin {
 
     @Column(length = 100)
     private String email; // 管理员邮箱
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Admin that = (Admin) o;
+        return id != null && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

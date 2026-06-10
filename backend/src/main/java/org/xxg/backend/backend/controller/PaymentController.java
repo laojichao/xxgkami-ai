@@ -35,7 +35,9 @@ public class PaymentController {
      * <p>权限：已认证用户</p>
      * @param body 请求体，包含 orderNo（订单号）
      * @return 支付平台返回的支付信息（如支付链接等）
+     * @deprecated 此端点与 POST /payment/create 功能相同，请使用 POST /payment/create 替代
      */
+    @Deprecated(since = "2026-06-10", forRemoval = false)
     @PostMapping("/pay")
     public ResponseEntity<Map<String, String>> pay(@RequestBody Map<String, String> body, Authentication auth) {
         String orderNo = body.get("orderNo");

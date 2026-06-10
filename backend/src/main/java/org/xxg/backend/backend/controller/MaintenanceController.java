@@ -57,7 +57,9 @@ public class MaintenanceController {
      * <p>权限：管理员</p>
      * @param settings 新的维护配置
      * @return 更新后的配置信息
+     * @deprecated 此端点与 POST /maintenance/update 功能相同，请使用 POST /maintenance/update 替代
      */
+    @Deprecated(since = "2026-06-10", forRemoval = false)
     @PutMapping
     public ResponseEntity<ApiResponse<MaintenanceSettings>> update(@RequestBody MaintenanceSettings settings) {
         return ResponseEntity.ok(ApiResponse.ok(maintenanceService.updateSettings(settings)));
