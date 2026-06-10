@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity
-@Table(name = "verification_codes")
+@Table(name = "verification_codes", indexes = {
+    @Index(name = "idx_vcode_email_type_time", columnList = "email, type, create_time")
+})
 public class VerificationCode {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

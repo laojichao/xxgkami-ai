@@ -9,7 +9,10 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity
-@Table(name = "operation_logs")
+@Table(name = "operation_logs", indexes = {
+    @Index(name = "idx_oplog_admin", columnList = "admin_id"),
+    @Index(name = "idx_oplog_time", columnList = "create_time")
+})
 public class OperationLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

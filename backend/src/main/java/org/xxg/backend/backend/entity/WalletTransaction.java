@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
  */
 @Data
 @Entity
-@Table(name = "wallet_transactions")
+@Table(name = "wallet_transactions", indexes = {
+    @Index(name = "idx_wtx_user_time", columnList = "user_id, create_time")
+})
 public class WalletTransaction {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
