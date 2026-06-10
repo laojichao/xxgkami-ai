@@ -15,6 +15,7 @@ import org.xxg.backend.backend.mapper.AdminRepository;
 import org.xxg.backend.backend.mapper.UserRepository;
 import org.xxg.backend.backend.service.AuthService;
 import org.xxg.backend.backend.service.TotpService;
+import org.xxg.backend.backend.util.JwtUtil;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,13 +33,16 @@ public class AuthController {
     private final UserRepository userRepository;
     private final AdminRepository adminRepository;
     private final TotpService totpService;
+    private final JwtUtil jwtUtil;
 
     public AuthController(AuthService authService, UserRepository userRepository,
-                          AdminRepository adminRepository, TotpService totpService) {
+                          AdminRepository adminRepository, TotpService totpService,
+                          JwtUtil jwtUtil) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
         this.totpService = totpService;
+        this.jwtUtil = jwtUtil;
     }
 
     /**
@@ -54,6 +58,9 @@ public class AuthController {
                                                                   HttpServletResponse response) {
         LoginResponse loginResponse = authService.adminLogin(request);
         setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
+        // Don't return tokens in response body — they are in httpOnly cookies
+        loginResponse.setToken(null);
+        loginResponse.setRefreshToken(null);
         return ResponseEntity.ok(ApiResponse.ok(loginResponse));
     }
 
@@ -70,6 +77,9 @@ public class AuthController {
                                                                  HttpServletResponse response) {
         LoginResponse loginResponse = authService.userLogin(request);
         setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
+        // Don't return tokens in response body — they are in httpOnly cookies
+        loginResponse.setToken(null);
+        loginResponse.setRefreshToken(null);
         return ResponseEntity.ok(ApiResponse.ok(loginResponse));
     }
 
@@ -394,6 +404,13 @@ public class AuthController {
         String refreshTokenValue = body.get("refreshToken");
         if (accessToken == null || refreshTokenValue == null) {
             return ResponseEntity.badRequest().body(ApiResponse.error("token 和 refreshToken 不能为空"));
+        }
+        // Validate both tokens before setting cookies
+        if (!jwtUtil.isTokenValid(accessToken) || !jwtUtil.isAccessToken(accessToken)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无效的 access token"));
+        }
+        if (!jwtUtil.isTokenValid(refreshTokenValue) || !jwtUtil.isRefreshToken(refreshTokenValue)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无效的 refresh token"));
         }
         setTokenCookies(response, accessToken, refreshTokenValue);
         return ResponseEntity.ok(ApiResponse.ok("Cookie 已设置"));

@@ -11,6 +11,7 @@ import org.xxg.backend.backend.service.SecurityService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * 安全管理接口
@@ -21,6 +22,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/security")
 public class SecurityController {
+
+    private static final Pattern IPV4_PATTERN = Pattern.compile(
+            "^((25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$");
+    private static final Pattern IPV6_PATTERN = Pattern.compile(
+            "^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$");
+
     private final SecurityService securityService;
     public SecurityController(SecurityService securityService) { this.securityService = securityService; }
 
@@ -48,6 +55,9 @@ public class SecurityController {
         String ip = ipObj != null ? ipObj.toString() : null;
         if (ip == null || ip.isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("IP 地址不能为空"));
+        }
+        if (!IPV4_PATTERN.matcher(ip).matches() && !IPV6_PATTERN.matcher(ip).matches()) {
+            return ResponseEntity.ok(ApiResponse.error("IP 地址格式无效"));
         }
         String reason = (String) body.get("reason");
         Number hoursNum = (Number) body.get("hours");

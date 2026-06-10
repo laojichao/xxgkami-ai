@@ -62,8 +62,12 @@ public class CardController {
     }
 
     @GetMapping("/admin/all")
-    public ResponseEntity<ApiResponse<List<Card>>> adminAllCards() {
-        return ResponseEntity.ok(ApiResponse.ok(cardService.getCardsByCreator("admin", null)));
+    public ResponseEntity<ApiResponse<Page<Card>>> adminAllCards(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        size = Math.min(size, 500); // Cap result size to prevent OOM
+        return ResponseEntity.ok(ApiResponse.ok(
+                cardService.getCardsByCreator("admin", null, PageRequest.of(page, size))));
     }
 
     @GetMapping("/admin")

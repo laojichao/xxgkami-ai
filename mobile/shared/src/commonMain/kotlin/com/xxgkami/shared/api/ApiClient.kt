@@ -7,6 +7,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -29,13 +30,17 @@ import kotlinx.serialization.json.jsonPrimitive
  * @property onTokenRefreshed Token 刷新成功后的回调，用于同步持久化存储
  * @property onLogout Token 刷新失败后的登出回调，用于清理本地状态
  */
-class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
+class ApiClient(var baseUrl: String = "") {
     @Volatile var token: String? = null
         private set
     @Volatile var refreshToken: String? = null
         private set
     var onTokenRefreshed: ((newToken: String, newRefreshToken: String) -> Unit)? = null
     var onLogout: (() -> Unit)? = null
+
+    private fun requireBaseUrl(): String {
+        return baseUrl.ifBlank { throw IllegalStateException("API base URL not configured. Call ApiProvider.updateBaseUrl() first.") }
+    }
 
     /** 互斥锁，防止多个并发请求同时触发 Token 刷新 */
     private val refreshMutex = Mutex()
@@ -49,10 +54,11 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
         install(ContentNegotiation) {
             json(json)
         }
-        // 安装超时插件：请求超时 15 秒，连接超时 10 秒
+        // 安装超时插件：请求超时 15 秒，连接超时 10 秒，Socket 超时 10 秒
         install(HttpTimeout) {
             requestTimeoutMillis = 15000
             connectTimeoutMillis = 10000
+            socketTimeoutMillis = 10000
         }
     }
 
@@ -96,7 +102,7 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
                     put("refreshToken", JsonPrimitive(currentRefreshToken))
                 }.toString()
 
-                val response = httpClient.post("$baseUrl/auth/refresh") {
+                val response = httpClient.post("${requireBaseUrl()}/auth/refresh") {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -124,6 +130,8 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
                 clearTokens()
                 onLogout?.invoke()
                 false
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 clearTokens()
                 onLogout?.invoke()
@@ -168,7 +176,7 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
      */
     suspend fun get(path: String): String {
         return executeWithRefresh {
-            httpClient.get("$baseUrl$path") {
+            httpClient.get("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
             }.bodyAsText()
         }
@@ -183,7 +191,7 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
      */
     suspend fun post(path: String, body: String): String {
         return executeWithRefresh {
-            httpClient.post("$baseUrl$path") {
+            httpClient.post("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
                 contentType(ContentType.Application.Json)
                 setBody(body)
@@ -200,7 +208,7 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
      */
     suspend fun put(path: String, body: String): String {
         return executeWithRefresh {
-            httpClient.put("$baseUrl$path") {
+            httpClient.put("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
                 contentType(ContentType.Application.Json)
                 setBody(body)
@@ -216,7 +224,7 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
      */
     suspend fun delete(path: String): String {
         return executeWithRefresh {
-            httpClient.delete("$baseUrl$path") {
+            httpClient.delete("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
             }.bodyAsText()
         }

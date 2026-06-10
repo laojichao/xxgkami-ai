@@ -209,10 +209,10 @@ public class OrderService {
                 predicates.add(cb.equal(root.get("status"), status));
             }
             if (orderNo != null && !orderNo.isBlank()) {
-                predicates.add(cb.like(root.get("orderNo"), "%" + orderNo + "%"));
+                predicates.add(cb.like(root.get("orderNo"), "%" + escapeLike(orderNo) + "%", '\\'));
             }
             if (username != null && !username.isBlank()) {
-                predicates.add(cb.like(root.get("username"), "%" + username + "%"));
+                predicates.add(cb.like(root.get("username"), "%" + escapeLike(username) + "%", '\\'));
             }
             if (startDate != null && !startDate.isBlank()) {
                 LocalDate start = LocalDate.parse(startDate, DateTimeFormatter.ISO_LOCAL_DATE);
@@ -258,11 +258,19 @@ public class OrderService {
         LocalDateTime expireTime = LocalDateTime.now().minusMinutes(30);
         List<Order> expiredOrders = orderRepository.findByStatusAndCreateTimeBefore("pending", expireTime);
         for (Order order : expiredOrders) {
-            order.setStatus("cancelled");
-            order.setUpdateTime(LocalDateTime.now());
+            if ("pending".equals(order.getStatus())) {
+                order.setStatus("cancelled");
+                order.setUpdateTime(LocalDateTime.now());
+                orderRepository.save(order);
+            }
         }
-        if (!expiredOrders.isEmpty()) {
-            orderRepository.saveAll(expiredOrders);
-        }
+    }
+
+    /**
+     * 转义 LIKE 查询中的特殊字符（%、_、\）。
+     */
+    private String escapeLike(String value) {
+        if (value == null) return null;
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

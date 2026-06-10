@@ -3,9 +3,11 @@ package org.xxg.backend.backend.mapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.xxg.backend.backend.entity.Card;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -17,10 +19,16 @@ import java.util.Optional;
 public interface CardRepository extends JpaRepository<Card, Integer> {
     /** 根据卡密明文键查询卡密 */
     Optional<Card> findByCardKey(String cardKey);
+    /** 根据卡密明文键查询卡密（悲观锁，用于并发安全场景） */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Card c WHERE c.cardKey = :cardKey")
+    Optional<Card> findByCardKeyForUpdate(@Param("cardKey") String cardKey);
     /** 根据加密键查询卡密 */
     Optional<Card> findByEncryptedKey(String encryptedKey);
     /** 根据创建者类型和创建者ID查询卡密列表 */
     List<Card> findByCreatorTypeAndCreatorId(Card.CreatorType creatorType, Integer creatorId);
+    /** 根据创建者类型查询卡密列表（不限创建者ID） */
+    List<Card> findByCreatorType(Card.CreatorType creatorType);
     /** 根据创建者类型和创建者ID分页查询卡密 */
     Page<Card> findByCreatorTypeAndCreatorId(Card.CreatorType creatorType, Integer creatorId, Pageable pageable);
     /** 根据状态查询卡密列表 */

@@ -10,7 +10,7 @@ import com.xxgkami.shared.api.ApiProvider
 object TokenStore {
     private const val TAG = "TokenStore"
     private const val PREFS_NAME = "xxgkami_auth_encrypted"
-    private const val PREFS_NAME_FALLBACK = "xxgkami_auth_fallback"
+
     private const val KEY_ACCESS_TOKEN = "access_token"
     private const val KEY_REFRESH_TOKEN = "refresh_token"
     private const val KEY_USERNAME = "username"
@@ -34,9 +34,29 @@ object TokenStore {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            // 加密存储初始化失败，降级使用普通 SharedPreferences
-            Log.w(TAG, "EncryptedSharedPreferences init failed, falling back to plain storage", e)
-            context.getSharedPreferences(PREFS_NAME_FALLBACK, Context.MODE_PRIVATE)
+            Log.w(TAG, "EncryptedSharedPreferences init failed, attempting recovery", e)
+            // Try to delete corrupted master key and retry
+            try {
+                context.deleteSharedPreferences(PREFS_NAME)
+                MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                // After deleting, recreate with encryption
+                val masterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    context,
+                    PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } catch (e2: Exception) {
+                Log.e(TAG, "EncryptedSharedPreferences recovery failed", e2)
+                throw RuntimeException("无法初始化安全存储，请重新登录", e2)
+            }
         }
 
         // Restore tokens from storage

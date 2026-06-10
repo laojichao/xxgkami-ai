@@ -151,7 +151,8 @@ public class CardService {
     public Map<String, Object> verifyCard(String cardKey, String machineCode, Integer apiKeyId) {
         Map<String, Object> result = new HashMap<>();
 
-        Card card = cardRepository.findByCardKey(cardKey).orElse(null);
+        // Use pessimistic lock on Card to prevent concurrent modifications
+        Card card = cardRepository.findByCardKeyForUpdate(cardKey).orElse(null);
         if (card == null) {
             result.put("success", false);
             result.put("message", "卡密不存在");
@@ -167,6 +168,15 @@ public class CardService {
             return result;
         }
 
+        // Check if card status is invalidated
+        CardStatus cardStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
+        if (cardStatus != null && !Boolean.TRUE.equals(cardStatus.getIsValid())) {
+            result.put("success", false);
+            result.put("message", "该卡密已失效");
+            result.put("statusCode", 403);
+            return result;
+        }
+
         // Check machine code binding
         if (card.getMachineCode() != null && !card.getMachineCode().isEmpty()) {
             if (machineCode == null || !card.getMachineCode().equals(machineCode)) {
@@ -179,9 +189,6 @@ public class CardService {
             // Bind machine code on first use
             card.setMachineCode(machineCode);
         }
-
-        // Get status with pessimistic lock to prevent stale reads on concurrent updates
-        CardStatus cardStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
 
         if (card.getCardType() == Card.CardType.time) {
 
@@ -266,14 +273,18 @@ public class CardService {
         } catch (IllegalArgumentException e) {
             throw new BusinessException("无效的创建者类型: " + creatorType);
         }
+        if (creatorId == null) {
+            return cardRepository.findAll(pageable);
+        }
         return cardRepository.findByCreatorTypeAndCreatorId(type, creatorId, pageable);
     }
 
     /**
      * 查询指定创建者的全部卡密列表（不分页）。
+     * 当 creatorId 为 null 时，按创建者类型查询所有卡密。
      *
      * @param creatorType 创建者类型
-     * @param creatorId   创建者 ID
+     * @param creatorId   创建者 ID（可为 null）
      * @return 卡密列表
      */
     @Transactional(readOnly = true)
@@ -283,6 +294,9 @@ public class CardService {
             type = Card.CreatorType.valueOf(creatorType);
         } catch (IllegalArgumentException e) {
             throw new BusinessException("无效的创建者类型: " + creatorType);
+        }
+        if (creatorId == null) {
+            return cardRepository.findByCreatorType(type);
         }
         return cardRepository.findByCreatorTypeAndCreatorId(type, creatorId);
     }
@@ -298,6 +312,11 @@ public class CardService {
                 .orElseThrow(() -> new BusinessException("卡密不存在"));
         card.setStatus(2);
         cardRepository.save(card);
+        cardStatusRepository.findByCardHash(card.getEncryptedKey())
+                .ifPresent(status -> {
+                    status.setIsValid(false);
+                    cardStatusRepository.save(status);
+                });
     }
 
     /**
@@ -314,6 +333,11 @@ public class CardService {
         // 恢复到暂停前的状态：有使用记录则恢复为已使用，否则恢复为未使用
         card.setStatus(card.getUseTime() != null ? 1 : 0);
         cardRepository.save(card);
+        cardStatusRepository.findByCardHash(card.getEncryptedKey())
+                .ifPresent(status -> {
+                    status.setIsValid(true);
+                    cardStatusRepository.save(status);
+                });
     }
 
     /**

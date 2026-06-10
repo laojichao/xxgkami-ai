@@ -35,17 +35,25 @@ public class WalletService {
     }
 
     /**
-     * 获取用户钱包，不存在则自动创建
+     * 获取用户钱包，不存在则自动创建。
+     * 使用 @Transactional 保证原子性，并处理并发创建时的唯一约束冲突。
      * @param userId 用户ID
      * @return 钱包实体
      */
+    @Transactional
     public Wallet getOrCreateWallet(Integer userId) {
-        return walletRepository.findByUserId(userId).orElseGet(() -> {
-            Wallet wallet = new Wallet();
-            wallet.setUserId(userId);
-            wallet.setBalance(BigDecimal.ZERO);
-            return walletRepository.save(wallet);
-        });
+        try {
+            return walletRepository.findByUserId(userId).orElseGet(() -> {
+                Wallet wallet = new Wallet();
+                wallet.setUserId(userId);
+                wallet.setBalance(BigDecimal.ZERO);
+                return walletRepository.save(wallet);
+            });
+        } catch (DataIntegrityViolationException e) {
+            // Another thread already created the wallet; query and return it
+            return walletRepository.findByUserId(userId)
+                    .orElseThrow(() -> new BusinessException("钱包创建失败"));
+        }
     }
 
     /**

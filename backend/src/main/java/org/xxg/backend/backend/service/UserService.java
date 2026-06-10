@@ -101,9 +101,9 @@ public class UserService {
         if (!passwordUtil.matches(oldPassword, user.getPassword())) {
             throw new BusinessException("原密码错误");
         }
-        // 密码强度校验：至少6位
-        if (newPassword == null || newPassword.length() < 6) {
-            throw new BusinessException("新密码长度不能少于6位");
+        // 密码强度校验：至少8位
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new BusinessException("新密码长度不能少于8位");
         }
         user.setPassword(passwordUtil.encode(newPassword));
         user.setUpdateTime(LocalDateTime.now());

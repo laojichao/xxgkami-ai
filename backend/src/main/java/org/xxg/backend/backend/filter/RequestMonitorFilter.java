@@ -8,18 +8,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.xxg.backend.backend.service.SecurityService;
 
 import java.io.IOException;
 
 /**
  * 请求监控过滤器。
  * <p>记录每个 API 请求的耗时信息，对超过 3 秒的慢请求输出告警日志，
- * 便于排查性能瓶颈。</p>
+ * 便于排查性能瓶颈。同时拦截 IP 黑名单中的请求。</p>
  */
 @Component
 public class RequestMonitorFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RequestMonitorFilter.class);
+    private final SecurityService securityService;
+
+    public RequestMonitorFilter(SecurityService securityService) {
+        this.securityService = securityService;
+    }
 
     /**
      * 拦截请求并计算处理耗时，慢请求写入告警日志。
@@ -35,6 +41,16 @@ public class RequestMonitorFilter extends OncePerRequestFilter {
         String clientIp = getClientIp(request);
         String uri = request.getRequestURI();
         String method = request.getMethod();
+
+        // Check IP blacklist before processing the request
+        if (securityService.isIpBlocked(clientIp)) {
+            log.warn("[BLOCKED IP] {} | {} {} | IP: {} is blacklisted",
+                    java.time.LocalDateTime.now(), method, uri, clientIp);
+            response.setStatus(403);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":403,\"message\":\"您的IP已被封禁\"}");
+            return;
+        }
 
         try {
             filterChain.doFilter(request, response);

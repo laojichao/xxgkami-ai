@@ -101,7 +101,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String clientIp = getClientIp(request);
 
         // 登录接口限流：同一IP每分钟最多10次
-        if (uri.contains("/auth/admin/login") || uri.contains("/auth/user/login")) {
+        if (uri.endsWith("/auth/admin/login") || uri.endsWith("/auth/user/login")) {
             if (!tryAcquire(loginAttempts, clientIp, LOGIN_MAX_REQUESTS, LOGIN_WINDOW_SECONDS)) {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setContentType("application/json;charset=UTF-8");
@@ -111,7 +111,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         // 卡密验证接口限流：同一IP每分钟最多30次
-        if (uri.contains("/cards/use") || uri.contains("/cards/verify")) {
+        if (uri.endsWith("/cards/use") || uri.endsWith("/cards/verify")) {
             if (!tryAcquire(verifyAttempts, clientIp, VERIFY_MAX_REQUESTS, VERIFY_WINDOW_SECONDS)) {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setContentType("application/json;charset=UTF-8");
@@ -121,10 +121,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         // 敏感认证接口限流：同一IP每分钟最多5次（防止邮箱轰炸和验证码暴力破解）
-        if (uri.contains("/auth/register") || uri.contains("/auth/email-code")
-                || uri.contains("/auth/reset-code") || uri.contains("/auth/reset-password")
-                || uri.contains("/auth/totp/enable") || uri.contains("/auth/totp/disable")
-                || uri.contains("/auth/totp/setup")) {
+        if (uri.endsWith("/auth/register") || uri.endsWith("/auth/email-code")
+                || uri.endsWith("/auth/reset-code") || uri.endsWith("/auth/reset-password")
+                || uri.endsWith("/auth/totp/enable") || uri.endsWith("/auth/totp/disable")
+                || uri.endsWith("/auth/totp/setup")) {
             if (!tryAcquire(sensitiveAttempts, clientIp, SENSITIVE_MAX_REQUESTS, SENSITIVE_WINDOW_SECONDS)) {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setContentType("application/json;charset=UTF-8");

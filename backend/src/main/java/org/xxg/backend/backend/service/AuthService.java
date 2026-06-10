@@ -58,6 +58,7 @@ public class AuthService {
         this.totpService = totpService;
     }
 
+    @Transactional
     public LoginResponse adminLogin(LoginRequest request) {
         Admin admin = adminRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
@@ -101,6 +102,7 @@ public class AuthService {
                 .build();
     }
 
+    @Transactional
     public LoginResponse userLogin(LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
@@ -144,10 +146,10 @@ public class AuthService {
     @Transactional
     public void register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new BusinessException("用户名已存在");
+            throw new BusinessException("注册信息有误，请检查后重试");
         }
         if (request.getEmail() != null && userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException("邮箱已被注册");
+            throw new BusinessException("注册信息有误，请检查后重试");
         }
 
         // Verify email code
@@ -164,9 +166,9 @@ public class AuthService {
         // 删除已使用的验证码，防止重复使用
         verificationCodeRepository.delete(vCode);
 
-        // 密码强度校验：至少6位
-        if (request.getPassword() == null || request.getPassword().length() < 6) {
-            throw new BusinessException("密码长度不能少于6位");
+        // 密码强度校验：至少8位
+        if (request.getPassword() == null || request.getPassword().length() < 8) {
+            throw new BusinessException("密码长度不能少于8位");
         }
 
         User user = new User();
@@ -178,6 +180,7 @@ public class AuthService {
         userRepository.save(user);
     }
 
+    @Transactional
     public void sendEmailCode(String email, String type) {
         // 60秒内不能重复发送
         boolean recentExists = verificationCodeRepository.existsRecentCode(
@@ -341,9 +344,9 @@ public class AuthService {
         // 删除已使用的验证码，防止重复使用
         verificationCodeRepository.delete(vCode);
 
-        // 密码强度校验：至少6位
-        if (request.getNewPassword() == null || request.getNewPassword().length() < 6) {
-            throw new BusinessException("新密码长度不能少于6位");
+        // 密码强度校验：至少8位
+        if (request.getNewPassword() == null || request.getNewPassword().length() < 8) {
+            throw new BusinessException("新密码长度不能少于8位");
         }
 
         User user = userRepository.findByEmail(request.getEmail())

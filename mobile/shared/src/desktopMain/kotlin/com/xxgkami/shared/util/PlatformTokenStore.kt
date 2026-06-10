@@ -2,6 +2,8 @@ package com.xxgkami.shared.util
 
 import com.xxgkami.shared.api.ApiProvider
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.Cipher
@@ -37,7 +39,9 @@ actual class PlatformTokenStore actual constructor() {
 
     init {
         // 确保配置目录存在
-        configDir.mkdirs()
+        if (!configDir.exists() && !configDir.mkdirs()) {
+            throw IllegalStateException("Failed to create config directory: ${configDir.absolutePath}")
+        }
     }
 
     actual fun saveTokens(accessToken: String, refreshToken: String) {
@@ -111,7 +115,19 @@ actual class PlatformTokenStore actual constructor() {
     private fun generateAndSaveKey(): ByteArray {
         val key = ByteArray(32)
         secureRandom.nextBytes(key)
-        keyFile.writeText(Base64.getEncoder().encodeToString(key))
+        val encoded = Base64.getEncoder().encodeToString(key)
+        val tmpFile = File(configDir, ".key.tmp")
+        tmpFile.writeText(encoded)
+        tmpFile.renameTo(keyFile)
+        // Set permissions after rename
+        try {
+            val path = keyFile.toPath()
+            if (File.separator != "\\") { // POSIX (Linux/Mac)
+                Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-------"))
+            }
+        } catch (e: Exception) {
+            println("[PlatformTokenStore] Warning: Could not set key file permissions: ${e.message}")
+        }
         return key
     }
 

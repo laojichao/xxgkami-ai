@@ -14,11 +14,11 @@ object ApiProvider {
     // 全局共享的 API 客户端实例
     val apiClient: ApiClient = ApiClient()
 
-    /** 更新 API 基础地址，必须以 http:// 或 https:// 开头 */
+    /** 更新 API 基础地址，必须以 http:// 或 https:// 开头。生产环境必须使用 HTTPS */
     fun updateBaseUrl(url: String) {
         require(url.isNotBlank()) { "API base URL must not be blank" }
-        require(url.startsWith("http://") || url.startsWith("https://")) {
-            "API base URL must start with http:// or https://, got: $url"
+        require(url.startsWith("https://") || (url.startsWith("http://") && (url.contains("localhost") || url.contains("10.0.2.2") || url.contains("127.0.0.1")))) {
+            "Production API base URL must use HTTPS. Got: $url"
         }
         apiClient.baseUrl = url
     }
