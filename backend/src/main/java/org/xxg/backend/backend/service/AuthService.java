@@ -2,6 +2,7 @@ package org.xxg.backend.backend.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.dto.*;
@@ -15,7 +16,6 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 认证服务 - 处理用户/管理员的登录、注册、验证码和令牌刷新等认证相关业务逻辑
@@ -37,21 +37,21 @@ public class AuthService {
     private final AdminRepository adminRepository;
     private final UserRepository userRepository;
     private final VerificationCodeRepository verificationCodeRepository;
+    private final BindTokenRepository bindTokenRepository;
     private final JwtUtil jwtUtil;
     private final PasswordUtil passwordUtil;
     private final EmailService emailService;
     private final TotpService totpService;
 
-    // 内存存储 bind token，生产环境建议用 Redis
-    private final Map<String, LocalDateTime> bindTokens = new ConcurrentHashMap<>();
-
     public AuthService(AdminRepository adminRepository, UserRepository userRepository,
                        VerificationCodeRepository verificationCodeRepository,
+                       BindTokenRepository bindTokenRepository,
                        JwtUtil jwtUtil, PasswordUtil passwordUtil, EmailService emailService,
                        TotpService totpService) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
         this.verificationCodeRepository = verificationCodeRepository;
+        this.bindTokenRepository = bindTokenRepository;
         this.jwtUtil = jwtUtil;
         this.passwordUtil = passwordUtil;
         this.emailService = emailService;
@@ -256,15 +256,16 @@ public class AuthService {
                 .build();
     }
 
-    // bind token 到 userId 的映射，用于验证 token 归属
-    private final Map<String, Integer> bindTokenUsers = new ConcurrentHashMap<>();
-
     private Map<String, Object> generateBindToken(Integer userId) {
         String token = UUID.randomUUID().toString();
-        bindTokens.put(token, LocalDateTime.now().plusMinutes(10));
-        if (userId != null) {
-            bindTokenUsers.put(token, userId);
-        }
+
+        BindToken bindToken = new BindToken();
+        bindToken.setToken(token);
+        bindToken.setUserId(userId);
+        bindToken.setExpireTime(LocalDateTime.now().plusMinutes(10));
+        bindToken.setUsed(false);
+        bindTokenRepository.save(bindToken);
+
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
         return result;
@@ -274,23 +275,44 @@ public class AuthService {
         return generateBindToken(userId);
     }
 
+    @Transactional
     public boolean validateBindToken(Integer userId, String token) {
         if (token == null || token.isEmpty()) return false;
-        LocalDateTime expireTime = bindTokens.get(token);
-        if (expireTime == null) return false;
-        if (expireTime.isBefore(LocalDateTime.now())) {
-            bindTokens.remove(token);
-            bindTokenUsers.remove(token);
+
+        Optional<BindToken> optBindToken = bindTokenRepository.findByTokenAndUsedFalse(token);
+        if (optBindToken.isEmpty()) return false;
+
+        BindToken bindToken = optBindToken.get();
+
+        // 检查是否过期
+        if (bindToken.getExpireTime().isBefore(LocalDateTime.now())) {
+            bindTokenRepository.delete(bindToken);
             return false;
         }
+
         // 验证 token 归属：只有生成该 token 的用户才能使用
-        Integer tokenOwner = bindTokenUsers.get(token);
-        if (tokenOwner != null && userId != null && !tokenOwner.equals(userId)) {
+        if (bindToken.getUserId() != null && userId != null
+                && !bindToken.getUserId().equals(userId)) {
             return false;
         }
-        bindTokens.remove(token); // 一次性使用
-        bindTokenUsers.remove(token);
+
+        // 标记为已使用（一次性令牌）
+        bindToken.setUsed(true);
+        bindTokenRepository.save(bindToken);
         return true;
+    }
+
+    /**
+     * 定时清理过期的绑定令牌，每小时执行一次
+     */
+    @Scheduled(fixedRate = 3600000)
+    @Transactional
+    public void cleanupExpiredBindTokens() {
+        try {
+            bindTokenRepository.deleteByExpireTimeBefore(LocalDateTime.now());
+        } catch (Exception e) {
+            log.warn("清理过期绑定令牌失败: {}", e.getMessage());
+        }
     }
 
     @Transactional

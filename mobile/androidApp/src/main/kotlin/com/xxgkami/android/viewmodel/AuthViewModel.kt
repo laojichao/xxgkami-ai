@@ -43,6 +43,9 @@ class AuthViewModel : ViewModel() {
     private val _registerSuccess = MutableStateFlow(false)
     val registerSuccess: StateFlow<Boolean> = _registerSuccess
 
+    /** 用户信息缓存标记：避免页面切换时重复请求 */
+    private var userInfoLoaded = false
+
     init {
         // Token 回调由 TokenStore 统一管理，避免与 ApiClient 的 onTokenRefreshed/onLogout 冲突
     }
@@ -162,13 +165,16 @@ class AuthViewModel : ViewModel() {
 
     /**
      * 获取当前登录用户信息，更新 [_userInfo] 状态。
+     * @param forceRefresh 是否强制刷新，忽略缓存
      */
-    fun getUserInfo() {
+    fun getUserInfo(forceRefresh: Boolean = false) {
+        if (userInfoLoaded && !forceRefresh) return
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 val response = authApi.getUserInfo()
                 _userInfo.value = response.data
+                userInfoLoaded = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -196,7 +202,16 @@ class AuthViewModel : ViewModel() {
             _userInfo.value = null
             _registerSuccess.value = false
             _error.value = null
+            userInfoLoaded = false
         }
+    }
+
+    /**
+     * 重置用户信息缓存标记
+     * 供外部在登出流程中调用
+     */
+    fun resetCache() {
+        userInfoLoaded = false
     }
 
     /**

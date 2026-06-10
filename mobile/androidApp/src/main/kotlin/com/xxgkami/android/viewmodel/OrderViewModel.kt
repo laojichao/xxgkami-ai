@@ -32,17 +32,23 @@ class OrderViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    // 数据缓存标记：避免页面切换时重复请求
+    private var ordersLoaded = false
+
     /**
      * 加载当前用户的订单列表
+     * @param forceRefresh 是否强制刷新，忽略缓存
      * 成功时更新 [_orders]，失败时更新 [_error]
      */
-    fun loadOrders() {
+    fun loadOrders(forceRefresh: Boolean = false) {
+        if (ordersLoaded && !forceRefresh) return
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             try {
                 val response = orderApi.getMyOrders()
                 _orders.value = response.data ?: emptyList()
+                ordersLoaded = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -51,5 +57,13 @@ class OrderViewModel : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+
+    /**
+     * 重置缓存标记
+     * 在用户登出时调用，确保下次登录后重新加载数据
+     */
+    fun resetCache() {
+        ordersLoaded = false
     }
 }

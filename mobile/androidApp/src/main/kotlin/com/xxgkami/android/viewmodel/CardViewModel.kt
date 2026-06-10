@@ -36,6 +36,10 @@ class CardViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    // 数据缓存标记：避免页面切换时重复请求
+    private var cardsLoaded = false
+    private var cardsUserId: Int? = null
+
     /**
      * 验证卡密
      * @param cardKey 卡密字符串
@@ -61,14 +65,18 @@ class CardViewModel : ViewModel() {
     /**
      * 加载指定用户的卡密列表
      * @param userId 用户ID
+     * @param forceRefresh 是否强制刷新，忽略缓存
      */
-    fun loadUserCards(userId: Int) {
+    fun loadUserCards(userId: Int, forceRefresh: Boolean = false) {
+        if (cardsLoaded && cardsUserId == userId && !forceRefresh) return
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             try {
                 val response = cardApi.getUserCards(userId)
                 _cards.value = response.data ?: emptyList()
+                cardsLoaded = true
+                cardsUserId = userId
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -95,5 +103,14 @@ class CardViewModel : ViewModel() {
                 _error.value = e.message ?: "解绑失败"
             }
         }
+    }
+
+    /**
+     * 重置缓存标记
+     * 在用户登出时调用，确保下次登录后重新加载数据
+     */
+    fun resetCache() {
+        cardsLoaded = false
+        cardsUserId = null
     }
 }
