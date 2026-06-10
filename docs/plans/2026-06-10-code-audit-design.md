@@ -130,14 +130,16 @@
 | R8 | ViewModel 缓存 → 添加数据缓存机制 | `7c1a43e` |
 | R9 | UserPage Options API → Composition API | `8233f21` |
 
-### 仍待处理问题
+### 已修复的剩余问题（第二轮）
 
-| # | 严重度 | 问题 | 建议方案 | 原因 |
-|---|--------|------|----------|------|
-| R2 | 🟠高 | 前端 JWT 存 localStorage | 改用 httpOnly cookie | 需要后端配合设置 cookie，架构改动大 |
-| R3 | 🟠高 | iOS/Desktop Token 持久化缺失 | 实现 Keychain | 需要平台特定代码，当前仅支持 Android |
-| R4 | 🟡中 | MD5 用于支付签名 | 受限于第三方协议 | 需确认支付网关是否支持 HMAC-SHA256 |
-| R7 | 🟡中 | 大组件文件拆分 | 拆分子组件 | 工作量大，功能回归测试复杂 |
+| # | 问题 | 提交 |
+|---|------|------|
+| R2 | 前端 JWT 存 localStorage → httpOnly cookie | `e1f5d88` |
+| R3 | iOS/Desktop Token 持久化 → Keychain + 加密文件存储 | `e1f5d88` |
+| R4 | MD5 支付签名 → 添加 HMAC-SHA256 替代方案 | `b669eb7` |
+| R7 | 大组件文件拆分 → ApiManagePage 拆分为 9 个子组件 | `e1f5d88` |
+
+### 所有问题已修复 ✅
 
 ## 6. 风险评估
 
