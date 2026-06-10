@@ -83,6 +83,16 @@ public class SettingsController {
         return ResponseEntity.ok(ApiResponse.ok("设置已保存"));
     }
 
+    /**
+     * 手动刷新配置缓存
+     * 当数据库配置被外部修改后，可通过此接口强制重新加载缓存
+     */
+    @PostMapping("/refresh-cache")
+    public ResponseEntity<ApiResponse<Void>> refreshCache() {
+        settingsService.refreshCache();
+        return ResponseEntity.ok(ApiResponse.ok("配置缓存已刷新"));
+    }
+
     @PostMapping("/email/test")
     public ResponseEntity<ApiResponse<Void>> sendTestEmail(@RequestBody Map<String, String> body) {
         try {

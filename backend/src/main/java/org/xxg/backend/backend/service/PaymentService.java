@@ -1,13 +1,10 @@
 package org.xxg.backend.backend.service;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.Order;
-import org.xxg.backend.backend.entity.Setting;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.OrderRepository;
-import org.xxg.backend.backend.mapper.SettingRepository;
 import org.xxg.backend.backend.util.PaymentUtil;
 
 import org.slf4j.Logger;
@@ -26,15 +23,15 @@ public class PaymentService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
-    private final SettingRepository settingRepository;
+    private final SettingsService settingsService;
     private final OrderRepository orderRepository;
     private final OrderService orderService;
     private final CardService cardService;
     private final PaymentUtil paymentUtil;
 
-    public PaymentService(SettingRepository settingRepository, OrderRepository orderRepository,
+    public PaymentService(SettingsService settingsService, OrderRepository orderRepository,
                           OrderService orderService, CardService cardService, PaymentUtil paymentUtil) {
-        this.settingRepository = settingRepository;
+        this.settingsService = settingsService;
         this.orderRepository = orderRepository;
         this.orderService = orderService;
         this.cardService = cardService;
@@ -50,11 +47,11 @@ public class PaymentService {
         Order order = orderRepository.findByOrderNo(orderNo)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
 
-        String apiUrl = getSettingValue("epay_api_url", "");
-        String pid = getSettingValue("epay_pid", "");
-        String key = getSettingValue("epay_key", "");
-        String notifyUrl = getSettingValue("epay_notify_url", "");
-        String returnUrl = getSettingValue("epay_return_url", "");
+        String apiUrl = settingsService.getValue("epay_api_url", "");
+        String pid = settingsService.getValue("epay_pid", "");
+        String key = settingsService.getValue("epay_key", "");
+        String notifyUrl = settingsService.getValue("epay_notify_url", "");
+        String returnUrl = settingsService.getValue("epay_return_url", "");
 
         if (apiUrl.isEmpty() || pid.isEmpty() || key.isEmpty()) {
             throw new BusinessException("支付配置不完整");
@@ -86,7 +83,7 @@ public class PaymentService {
      */
     @Transactional
     public String handlePaymentCallback(Map<String, String> params) {
-        String key = getSettingValue("epay_key", "");
+        String key = settingsService.getValue("epay_key", "");
         if (!paymentUtil.verifySign(params, key)) {
             log.warn("支付回调签名校验失败");
             return "fail";
@@ -121,18 +118,6 @@ public class PaymentService {
             return "success";
         }
         return "fail";
-    }
-
-    /**
-     * 从数据库获取系统配置项的值
-     * @param name 配置项名称
-     * @param defaultValue 默认值
-     * @return 配置项值，不存在返回默认值
-     */
-    private String getSettingValue(String name, String defaultValue) {
-        return settingRepository.findByName(name)
-                .map(Setting::getValue)
-                .orElse(defaultValue);
     }
 
     /**
