@@ -35,6 +35,7 @@ public class SettingsService {
      * @param defaultValue 默认值
      * @return 配置项值，不存在返回默认值
      */
+    @Transactional(readOnly = true)
     public String getValue(String name, String defaultValue) {
         // 先从缓存读取
         if (settingsCache.containsKey(name)) {
@@ -53,6 +54,7 @@ public class SettingsService {
      * 首次调用时从数据库加载全部配置到缓存，后续直接返回缓存副本
      * @return 配置项名称到值的映射Map（防御性拷贝）
      */
+    @Transactional(readOnly = true)
     public Map<String, String> getAllSettings() {
         if (!cacheLoaded) {
             refreshCache();
@@ -78,14 +80,38 @@ public class SettingsService {
     }
 
     /**
-     * 批量更新配置项
+     * 批量更新配置项。
+     * <p>一次性查询所有已存在的配置项，批量更新后统一 saveAll()，
+     * 减少数据库往返次数。</p>
+     *
      * @param settings 配置项名称到值的映射Map
      */
     @Transactional
     public void updateSettings(Map<String, String> settings) {
-        for (Map.Entry<String, String> entry : settings.entrySet()) {
-            updateSetting(entry.getKey(), entry.getValue());
+        if (settings == null || settings.isEmpty()) {
+            return;
         }
+
+        // 一次性查询所有已存在的配置项，按名称索引
+        List<Setting> existingList = settingRepository.findAll();
+        Map<String, Setting> existingMap = new HashMap<>(existingList.size());
+        for (Setting s : existingList) {
+            existingMap.put(s.getName(), s);
+        }
+
+        List<Setting> toSave = new ArrayList<>();
+        for (Map.Entry<String, String> entry : settings.entrySet()) {
+            String name = entry.getKey();
+            String value = entry.getValue();
+            Setting setting = existingMap.getOrDefault(name, new Setting());
+            setting.setName(name);
+            setting.setValue(value);
+            toSave.add(setting);
+            // 同步更新缓存
+            settingsCache.put(name, value);
+        }
+
+        settingRepository.saveAll(toSave);
     }
 
     /**

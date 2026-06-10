@@ -46,6 +46,7 @@ public class ApiKeyService {
      * @param id 密钥ID
      * @return API密钥实体，不存在则抛出异常
      */
+    @Transactional(readOnly = true)
     public ApiKey getApiKeyById(Integer id) {
         return apiKeyRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("API Key 不存在"));
@@ -56,6 +57,7 @@ public class ApiKeyService {
      * @param keyValue 密钥值
      * @return API密钥实体，不存在返回null
      */
+    @Transactional(readOnly = true)
     public ApiKey getApiKeyByValue(String keyValue) {
         return apiKeyRepository.findByKeyValue(keyValue).orElse(null);
     }
@@ -64,6 +66,7 @@ public class ApiKeyService {
      * 获取所有API密钥列表
      * @return 所有API密钥列表
      */
+    @Transactional(readOnly = true)
     public List<ApiKey> getAllApiKeys() {
         return apiKeyRepository.findAll();
     }
@@ -112,6 +115,7 @@ public class ApiKeyService {
      * @param keyValue 密钥值
      * @return 密钥存在且状态为启用返回true，否则返回false
      */
+    @Transactional(readOnly = true)
     public boolean validateApiKey(String keyValue) {
         ApiKey apiKey = apiKeyRepository.findByKeyValue(keyValue).orElse(null);
         return apiKey != null && apiKey.getStatus();

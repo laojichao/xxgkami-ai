@@ -6,6 +6,7 @@ import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.WalletApi
 import com.xxgkami.shared.model.Wallet
 import com.xxgkami.shared.model.WalletTransaction
+import com.xxgkami.android.util.ErrorMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,7 +61,7 @@ class WalletViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "加载钱包失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _loadingCount.value--
             }
@@ -87,7 +88,7 @@ class WalletViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "充值失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _loadingCount.value--
             }
@@ -111,7 +112,7 @@ class WalletViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "加载交易记录失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _loadingCount.value--
             }

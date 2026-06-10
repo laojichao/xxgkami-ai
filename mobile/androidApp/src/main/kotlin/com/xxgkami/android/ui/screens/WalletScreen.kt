@@ -11,11 +11,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.xxgkami.android.viewmodel.WalletViewModel
+import com.xxgkami.shared.model.Wallet
+import com.xxgkami.shared.model.WalletTransaction
 
 /**
  * 钱包管理页面
- * 展示用户余额、累计充值、累计消费信息
- * 下方列出交易记录列表，消费显示红色负数，充值显示绿色正数
+ * 展示用户余额、累计充值、累计消费信息和交易记录，支持下拉刷新
  *
  * @param navController 页面导航控制器
  * @param walletViewModel 钱包ViewModel，负责加载钱包和交易记录数据
@@ -26,6 +27,8 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
     val wallet by walletViewModel.wallet.collectAsState()
     val transactions by walletViewModel.transactions.collectAsState()
     val isLoading by walletViewModel.isLoading.collectAsState()
+    val error by walletViewModel.error.collectAsState()
+    var isRefreshing by remember { mutableStateOf(false) }
 
     // 页面首次加载时并行请求钱包信息和交易记录
     LaunchedEffect(Unit) {
@@ -33,65 +36,152 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
         walletViewModel.loadTransactions()
     }
 
+    // 监听加载状态，加载完成后关闭下拉刷新指示器
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            isRefreshing = false
+        }
+    }
+
     Scaffold(topBar = {
         TopAppBar(title = { Text("钱包") })
     }) { padding ->
-        if (isLoading && wallet == null) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-        LazyColumn(modifier = Modifier.padding(padding).padding(16.dp)) {
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("余额", style = MaterialTheme.typography.titleMedium)
-                        Text("¥${wallet?.balance ?: "0.00"}", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column {
-                                Text("累计充值", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("¥${wallet?.totalRecharge ?: "0.00"}", style = MaterialTheme.typography.bodyMedium)
-                            }
-                            Column {
-                                Text("累计消费", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("¥${wallet?.totalConsume ?: "0.00"}", style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
+        when {
+            isLoading && wallet == null && !isRefreshing -> {
+                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-                Spacer(Modifier.height(16.dp))
-                Text("交易记录", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
             }
-
-            if (transactions.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("暂无交易记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            } else {
-                items(transactions, key = { tx -> tx.id ?: tx.hashCode() }) { tx ->
-                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text(tx.description ?: tx.type ?: "", style = MaterialTheme.typography.bodyMedium)
-                                tx.createTime?.let {
-                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                            Text(
-                                // 消费显示负数（红色），充值/其他显示正数（绿色）
-                            "${if (tx.type == "consume") "-" else "+"}¥${tx.amount ?: "0"}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (tx.type == "consume") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
+            error != null && wallet == null -> {
+                WalletErrorState(
+                    message = error ?: "加载失败",
+                    onRetry = {
+                        walletViewModel.loadWallet(forceRefresh = true)
+                        walletViewModel.loadTransactions(forceRefresh = true)
+                    },
+                    modifier = Modifier.padding(padding)
+                )
+            }
+            else -> {
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        isRefreshing = true
+                        walletViewModel.loadWallet(forceRefresh = true)
+                        walletViewModel.loadTransactions(forceRefresh = true)
+                    },
+                    modifier = Modifier.fillMaxSize().padding(padding)
+                ) {
+                    WalletContent(wallet = wallet, transactions = transactions)
                 }
             }
         }
-        } // end else (not loading)
+    }
+}
+
+/**
+ * 钱包页面主内容区域
+ * 包含余额卡片和交易记录列表
+ * @param wallet 钱包信息，可能为null
+ * @param transactions 交易记录列表
+ */
+@Composable
+private fun WalletContent(wallet: Wallet?, transactions: List<WalletTransaction>) {
+    LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        item {
+            WalletBalanceCard(wallet = wallet)
+            Spacer(Modifier.height(16.dp))
+            Text("交易记录", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (transactions.isEmpty()) {
+            item {
+                TransactionEmptyState()
+            }
+        } else {
+            items(transactions, key = { tx -> tx.id ?: tx.hashCode() }) { tx ->
+                TransactionCard(transaction = tx)
+            }
+        }
+    }
+}
+
+/**
+ * 钱包余额概览卡片
+ * 展示当前余额、累计充值和累计消费
+ * @param wallet 钱包信息，可能为null
+ */
+@Composable
+private fun WalletBalanceCard(wallet: Wallet?) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("余额", style = MaterialTheme.typography.titleMedium)
+            Text("¥${wallet?.balance ?: "0.00"}", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("累计充值", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("¥${wallet?.totalRecharge ?: "0.00"}", style = MaterialTheme.typography.bodyMedium)
+                }
+                Column {
+                    Text("累计消费", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("¥${wallet?.totalConsume ?: "0.00"}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 单条交易记录卡片
+ * 消费显示红色负数，充值/其他显示绿色正数
+ * @param transaction 交易记录数据
+ */
+@Composable
+private fun TransactionCard(transaction: WalletTransaction) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text(transaction.description ?: transaction.type ?: "", style = MaterialTheme.typography.bodyMedium)
+                transaction.createTime?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Text(
+                "${if (transaction.type == "consume") "-" else "+"}¥${transaction.amount ?: "0"}",
+                style = MaterialTheme.typography.titleMedium,
+                color = if (transaction.type == "consume") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+/**
+ * 交易记录空状态提示
+ */
+@Composable
+private fun TransactionEmptyState() {
+    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+        Text("暂无交易记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * 钱包加载错误状态
+ * @param message 错误提示信息
+ * @param onRetry 重试回调
+ * @param modifier 修饰符
+ */
+@Composable
+private fun WalletErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(message, color = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onRetry) {
+                Text("重试")
+            }
+        }
     }
 }

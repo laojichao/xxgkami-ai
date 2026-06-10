@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 构建产物（由 Docker 内部构建）
+frontend/dist
+frontend/node_modules
+backend/target
+backend/.mvn
+mobile/
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 文档
+*.md
+LICENSE
+
+# 临时文件
+*.bak
+*.tmp
+*.log
+
+# 密钥和备份
+backend/keys/
+backend/backups/
+*.pem
+*.key
+*.p12

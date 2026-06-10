@@ -436,7 +436,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const loading = ref(false)
 const updating = ref(false)
 const orders = ref([])
-const allOrders = ref([])
 const dateRange = reactive({
   start: '',
   end: ''
@@ -466,33 +465,44 @@ const statusUpdateForm = reactive({
   remark: ''
 })
 
-// 统计数据
-const stats = computed(() => {
-  const totalOrders = allOrders.value.length
-  const completedOrders = allOrders.value.filter(order => order.status === 'completed').length
-  const pendingOrders = allOrders.value.filter(order => order.status === 'pending').length
-  const totalRevenue = allOrders.value
-    .filter(order => order.status === 'completed')
-    .reduce((sum, order) => sum + order.total_price, 0)
-    .toFixed(2)
-
-  return {
-    totalOrders,
-    completedOrders,
-    pendingOrders,
-    totalRevenue
-  }
+// 统计数据（从后端 /orders/stats 接口获取）
+const stats = reactive({
+  totalOrders: 0,
+  completedOrders: 0,
+  pendingOrders: 0,
+  totalRevenue: '0.00'
 })
 
-// 获取订单列表
+// 加载统计数据
+const loadStats = async () => {
+  try {
+    const response = await orderApi.getOrderStats()
+    if (response.success && response.data) {
+      stats.totalOrders = response.data.totalOrders || 0
+      stats.completedOrders = response.data.completedOrders || 0
+      stats.pendingOrders = response.data.pendingOrders || 0
+      // 收入统计暂由后端返回，如后端未提供则保持默认值
+      if (response.data.totalRevenue !== undefined) {
+        stats.totalRevenue = Number(response.data.totalRevenue).toFixed(2)
+      }
+    }
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+  }
+}
+
+// 获取订单列表（后端筛选 + 后端分页）
 const getOrders = async () => {
   loading.value = true
   try {
-    // 使用合理的分页大小，避免一次性加载过多数据导致性能问题
     const params = {
-      page: 0,
-      size: 200,
-      status: searchParams.status === 'all' ? '' : searchParams.status
+      page: pagination.page - 1,
+      size: pagination.pageSize,
+      status: searchParams.status === 'all' ? '' : searchParams.status,
+      orderNo: searchParams.orderId || '',
+      username: searchParams.username || '',
+      startDate: dateRange.start || '',
+      endDate: dateRange.end || ''
     }
 
     const response = await orderApi.getAllOrders(params)
@@ -500,32 +510,13 @@ const getOrders = async () => {
       // 后端返回 Page 对象，取 content 数组；兼容直接返回数组的情况
       const rawList = Array.isArray(response.data) ? response.data : (response.data.content || response.data)
       // 处理数据，添加 card_keys 数组转换
-      let fetchedOrders = rawList.map(order => ({
+      orders.value = rawList.map(order => ({
         ...order,
         card_keys: order.card_keys ? order.card_keys.split(',') : []
       }))
 
-      // 前端筛选：订单号、用户名、卡密类型、时间范围
-      if (searchParams.orderId) {
-        fetchedOrders = fetchedOrders.filter(o => o.orderNo && o.orderNo.includes(searchParams.orderId))
-      }
-      if (searchParams.username) {
-        fetchedOrders = fetchedOrders.filter(o => o.username && o.username.includes(searchParams.username))
-      }
-      if (searchParams.cardType && searchParams.cardType !== 'all') {
-        fetchedOrders = fetchedOrders.filter(o => o.cardType === searchParams.cardType)
-      }
-      if (dateRange.start) {
-        fetchedOrders = fetchedOrders.filter(o => o.createTime && o.createTime >= dateRange.start)
-      }
-      if (dateRange.end) {
-        fetchedOrders = fetchedOrders.filter(o => o.createTime && o.createTime <= dateRange.end + ' 23:59:59')
-      }
-
-      allOrders.value = fetchedOrders
-      pagination.total = allOrders.value.length
-
-      updatePagedOrders()
+      // 从后端 Page 对象获取总条数
+      pagination.total = response.data.totalElements || orders.value.length
     }
   } catch (error) {
     console.error(error)
@@ -533,12 +524,6 @@ const getOrders = async () => {
   } finally {
     loading.value = false
   }
-}
-
-const updatePagedOrders = () => {
-  const start = (pagination.page - 1) * pagination.pageSize
-  const end = start + pagination.pageSize
-  orders.value = allOrders.value.slice(start, end)
 }
 
 // 搜索订单
@@ -563,17 +548,16 @@ const resetSearch = () => {
 
 // 处理页面大小变化
 const handleSizeChange = () => {
-  // <select> 的 v-model 会将值设为字符串，需要转回数字以避免算术运算错误
   pagination.pageSize = Number(pagination.pageSize) || 10
   pagination.page = 1
-  updatePagedOrders()
+  getOrders()
 }
 
 // 处理当前页变化
 const handleCurrentChange = (page) => {
   if (page >= 1 && page <= Math.ceil(pagination.total / pagination.pageSize)) {
     pagination.page = page
-    updatePagedOrders()
+    getOrders()
   }
 }
 
@@ -707,6 +691,7 @@ const showToast = (message, type = 'info') => {
 // 组件挂载时获取数据
 onMounted(() => {
   getOrders()
+  loadStats()
 })
 </script>
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.OrderApi
 import com.xxgkami.shared.model.Order
+import com.xxgkami.android.util.ErrorMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +53,7 @@ class OrderViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "加载订单失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _isLoading.value = false
             }

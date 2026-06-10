@@ -3,6 +3,7 @@ package org.xxg.backend.backend.mapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,7 +17,7 @@ import java.util.Optional;
  * 订单数据访问接口
  * 提供订单的增删改查、按订单号/用户/状态查询以及订单统计功能
  */
-public interface OrderRepository extends JpaRepository<Order, Integer> {
+public interface OrderRepository extends JpaRepository<Order, Integer>, JpaSpecificationExecutor<Order> {
     /** 根据订单号查询订单 */
     Optional<Order> findByOrderNo(String orderNo);
 

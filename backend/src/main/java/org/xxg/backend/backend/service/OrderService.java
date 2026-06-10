@@ -2,6 +2,7 @@ package org.xxg.backend.backend.service;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,9 +11,13 @@ import org.xxg.backend.backend.entity.*;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.*;
 import org.xxg.backend.backend.util.PaymentUtil;
+import jakarta.persistence.criteria.Predicate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
@@ -131,6 +136,7 @@ public class OrderService {
      * @param orderNo 订单号
      * @return 订单实体，不存在时返回 null
      */
+    @Transactional(readOnly = true)
     public Order getOrderByNo(String orderNo) {
         return orderRepository.findByOrderNo(orderNo).orElse(null);
     }
@@ -141,6 +147,7 @@ public class OrderService {
      * @param userId 用户 ID
      * @return 订单列表
      */
+    @Transactional(readOnly = true)
     public List<Order> getOrdersByUserId(Integer userId) {
         return orderRepository.findByUserId(userId);
     }
@@ -152,6 +159,7 @@ public class OrderService {
      * @param pageable 分页参数
      * @return 订单分页结果
      */
+    @Transactional(readOnly = true)
     public Page<Order> getOrdersByUserId(Integer userId, Pageable pageable) {
         return orderRepository.findByUserId(userId, pageable);
     }
@@ -162,6 +170,7 @@ public class OrderService {
      * @param pageable 分页参数
      * @return 订单分页结果
      */
+    @Transactional(readOnly = true)
     public Page<Order> getAllOrders(Pageable pageable) {
         return orderRepository.findAll(pageable);
     }
@@ -173,8 +182,52 @@ public class OrderService {
      * @param pageable 分页参数
      * @return 订单分页结果
      */
+    @Transactional(readOnly = true)
     public Page<Order> getOrdersByStatus(String status, Pageable pageable) {
         return orderRepository.findByStatus(status, pageable);
+    }
+
+    /**
+     * 多条件动态查询订单（支持状态、订单号、用户名、时间范围筛选）。
+     * <p>使用 JPA Specification 构建动态查询条件，所有参数均可选。</p>
+     *
+     * @param status    订单状态（可选）
+     * @param orderNo   订单号模糊搜索（可选）
+     * @param username  用户名模糊搜索（可选）
+     * @param startDate 创建时间范围起始，格式 yyyy-MM-dd（可选）
+     * @param endDate   创建时间范围结束，格式 yyyy-MM-dd（可选）
+     * @param pageable  分页参数
+     * @return 订单分页结果
+     */
+    @Transactional(readOnly = true)
+    public Page<Order> searchOrders(String status, String orderNo, String username,
+                                     String startDate, String endDate, Pageable pageable) {
+        Specification<Order> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (status != null && !status.isBlank()) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (orderNo != null && !orderNo.isBlank()) {
+                predicates.add(cb.like(root.get("orderNo"), "%" + orderNo + "%"));
+            }
+            if (username != null && !username.isBlank()) {
+                predicates.add(cb.like(root.get("username"), "%" + username + "%"));
+            }
+            if (startDate != null && !startDate.isBlank()) {
+                LocalDate start = LocalDate.parse(startDate, DateTimeFormatter.ISO_LOCAL_DATE);
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createTime"),
+                        start.atStartOfDay()));
+            }
+            if (endDate != null && !endDate.isBlank()) {
+                LocalDate end = LocalDate.parse(endDate, DateTimeFormatter.ISO_LOCAL_DATE);
+                predicates.add(cb.lessThanOrEqualTo(root.get("createTime"),
+                        end.atTime(LocalTime.MAX)));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return orderRepository.findAll(spec, pageable);
     }
 
     /**
@@ -183,6 +236,7 @@ public class OrderService {
      *
      * @return 统计数据 Map
      */
+    @Transactional(readOnly = true)
     public Map<String, Object> getOrderStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalOrders", orderRepository.count());

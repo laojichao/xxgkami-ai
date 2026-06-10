@@ -1047,8 +1047,8 @@ const fetchOrders = async () => {
             }
         }
     } catch (e) {
-        console.error(“Failed to fetch data”, e);
-        ElMessage.error(“获取数据失败”);
+        console.error("Failed to fetch data", e);
+        ElMessage.error("获取数据失败");
     }
 };
 
@@ -1060,8 +1060,8 @@ const fetchPricing = async () => {
       countCardOptions.value = result.data.countCards || [];
     }
   } catch (e) {
-    console.error(“Failed to fetch pricing”, e);
-    ElMessage.error(“获取定价信息失败”);
+    console.error("Failed to fetch pricing", e);
+    ElMessage.error("获取定价信息失败");
   }
 }
 
@@ -1091,7 +1091,7 @@ const pollOrderStatus = async (orderId) => {
       clearInterval(pollTimer);
       pollTimer = null;
       ElMessageBox.alert(
-        `订单号：${order.orderNo}\n购买成功！\n\n您可以在”我的卡密”中查看和使用卡密。`,
+        `订单号：${order.orderNo}\n购买成功！\n\n您可以在"我的卡密"中查看和使用卡密。`,
         '支付成功',
         {
           confirmButtonText: '查看卡密',
@@ -1141,7 +1141,7 @@ onMounted(() => {
              if (latestOrder) {
                  if (latestOrder.status === 'completed') {
                      ElMessageBox.alert(
-                        `订单号：${latestOrder.orderNo}\n购买成功！\n\n您可以在”我的卡密”中查看和使用卡密。`,
+                        `订单号：${latestOrder.orderNo}\n购买成功！\n\n您可以在"我的卡密"中查看和使用卡密。`,
                         '支付成功',
                         {
                           confirmButtonText: '查看卡密',

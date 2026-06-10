@@ -205,6 +205,7 @@ public class AuthService {
         }
     }
 
+    @Transactional
     public LoginResponse refreshToken(TokenRefreshRequest request) {
         String refreshToken = request.getRefreshToken();
         if (!jwtUtil.isTokenValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
@@ -215,51 +216,55 @@ public class AuthService {
         String role = jwtUtil.extractRole(refreshToken);
 
         // 验证 refresh token 是否与数据库中存储的哈希值一致，防止已失效的 token 被重复使用
+        // 复用查询结果，避免后续再查一次数据库
         String hashedRefreshToken = hashToken(refreshToken);
         if ("admin".equals(role)) {
-            Admin admin = adminRepository.findByUsername(username).orElse(null);
-            if (admin == null || admin.getRefreshToken() == null
-                    || !admin.getRefreshToken().equals(hashedRefreshToken)) {
+            Admin admin = adminRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException("Refresh token 已失效，请重新登录"));
+            if (admin.getRefreshToken() == null || !admin.getRefreshToken().equals(hashedRefreshToken)) {
                 throw new BusinessException("Refresh token 已失效，请重新登录");
             }
+
+            String newAccessToken = jwtUtil.generateAccessToken(username, role);
+            String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
+
+            admin.setAccessToken(hashToken(newAccessToken));
+            admin.setRefreshToken(hashToken(newRefreshToken));
+            adminRepository.save(admin);
+
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("username", username);
+            userInfo.put("role", role);
+
+            return LoginResponse.builder()
+                    .token(newAccessToken)
+                    .refreshToken(newRefreshToken)
+                    .userInfo(userInfo)
+                    .build();
         } else {
-            User user = userRepository.findByUsername(username).orElse(null);
-            if (user == null || user.getRefreshToken() == null
-                    || !user.getRefreshToken().equals(hashedRefreshToken)) {
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException("Refresh token 已失效，请重新登录"));
+            if (user.getRefreshToken() == null || !user.getRefreshToken().equals(hashedRefreshToken)) {
                 throw new BusinessException("Refresh token 已失效，请重新登录");
             }
+
+            String newAccessToken = jwtUtil.generateAccessToken(username, role);
+            String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
+
+            user.setAccessToken(hashToken(newAccessToken));
+            user.setRefreshToken(hashToken(newRefreshToken));
+            userRepository.save(user);
+
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("username", username);
+            userInfo.put("role", role);
+
+            return LoginResponse.builder()
+                    .token(newAccessToken)
+                    .refreshToken(newRefreshToken)
+                    .userInfo(userInfo)
+                    .build();
         }
-
-        String newAccessToken = jwtUtil.generateAccessToken(username, role);
-        String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
-
-        // 更新数据库中的哈希 token，使旧 refresh token 失效
-        // 复用前面已查询的用户对象，避免重复查询数据库
-        if ("admin".equals(role)) {
-            Admin admin = adminRepository.findByUsername(username).orElse(null);
-            if (admin != null) {
-                admin.setAccessToken(hashToken(newAccessToken));
-                admin.setRefreshToken(hashToken(newRefreshToken));
-                adminRepository.save(admin);
-            }
-        } else {
-            User user = userRepository.findByUsername(username).orElse(null);
-            if (user != null) {
-                user.setAccessToken(hashToken(newAccessToken));
-                user.setRefreshToken(hashToken(newRefreshToken));
-                userRepository.save(user);
-            }
-        }
-
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("username", username);
-        userInfo.put("role", role);
-
-        return LoginResponse.builder()
-                .token(newAccessToken)
-                .refreshToken(newRefreshToken)
-                .userInfo(userInfo)
-                .build();
     }
 
     private Map<String, Object> generateBindToken(Integer userId) {

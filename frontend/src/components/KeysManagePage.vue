@@ -1,44 +1,18 @@
 <!-- 卡密管理页面：卡密列表展示、搜索、分页、生成/编辑/删除/导出、时间卡倒计时 -->
 <template>
   <div class="keys-manage-page">
-    <div class="section-header">
-      <h2>卡密管理</h2>
-      <div class="header-actions">
-        <button class="btn-secondary" @click="showExportModal = true">
-          <i class="fas fa-file-export"></i>
-          导出数据
-        </button>
-        <button class="btn-primary" @click="showCreateKeyModal = true">
-          <i class="fas fa-plus"></i>
-          生成卡密
-        </button>
-      </div>
-    </div>
+    <!-- 批量操作栏：导出数据 + 生成卡密按钮 -->
+    <BatchActions
+      @show-export="showExportModal = true"
+      @show-create="showCreateKeyModal = true"
+    />
 
-    <!-- 工具栏：机器码搜索筛选 + 列表统计信息 -->
-    <div class="keys-toolbar">
-      <div class="toolbar-search">
-        <label class="toolbar-label" for="machine-code-search">机器码搜索</label>
-        <input
-          id="machine-code-search"
-          v-model.trim="machineCodeSearch"
-          type="search"
-          class="toolbar-input"
-          placeholder="输入设备码关键字，筛选已绑定该机器码的卡密"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button v-if="machineCodeSearch" type="button" class="toolbar-clear" @click="machineCodeSearch = ''">
-          清除
-        </button>
-      </div>
-      <p class="toolbar-meta">
-        当前列表：<strong>{{ filteredKeys.length }}</strong> 条
-        <template v-if="machineCodeSearch">（已按机器码过滤）</template>
-        <span class="toolbar-divider">|</span>
-        全库共计 {{ props.keys?.length || 0 }} 条
-      </p>
-    </div>
+    <!-- 搜索筛选区域 -->
+    <KeyFilters
+      v-model="machineCodeSearch"
+      :filtered-count="filteredKeys.length"
+      :total-count="props.keys?.length || 0"
+    />
 
     <!-- 卡密数据表格 -->
     <div class="keys-table">
@@ -62,240 +36,108 @@
             </td>
           </tr>
           <template v-else>
-            <tr v-for="key in paginatedKeys" :key="key.id">
-            <td>{{ key.id }}</td>
-            <td class="key-code" @click="copyKey(key.card_key)" title="点击复制">
-              {{ key.card_key }}
-            </td>
-            <td>
-              <span class="card-type" :class="key.card_type">
-                {{ getCardTypeText(key.card_type) }}
-              </span>
-            </td>
-            <td>
-              <span :class="['status', getStatusClass(key.status)]">
-                {{ getStatusText(key.status) }}
-              </span>
-            </td>
-            <td class="machine-code-cell" :title="key.machine_code || ''">
-              <span v-if="key.machine_code" class="machine-code-tag">{{ key.machine_code }}</span>
-              <span v-else class="machine-code-empty">未绑定</span>
-            </td>
-            <td>{{ formatDate(key.create_time) }}</td>
-            <td class="duration-cell">
-              <template v-if="key.card_type === 'time'">
-                <span
-                  v-if="key.expire_time"
-                  :class="['time-countdown', { 'is-expired': isTimeCardExpired(key) }]"
-                >
-                  {{ formatTimeCardRemaining(key) }}
-                </span>
-                <span v-else class="time-spec">{{ (key.duration ?? 0) }} 天（未激活）</span>
-              </template>
-              <template v-else>{{ key.remaining_count }} 次</template>
-            </td>
-            <td>
-              <div class="action-buttons">
-                <button class="btn-secondary btn-sm" @click="copyKey(key.card_key)">
-                  <i class="fas fa-copy"></i>
-                  复制
-                </button>
-                <button class="btn-primary btn-sm" @click="editKey(key)">
-                  <i class="fas fa-edit"></i>
-                  编辑
-                </button>
-                <button 
-                  v-if="key.status === 0 || key.status === 2" 
-                  class="btn-success btn-sm" 
-                  @click="toggleKeyStatus(key.id, 1)"
-                >
-                  <i class="fas fa-play"></i>
-                  启用
-                </button>
-                <button 
-                  v-if="key.status === 1" 
-                  class="btn-warning btn-sm" 
-                  @click="toggleKeyStatus(key.id, 2)"
-                >
-                  <i class="fas fa-pause"></i>
-                  暂停
-                </button>
-                <button class="btn-danger btn-sm" @click="deleteKey(key.id)">
-                  <i class="fas fa-trash"></i>
-                  删除
-                </button>
-              </div>
-            </td>
-          </tr>
+            <KeyCard
+              v-for="key in paginatedKeys"
+              :key="key.id"
+              :key-data="key"
+              :now-ms="nowMs"
+              @copy="copyKey"
+              @edit="editKey"
+              @toggle-status="toggleKeyStatus"
+              @delete="deleteKey"
+            />
           </template>
         </tbody>
       </table>
     </div>
 
     <!-- 分页导航（含页码跳转） -->
-    <!-- 分页组件 -->
     <div class="pagination-container" v-if="totalPages > 1">
       <div class="pagination">
-        <!-- 上一页按钮 -->
-        <button 
-          class="pagination-btn" 
-          :disabled="currentPage === 1" 
+        <button
+          class="pagination-btn"
+          :disabled="currentPage === 1"
           @click="goToPage(currentPage - 1)"
         >
           ‹ 上一页
         </button>
-        
-        <!-- 页码按钮 -->
+
         <div class="page-numbers">
-          <!-- 第一页 -->
-          <button 
-            v-if="showFirstPage" 
-            class="page-btn" 
-            :class="{ active: currentPage === 1 }" 
+          <button
+            v-if="showFirstPage"
+            class="page-btn"
+            :class="{ active: currentPage === 1 }"
             @click="goToPage(1)"
           >
             1
           </button>
-          
-          <!-- 省略号 -->
+
           <span v-if="showStartEllipsis" class="ellipsis">...</span>
-          
-          <!-- 中间页码 -->
-          <button 
-            v-for="page in visiblePages" 
-            :key="page" 
-            class="page-btn" 
-            :class="{ active: currentPage === page }" 
+
+          <button
+            v-for="page in visiblePages"
+            :key="page"
+            class="page-btn"
+            :class="{ active: currentPage === page }"
             @click="goToPage(page)"
           >
             {{ page }}
           </button>
-          
-          <!-- 省略号 -->
+
           <span v-if="showEndEllipsis" class="ellipsis">...</span>
-          
-          <!-- 最后一页 -->
-          <button 
-            v-if="showLastPage" 
-            class="page-btn" 
-            :class="{ active: currentPage === totalPages }" 
+
+          <button
+            v-if="showLastPage"
+            class="page-btn"
+            :class="{ active: currentPage === totalPages }"
             @click="goToPage(totalPages)"
           >
             {{ totalPages }}
           </button>
         </div>
-        
-        <!-- 下一页按钮 -->
-        <button 
-          class="pagination-btn" 
-          :disabled="currentPage === totalPages" 
+
+        <button
+          class="pagination-btn"
+          :disabled="currentPage === totalPages"
           @click="goToPage(currentPage + 1)"
         >
           下一页 ›
         </button>
-        
-        <!-- 页码跳转 -->
+
         <div class="page-jump">
           <span>跳转到</span>
-          <input 
-            type="number" 
-            v-model.number="jumpPage" 
-            :min="1" 
-            :max="totalPages" 
+          <input
+            type="number"
+            v-model.number="jumpPage"
+            :min="1"
+            :max="totalPages"
             @keyup.enter="jumpToPage"
             class="jump-input"
           />
           <span>页</span>
           <button class="jump-btn" @click="jumpToPage">跳转</button>
         </div>
-        
-        <!-- 分页信息 -->
+
         <div class="pagination-info">
           共 {{ totalItems }} 条记录，第 {{ currentPage }} / {{ totalPages }} 页
         </div>
       </div>
     </div>
 
-    <!-- 导出数据弹窗（列选择/格式/范围/预览） -->
-    <!-- 导出数据模态框 -->
-    <div v-if="showExportModal" class="modal-overlay" @click="showExportModal = false">
-      <div class="modal-content export-modal" @click.stop>
-        <div class="modal-header">
-          <h3>导出卡密数据</h3>
-          <button class="close-btn" @click="showExportModal = false">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="export-settings">
-            <div class="setting-group">
-              <h4>选择导出列</h4>
-              <div class="checkbox-grid">
-                <label v-for="col in availableColumns" :key="col.key" class="checkbox-label">
-                  <input type="checkbox" v-model="selectedColumns" :value="col.key">
-                  {{ col.label }}
-                </label>
-              </div>
-            </div>
-            <div class="setting-group">
-              <h4>导出格式</h4>
-              <div class="radio-group">
-                <label class="radio-label">
-                  <input type="radio" v-model="exportFormat" value="xlsx"> Excel (.xlsx)
-                </label>
-                <label class="radio-label">
-                  <input type="radio" v-model="exportFormat" value="csv"> CSV (.csv)
-                </label>
-              </div>
-            </div>
-          </div>
-          <div class="setting-group export-scope-group">
-            <h4>导出范围</h4>
-            <p class="export-scope-hint">会先应用上方「机器码搜索」的结果，再按使用状态筛选；选「全部」则仅受机器码搜索影响。</p>
-            <div class="radio-group horizontal">
-              <label class="radio-label">
-                <input type="radio" v-model="exportUsageScope" value="all"> 全部（未按状态筛选）
-              </label>
-              <label class="radio-label">
-                <input type="radio" v-model="exportUsageScope" value="unused"> 仅未使用
-              </label>
-              <label class="radio-label">
-                <input type="radio" v-model="exportUsageScope" value="used"> 仅已使用（含已暂停）
-              </label>
-            </div>
-          </div>
-          
-          <div class="preview-section">
-            <h4>数据预览 (前 5 条，共符合条件 {{ keysForExport.length }} 条)</h4>
-            <div class="preview-table-container">
-              <table class="preview-table">
-                <thead>
-                  <tr>
-                    <th v-for="colKey in selectedColumns" :key="colKey">
-                      {{ getColumnLabel(colKey) }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, index) in previewData" :key="index">
-                    <td v-for="colKey in selectedColumns" :key="colKey">
-                      {{ row[colKey] }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn-secondary" @click="showExportModal = false">取消</button>
-          <button class="btn-primary" @click="exportData" :disabled="selectedColumns.length === 0 || exporting">
-            <i class="fas" :class="exporting ? 'fa-spinner fa-spin' : 'fa-file-export'"></i>
-            {{ exporting ? '导出中...' : '确认导出' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 导出数据弹窗 -->
+    <ExportDialog
+      v-if="showExportModal"
+      :available-columns="availableColumns"
+      v-model:selected-columns="selectedColumns"
+      v-model:export-format="exportFormat"
+      v-model:export-usage-scope="exportUsageScope"
+      :preview-data="previewData"
+      :keys-for-export-count="keysForExport.length"
+      :exporting="exporting"
+      @close="showExportModal = false"
+      @export="exportData"
+    />
 
-    <!-- 编辑卡密弹窗（类型/时长/次数/状态/机器码/自助解绑） -->
     <!-- 编辑卡密模态框 -->
     <div v-if="showEditKeyModal" class="modal-overlay" @click="showEditKeyModal = false">
       <div class="modal-content" @click.stop>
@@ -406,7 +248,6 @@
       </div>
     </div>
 
-    <!-- 生成卡密弹窗（类型/数量/时长/叠加/自助解绑） -->
     <!-- 生成卡密模态框 -->
     <div v-if="showCreateKeyModal" class="modal-overlay" @click="showCreateKeyModal = false">
       <div class="modal-content" @click.stop>
@@ -520,6 +361,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { cardApi } from '../services/api.js'
 import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
+import BatchActions from './keys/BatchActions.vue'
+import KeyFilters from './keys/KeyFilters.vue'
+import KeyCard from './keys/KeyCard.vue'
+import ExportDialog from './keys/ExportDialog.vue'
 
 const props = defineProps({
   keys: Array
@@ -528,8 +373,6 @@ const props = defineProps({
 const emit = defineEmits(['create-keys', 'delete-key', 'update-key', 'toggle-key-status'])
 
 /* ========== 时间卡倒计时 ========== */
-
-/** 当前时间戳（每秒刷新），驱动时间卡密实时倒计时 */
 const nowMs = ref(Date.now())
 let countdownTimer = null
 
@@ -546,54 +389,14 @@ onUnmounted(() => {
   }
 })
 
-/** 数字补零为两位字符串 */
-const pad2 = (n) => String(n).padStart(2, '0')
-
-/** 解析卡密到期时间为毫秒时间戳 */
-const parseExpireTimeMs = (key) => {
-  const raw = key?.expire_time
-  if (raw == null || raw === '') return null
-  const t = new Date(raw).getTime()
-  return Number.isFinite(t) ? t : null
-}
-
-/** 判断时间卡是否已过期 */
-const isTimeCardExpired = (key) => {
-  const end = parseExpireTimeMs(key)
-  return end != null && end <= nowMs.value
-}
-
-/** 格式化时间卡剩余时间（天/时/分/秒） */
-const formatTimeCardRemaining = (key) => {
-  const end = parseExpireTimeMs(key)
-  if (end == null) return '—'
-  const ms = end - nowMs.value
-  if (ms <= 0) return '已过期'
-  const totalSec = Math.floor(ms / 1000)
-  const days = Math.floor(totalSec / 86400)
-  const h = Math.floor((totalSec % 86400) / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  if (days > 0) {
-    return `${days} 天 ${pad2(h)}:${pad2(m)}:${pad2(s)}`
-  }
-  return `${pad2(h)}:${pad2(m)}:${pad2(s)}`
-}
-
 /* ========== 弹窗与导出状态 ========== */
-
 const showCreateKeyModal = ref(false)
 const showEditKeyModal = ref(false)
 const showExportModal = ref(false)
-/** 导出按钮加载状态 */
 const exporting = ref(false)
-/** 导出格式（xlsx/csv） */
 const exportFormat = ref('xlsx')
-/** 导出使用状态范围：all | unused | used */
 const exportUsageScope = ref('all')
-/** 机器码搜索关键字（列表与导出预览均按此过滤，不区分大小写） */
 const machineCodeSearch = ref('')
-/** 导出时选中的列 */
 const selectedColumns = ref(['id', 'card_key', 'card_type', 'status', 'create_time'])
 
 /** 可导出的列定义 */
@@ -637,18 +440,15 @@ const obfuscateCardKey = (rawKey) => {
 const processExportData = (data) => {
   return data.map(item => {
     const processed = {}
-    
-    // 基础字段处理
+
     if (selectedColumns.value.includes('id')) processed.id = item.id
     if (selectedColumns.value.includes('card_key')) processed.card_key = item.card_key
     if (selectedColumns.value.includes('encrypted_key')) processed.encrypted_key = obfuscateCardKey(item.card_key)
-    
-    // 使用者信息 (优先显示设备ID或IP)
+
     if (selectedColumns.value.includes('user_info')) {
       processed.user_info = item.device_id ? `Device: ${item.device_id}` : (item.ip_address ? `IP: ${item.ip_address}` : '-')
     }
-    
-    // 剩余时间/次数
+
     if (selectedColumns.value.includes('remaining_time')) {
       if (item.card_type === 'time') {
         if (item.expire_time) {
@@ -672,19 +472,17 @@ const processExportData = (data) => {
       processed.remaining_count = item.card_type === 'count' ? `${item.remaining_count}/${item.total_count}` : '-'
     }
 
-    // 时间字段
     if (selectedColumns.value.includes('expire_time')) {
       processed.expire_time = item.expire_time ? formatDate(item.expire_time) : (item.card_type === 'time' ? '未激活' : '-')
     }
-    if (selectedColumns.value.includes('create_time')) processed.create_time = formatDate(item.create_time) // Add create_time if needed, though not in user request list but useful
-    
-    // 类型和专属信息
+    if (selectedColumns.value.includes('create_time')) processed.create_time = formatDate(item.create_time)
+
     if (selectedColumns.value.includes('card_type')) processed.card_type = getCardTypeText(item.card_type)
-    if (selectedColumns.value.includes('status')) processed.status = getStatusText(item.status) // Status also useful
+    if (selectedColumns.value.includes('status')) processed.status = getStatusText(item.status)
     if (selectedColumns.value.includes('machine_code')) processed.machine_code = item.machine_code || '-'
     if (selectedColumns.value.includes('is_exclusive')) processed.is_exclusive = item.api_key_id ? '是' : '否'
     if (selectedColumns.value.includes('api_key_id')) processed.api_key_id = item.api_key_id || '-'
-    
+
     return processed
   })
 }
@@ -730,24 +528,19 @@ const exportData = async () => {
 
   exporting.value = true
   try {
-    // 动态导入 xlsx 库，减少初始打包体积（~400KB）
     const XLSX = await import('xlsx')
     const dataToExport = processExportData(allData)
 
-    // 创建工作簿
     const wb = XLSX.utils.book_new()
-
-    // 转换表头为中文
     const header = selectedColumns.value.map(key => getColumnLabel(key))
     const body = dataToExport.map(row => selectedColumns.value.map(key => row[key]))
 
     const ws = XLSX.utils.aoa_to_sheet([header, ...body])
     XLSX.utils.book_append_sheet(wb, ws, "卡密数据")
 
-    // 导出文件
     const fileName = `卡密导出_${new Date().toISOString().slice(0,10)}.${exportFormat.value}`
     XLSX.writeFile(wb, fileName)
-    
+
     ElMessage.success('导出成功')
     showExportModal.value = false
   } catch (error) {
@@ -799,7 +592,6 @@ const editingKey = reactive({
 const totalItems = computed(() => filteredKeys.value?.length ?? 0)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)))
 
-// 当前页显示的数据
 const paginatedKeys = computed(() => {
   const list = filteredKeys.value || []
   if (!list.length) return []
@@ -808,23 +600,19 @@ const paginatedKeys = computed(() => {
   return list.slice(start, end)
 })
 
-// 可见页码计算
 const visiblePages = computed(() => {
   const pages = []
   const total = totalPages.value
   const current = currentPage.value
-  
+
   if (total <= 7) {
-    // 总页数小于等于7，显示所有页码
     for (let i = 1; i <= total; i++) {
       pages.push(i)
     }
   } else {
-    // 总页数大于7，显示当前页前后各2页
     let start = Math.max(2, current - 2)
     let end = Math.min(total - 1, current + 2)
-    
-    // 调整范围确保显示5个页码
+
     if (end - start < 4) {
       if (start === 2) {
         end = Math.min(total - 1, start + 4)
@@ -832,31 +620,27 @@ const visiblePages = computed(() => {
         start = Math.max(2, end - 4)
       }
     }
-    
+
     for (let i = start; i <= end; i++) {
       pages.push(i)
     }
   }
-  
+
   return pages
 })
 
-// 是否显示第一页
 const showFirstPage = computed(() => {
   return totalPages.value > 7 && !visiblePages.value.includes(1)
 })
 
-// 是否显示最后一页
 const showLastPage = computed(() => {
   return totalPages.value > 7 && !visiblePages.value.includes(totalPages.value)
 })
 
-// 是否显示开始省略号
 const showStartEllipsis = computed(() => {
   return showFirstPage.value && visiblePages.value[0] > 2
 })
 
-// 是否显示结束省略号
 const showEndEllipsis = computed(() => {
   return showLastPage.value && visiblePages.value[visiblePages.value.length - 1] < totalPages.value - 1
 })
@@ -911,15 +695,13 @@ const getStatusClass = (status) => {
 }
 
 const createKeys = () => {
-  // Deep copy and clean data
   const keyData = { ...newKey }
   if (keyData.card_type === 'time') {
     keyData.total_count = 0
   }
-  
+
   emit('create-keys', keyData)
   showCreateKeyModal.value = false
-  // 重置表单
   newKey.card_type = 'time'
   newKey.count = 1
   newKey.duration = 30
@@ -954,8 +736,8 @@ const updateKey = () => {
   showEditKeyModal.value = false
 }
 
-const toggleKeyStatus = (keyId, newStatus) => {
-  emit('toggle-key-status', { id: keyId, status: newStatus })
+const toggleKeyStatus = ({ id, status }) => {
+  emit('toggle-key-status', { id, status })
 }
 
 const deleteKey = async (keyId) => {
@@ -985,266 +767,7 @@ const copyKey = async (cardKey) => {
   min-height: 100vh;
 }
 
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0;
-  padding: 2rem;
-  background: white;
-  border-bottom: 1px solid #e1e5e9;
-}
-
-.keys-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1rem 1.5rem;
-  padding: 1rem 2rem 1.25rem;
-  background: white;
-  border-bottom: 1px solid #e1e5e9;
-}
-
-.toolbar-search {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  flex: 1;
-  min-width: 220px;
-}
-
-.toolbar-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #4a5568;
-  white-space: nowrap;
-}
-
-.toolbar-input {
-  flex: 1;
-  min-width: 200px;
-  max-width: 480px;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 0.875rem;
-}
-
-.toolbar-input:focus {
-  outline: none;
-  border-color: #3182ce;
-  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15);
-}
-
-.toolbar-clear {
-  background: none;
-  border: none;
-  color: #718096;
-  font-size: 0.8125rem;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-}
-
-.toolbar-clear:hover {
-  color: #2d3748;
-  text-decoration: underline;
-}
-
-.toolbar-meta {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: #718096;
-}
-
-.toolbar-divider {
-  margin: 0 0.35rem;
-  opacity: 0.5;
-}
-
-.header-actions {
-  display: flex;
-  gap: 1rem;
-}
-
-.export-modal {
-  max-width: 800px;
-  width: 90%;
-}
-
-.export-settings {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 2rem;
-  margin-bottom: 2rem;
-}
-
-.setting-group h4 {
-  margin: 0 0 1rem 0;
-  color: #2d3748;
-  font-size: 1rem;
-}
-
-.checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 0.75rem;
-}
-
-.checkbox-label, .radio-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  color: #4a5568;
-  font-size: 0.875rem;
-}
-
-.radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.radio-group.horizontal {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.75rem 1.25rem;
-}
-
-.export-scope-group {
-  margin-bottom: 1rem;
-}
-
-.export-scope-hint {
-  margin: 0 0 0.75rem 0;
-  font-size: 0.8125rem;
-  color: #718096;
-  line-height: 1.5;
-}
-
-.preview-section {
-  border-top: 1px solid #e2e8f0;
-  padding-top: 1.5rem;
-}
-
-.preview-section h4 {
-  margin: 0 0 1rem 0;
-  color: #2d3748;
-  font-size: 1rem;
-}
-
-.preview-table-container {
-  overflow-x: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-}
-
-.preview-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.preview-table th, .preview-table td {
-  padding: 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.preview-table th {
-  background: #f7fafc;
-  font-weight: 600;
-  color: #4a5568;
-}
-
-@media (max-width: 768px) {
-  .export-settings {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-}
-
-.section-header h2 {
-  color: #2d3748;
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 600;
-}
-
-.btn-primary,
-.btn-secondary,
-.btn-danger,
-.btn-success,
-.btn-warning {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-decoration: none;
-}
-
-.btn-sm {
-  padding: 0.375rem 0.5rem;
-  font-size: 0.75rem;
-  border-radius: 4px;
-  min-width: auto;
-}
-
-.btn-primary {
-  background: #4f46e5;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #4338ca;
-  transform: translateY(-1px);
-}
-
-.btn-secondary {
-  background: #6b7280;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background: #4b5563;
-}
-
-.btn-danger {
-  background: #ef4444;
-  color: white;
-}
-
-.btn-danger:hover {
-  background: #dc2626;
-}
-
-.btn-success {
-  background: #10b981;
-  color: white;
-}
-
-.btn-success:hover {
-  background: #059669;
-}
-
-.btn-warning {
-  background: #f59e0b;
-  color: white;
-}
-
-.btn-warning:hover {
-  background: #d97706;
-}
-
+/* 表格样式 */
 .keys-table {
   overflow-x: hidden;
   background: white;
@@ -1267,14 +790,14 @@ const copyKey = async (cardKey) => {
   font-size: 0.9rem;
 }
 
-.keys-table th:nth-child(1) { width: 4%; }   /* ID */
-.keys-table th:nth-child(2) { width: 20%; }  /* 卡密 */
-.keys-table th:nth-child(3) { width: 7%; }   /* 类型 */
-.keys-table th:nth-child(4) { width: 7%; }   /* 状态 */
-.keys-table th:nth-child(5) { width: 10%; }  /* 机器码 */
-.keys-table th:nth-child(6) { width: 13%; }  /* 创建时间 */
-.keys-table th:nth-child(7) { width: 17%; }  /* 剩余时间/次数（倒计时） */
-.keys-table th:nth-child(8) { width: 22%; }  /* 操作 */
+.keys-table th:nth-child(1) { width: 4%; }
+.keys-table th:nth-child(2) { width: 20%; }
+.keys-table th:nth-child(3) { width: 7%; }
+.keys-table th:nth-child(4) { width: 7%; }
+.keys-table th:nth-child(5) { width: 10%; }
+.keys-table th:nth-child(6) { width: 13%; }
+.keys-table th:nth-child(7) { width: 17%; }
+.keys-table th:nth-child(8) { width: 22%; }
 
 .keys-table th,
 .keys-table td {
@@ -1299,48 +822,103 @@ const copyKey = async (cardKey) => {
   background: #f8fafc;
 }
 
-.key-code {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-  background: #f1f5f9;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #475569;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  display: block;
-  overflow: hidden;
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+  padding: 1.5rem 1.5rem 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #2d3748;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: #6b7280;
   cursor: pointer;
-  transition: all 0.2s;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
 }
 
-.key-code:hover {
-  background: #e2e8f0;
-  color: #2563eb;
+.close-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
 }
 
-.machine-code-cell {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.modal-body {
+  padding: 1.5rem;
 }
 
-.machine-code-tag {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-  font-size: 0.75rem;
-  background: #f0fdf4;
-  color: #15803d;
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
-  border: 1px solid #bbf7d0;
+.form-group {
+  margin-bottom: 1.5rem;
 }
 
-.machine-code-empty {
-  font-size: 0.75rem;
-  color: #a1a1aa;
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.readonly-input {
+  background: #f9fafb !important;
+  color: #6b7280 !important;
+  cursor: not-allowed !important;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 .machine-code-edit {
@@ -1359,14 +937,14 @@ const copyKey = async (cardKey) => {
   white-space: nowrap;
 }
 
-.form-hint {
-  display: block;
-  margin-top: 0.35rem;
-  font-size: 0.8rem;
-  color: #6b7280;
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 0 1.5rem 1.5rem;
 }
 
-/* 生成卡密：同机时长叠加 — 卡片 + iOS 风格开关 */
+/* 开关样式 */
 .stack-time-stack-group {
   margin-bottom: 1.5rem;
 }
@@ -1488,181 +1066,6 @@ const copyKey = async (cardKey) => {
   line-height: 1.5;
   color: #6b7280;
   font-weight: 400;
-}
-
-.duration-cell {
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.time-countdown {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-  font-variant-numeric: tabular-nums;
-  color: #0369a1;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.time-countdown.is-expired {
-  color: #b91c1c;
-}
-
-.time-spec {
-  color: #64748b;
-  font-size: 0.8125rem;
-}
-
-.card-type {
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  display: inline-block;
-}
-
-.card-type.time {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.card-type.count {
-  background: #fce7f3;
-  color: #be185d;
-}
-
-.status {
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  display: inline-block;
-}
-
-.status.unused {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status.used {
-  background: #e0f2fe;
-  color: #0c4a6e;
-}
-
-.status.disabled {
-  background: #fef2f2;
-  color: #991b1b;
-}
-
-.status.expired {
-  background: #fef2f2;
-  color: #991b1b;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.25rem;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.modal-header {
-  padding: 1.5rem 1.5rem 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-header h3 {
-  margin: 0;
-  color: #2d3748;
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 1.25rem;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.close-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-.modal-body {
-  padding: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: #374151;
-  font-size: 0.875rem;
-}
-
-.form-group input,
-.form-group select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  transition: border-color 0.2s ease;
-  box-sizing: border-box;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-}
-
-.readonly-input {
-  background: #f9fafb !important;
-  color: #6b7280 !important;
-  cursor: not-allowed !important;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  padding: 0 1.5rem 1.5rem;
 }
 
 /* 分页样式 */
@@ -1787,14 +1190,74 @@ const copyKey = async (cardKey) => {
   white-space: nowrap;
 }
 
+/* 按钮通用样式 */
+.btn-primary {
+  background: #4f46e5;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.btn-secondary:hover {
+  background: #4b5563;
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  min-width: auto;
+}
+
 /* 响应式设计 */
 @media (max-width: 1200px) {
   .keys-table {
     margin: 0 1rem 2rem;
-  }
-  
-  .section-header {
-    padding: 1.5rem 1rem;
   }
 
   .pagination-container {
@@ -1803,18 +1266,6 @@ const copyKey = async (cardKey) => {
 }
 
 @media (max-width: 768px) {
-  .section-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-    padding: 1rem;
-  }
-
-  .section-header h2 {
-    font-size: 1.5rem;
-    text-align: center;
-  }
-
   .keys-table {
     font-size: 0.875rem;
     margin: 0 0.5rem 1rem;
@@ -1824,11 +1275,6 @@ const copyKey = async (cardKey) => {
   .keys-table th,
   .keys-table td {
     padding: 0.75rem 0.5rem;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-    gap: 0.25rem;
   }
 
   .modal-content {
@@ -1885,16 +1331,12 @@ const copyKey = async (cardKey) => {
   .keys-manage-page {
     border-radius: 0;
   }
-  
-  .section-header {
-    border-radius: 0;
-  }
-  
+
   .keys-table {
     border-radius: 0;
     margin: 0 0 1rem;
   }
-  
+
   .modal-content {
     border-radius: 0;
     margin: 0;

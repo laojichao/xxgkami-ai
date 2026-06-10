@@ -107,20 +107,24 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { cardApi, statsApi, apiKeyApi, publicApi, settingsApi, maintenanceApi } from '../services/api.js'
 import { ElMessage } from 'element-plus'
 import NavigationBar from './NavigationBar.vue'
+
+// 首屏组件直接加载
 import OverviewPage from './OverviewPage.vue'
-import KeysManagePage from './KeysManagePage.vue'
-import PricingManagePage from './PricingManagePage.vue'
-import OrdersManagePage from './OrdersManagePage.vue'
-import ApiManagePage from './ApiManagePage.vue'
-import UserManagePage from './UserManagePage.vue'
-import SettingsPage from './SettingsPage.vue'
-import NotificationPage from './NotificationPage.vue'
-import MaintenanceAdmin from './MaintenanceAdmin.vue'
-import SystemInfo from './SystemInfo.vue'
+
+// 非首屏组件懒加载，减少初始打包体积
+const KeysManagePage = defineAsyncComponent(() => import('./KeysManagePage.vue'))
+const PricingManagePage = defineAsyncComponent(() => import('./PricingManagePage.vue'))
+const OrdersManagePage = defineAsyncComponent(() => import('./OrdersManagePage.vue'))
+const ApiManagePage = defineAsyncComponent(() => import('./ApiManagePage.vue'))
+const UserManagePage = defineAsyncComponent(() => import('./UserManagePage.vue'))
+const SettingsPage = defineAsyncComponent(() => import('./SettingsPage.vue'))
+const NotificationPage = defineAsyncComponent(() => import('./NotificationPage.vue'))
+const MaintenanceAdmin = defineAsyncComponent(() => import('./MaintenanceAdmin.vue'))
+const SystemInfo = defineAsyncComponent(() => import('./SystemInfo.vue'))
 
 const props = defineProps({
   userInfo: Object

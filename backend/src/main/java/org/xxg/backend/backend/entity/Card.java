@@ -64,7 +64,7 @@ public class Card {
     private Integer remainingCount = 0; // 剩余次数(次数卡使用)
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "creator_type", columnDefinition = "enum('admin','user')")
+    @Column(name = "creator_type", columnDefinition = "enum('admin','user','system')")
     private CreatorType creatorType = CreatorType.admin; // 创建者类型: admin=管理员, user=普通用户
 
     @Column(name = "creator_id")
@@ -95,8 +95,8 @@ public class Card {
     public enum VerifyMethod { web, post, get }
     /** 卡密类型枚举: time=时长卡, count=次数卡 */
     public enum CardType { time, count }
-    /** 创建者类型枚举 */
-    public enum CreatorType { admin, user }
+    /** 创建者类型枚举: admin=管理员, user=普通用户, system=系统自动生成 */
+    public enum CreatorType { admin, user, system }
 
     @Override
     public boolean equals(Object o) {

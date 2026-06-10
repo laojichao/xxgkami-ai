@@ -3,6 +3,7 @@ package com.xxgkami.android.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xxgkami.android.data.TokenStore
+import com.xxgkami.android.util.ErrorMapper
 import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.AuthApi
 import com.xxgkami.shared.model.*
@@ -67,7 +68,7 @@ class AuthViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e // 协程取消异常必须向上传播，不能吞掉
             } catch (e: Exception) {
-                _loginState.value = ApiResponse(false, e.message)
+                _loginState.value = ApiResponse(false, ErrorMapper.mapError(e))
             } finally {
                 _isLoading.value = false
             }
@@ -91,7 +92,7 @@ class AuthViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _loginState.value = ApiResponse(false, e.message)
+                _loginState.value = ApiResponse(false, ErrorMapper.mapError(e))
             } finally {
                 _isLoading.value = false
             }
@@ -134,7 +135,7 @@ class AuthViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "注册失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _isLoading.value = false
             }
@@ -156,7 +157,7 @@ class AuthViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "发送验证码失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _isLoading.value = false
             }
@@ -178,7 +179,7 @@ class AuthViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "获取用户信息失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _isLoading.value = false
             }

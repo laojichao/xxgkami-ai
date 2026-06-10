@@ -81,25 +81,31 @@ public class OrderController {
     }
 
     /**
-     * 管理员获取所有订单（支持状态筛选，分页）
+     * 管理员获取所有订单（支持多条件筛选，分页）
      * <p>GET /orders/admin/all</p>
      * <p>权限：管理员</p>
      * @param page 页码，默认0
      * @param size 每页条数，默认20
      * @param status 可选参数，按订单状态筛选
+     * @param orderNo 可选参数，按订单号模糊搜索
+     * @param username 可选参数，按用户名模糊搜索
+     * @param startDate 可选参数，按创建时间范围起始（格式 yyyy-MM-dd）
+     * @param endDate 可选参数，按创建时间范围结束（格式 yyyy-MM-dd）
      * @return 分页订单列表
      */
     @GetMapping("/admin/all")
     public ResponseEntity<ApiResponse<Page<Order>>> adminAllOrders(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String orderNo,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
         PageRequest pageRequest = PageRequest.of(page, size);
-        if (status != null && !status.isBlank()) {
-            return ResponseEntity.ok(ApiResponse.ok(orderService.getOrdersByStatus(status, pageRequest)));
-        }
-        return ResponseEntity.ok(ApiResponse.ok(orderService.getAllOrders(pageRequest)));
+        return ResponseEntity.ok(ApiResponse.ok(
+                orderService.searchOrders(status, orderNo, username, startDate, endDate, pageRequest)));
     }
 
     /**

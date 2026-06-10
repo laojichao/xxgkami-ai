@@ -682,7 +682,7 @@ export const orderApi = {
   },
 
   /**
-   * 获取所有订单（管理员）
+   * 获取所有订单（管理员，支持筛选参数）
    */
   async getAllOrders(params = {}) {
     // Filter out empty params
@@ -694,6 +694,13 @@ export const orderApi = {
     });
     const queryString = new URLSearchParams(queryParams).toString();
     return await apiRequest(`/orders/admin/all?${queryString}`);
+  },
+
+  /**
+   * 获取订单统计数据（管理员）
+   */
+  async getOrderStats() {
+    return await apiRequest('/orders/stats');
   },
 
   /**

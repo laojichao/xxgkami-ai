@@ -32,6 +32,7 @@ public class UserService {
      * @param id 用户ID
      * @return 用户实体，不存在则抛出异常
      */
+    @Transactional(readOnly = true)
     public User getUserById(Integer id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
@@ -42,6 +43,7 @@ public class UserService {
      * @param username 用户名
      * @return 用户实体，不存在则抛出异常
      */
+    @Transactional(readOnly = true)
     public User getUserByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
@@ -52,6 +54,7 @@ public class UserService {
      * @param pageable 分页参数
      * @return 用户分页结果
      */
+    @Transactional(readOnly = true)
     public Page<User> getAllUsers(Pageable pageable) {
         return userRepository.findAll(pageable);
     }
@@ -133,6 +136,7 @@ public class UserService {
      * 获取用户统计数据
      * @return 包含总用户数、活跃用户数、今日新增用户数的Map
      */
+    @Transactional(readOnly = true)
     public Map<String, Object> getUserStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalUsers", userRepository.count());

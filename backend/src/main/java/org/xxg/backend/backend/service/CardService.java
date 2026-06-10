@@ -245,6 +245,7 @@ public class CardService {
      * @param cardKey 卡密明文
      * @return 卡密实体，不存在时返回 null
      */
+    @Transactional(readOnly = true)
     public Card getCardByKey(String cardKey) {
         return cardRepository.findByCardKey(cardKey).orElse(null);
     }
@@ -257,6 +258,7 @@ public class CardService {
      * @param pageable    分页参数
      * @return 卡密分页结果
      */
+    @Transactional(readOnly = true)
     public Page<Card> getCardsByCreator(String creatorType, Integer creatorId, Pageable pageable) {
         Card.CreatorType type;
         try {
@@ -274,6 +276,7 @@ public class CardService {
      * @param creatorId   创建者 ID
      * @return 卡密列表
      */
+    @Transactional(readOnly = true)
     public List<Card> getCardsByCreator(String creatorType, Integer creatorId) {
         Card.CreatorType type;
         try {
@@ -349,6 +352,7 @@ public class CardService {
      *
      * @return 统计数据 Map
      */
+    @Transactional(readOnly = true)
     public Map<String, Object> getStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalCards", cardRepository.count());
@@ -362,49 +366,96 @@ public class CardService {
     }
 
     /**
-     * 根据订单信息生成卡密（支付回调时调用）。
-     * <p>根据订单的卡密类型、数量、规格等信息批量生成卡密，返回卡密明文列表。</p>
+     * 根据订单信息批量生成卡密（支付回调时调用）。
+     * <p>根据订单的卡密类型、数量、规格等信息批量生成卡密，
+     * 使用 saveAll() 批量插入替代逐条 save()，减少数据库往返次数。</p>
      *
      * @param order 订单实体
      * @return 生成的卡密明文（多个以逗号分隔）
      */
     @Transactional
     public String generateCardsForOrder(Order order) {
-        List<String> cardKeys = new ArrayList<>();
         int quantity = order.getQuantity() != null ? order.getQuantity() : 1;
+
+        // 预解析卡密规格，避免循环内重复解析
+        Integer duration = null;
+        Integer totalCount = null;
+        Integer days = null;
+        if ("time".equals(order.getCardType())) {
+            days = parseDaysFromSpec(order.getCardSpec());
+            duration = days * 24 * 60;
+        } else if ("count".equals(order.getCardType())) {
+            totalCount = parseCountFromSpec(order.getCardSpec());
+        }
+
+        // 收集所有待保存实体
+        List<Card> cards = new ArrayList<>(quantity);
+        List<CardCipher> ciphers = new ArrayList<>(quantity);
+        List<CardStatus> statuses = new ArrayList<>(quantity);
+        List<String> cardKeys = new ArrayList<>(quantity);
 
         for (int i = 0; i < quantity; i++) {
             try {
-                Integer duration = null;
-                Integer totalCount = null;
-                Integer days = null;
+                String cardKey = obfuscator.generateCardKey();
+                String encryptedKey = obfuscator.generateEncryptedKey(cardKey);
 
-                if ("time".equals(order.getCardType())) {
-                    // 时间卡：cardSpec 格式如 "7天" 或 "30天"
-                    days = parseDaysFromSpec(order.getCardSpec());
-                    duration = days * 24 * 60; // 转换为分钟
-                } else if ("count".equals(order.getCardType())) {
-                    // 次数卡：cardSpec 格式如 "100次"
-                    totalCount = parseCountFromSpec(order.getCardSpec());
+                // 创建加密数据
+                String aesKey = cryptoUtil.generateAesKey();
+                String iv = cryptoUtil.generateIv();
+                String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
+                String signData = cryptoUtil.hmacSign(cardKey, aesKey);
+
+                CardCipher cipher = new CardCipher();
+                cipher.setCardHash(encryptedKey);
+                cipher.setCipherData(cipherData);
+                cipher.setSignData(signData);
+                cipher.setSalt("global");
+                cipher.setIv(iv);
+                ciphers.add(cipher);
+
+                // 创建卡密状态
+                CardStatus status = new CardStatus();
+                status.setCardHash(encryptedKey);
+                status.setIsValid(true);
+                if ("time".equals(order.getCardType()) && days != null) {
+                    status.setExpireTime(LocalDateTime.now().plusDays(days));
                 }
+                if ("count".equals(order.getCardType()) && totalCount != null) {
+                    status.setTotalCount(totalCount);
+                    status.setRemainCount(totalCount);
+                }
+                statuses.add(status);
 
-                Card card = generateCard(
-                        order.getCardType(),
-                        duration,
-                        totalCount,
-                        "system",
-                        order.getUserId(),
-                        order.getUsername() != null ? order.getUsername() : "system",
-                        "web",
-                        days,
-                        null
-                );
-                cardKeys.add(card.getCardKey());
+                // 创建卡密主记录
+                Card card = new Card();
+                card.setCardKey(cardKey);
+                card.setEncryptedKey(encryptedKey);
+                card.setStatus(0);
+                card.setCreateTime(LocalDateTime.now());
+                card.setCardType(Card.CardType.valueOf(order.getCardType()));
+                card.setDuration(duration != null ? duration : 0);
+                card.setTotalCount(totalCount != null ? totalCount : 0);
+                card.setRemainingCount(totalCount != null ? totalCount : 0);
+                card.setCreatorType(Card.CreatorType.system);
+                card.setCreatorId(order.getUserId());
+                card.setCreatorName(order.getUsername() != null ? order.getUsername() : "system");
+                card.setApiKeyId(null);
+                card.setVerifyMethod(Card.VerifyMethod.web);
+                card.setEncryptionType("advanced");
+                cards.add(card);
+
+                cardKeys.add(cardKey);
             } catch (Exception e) {
                 log.error("为订单 {} 生成卡密失败: {}", order.getOrderNo(), e.getMessage(), e);
                 throw new BusinessException("卡密生成失败: " + e.getMessage());
             }
         }
+
+        // 批量插入，减少数据库往返次数
+        cardCipherRepository.saveAll(ciphers);
+        cardStatusRepository.saveAll(statuses);
+        cardRepository.saveAll(cards);
+
         return String.join(",", cardKeys);
     }
 

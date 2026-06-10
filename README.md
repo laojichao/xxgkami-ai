@@ -79,7 +79,49 @@ xxgkami-ai/
 - MySQL 8.0+
 - Node.js 18+
 
-### 1. 数据库初始化
+### 环境变量配置
+
+复制 `.env.example` 为 `.env` 并填写实际值：
+
+```bash
+cp .env.example .env
+```
+
+主要环境变量：
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `JWT_SECRET` | 是 | JWT 签名密钥，长度 >= 32 字符 |
+| `DB_PASSWORD` | 是 | MySQL root 密码 |
+| `DB_URL` | 否 | 数据库连接地址，默认 localhost:3306/kami |
+| `DB_USERNAME` | 否 | 数据库用户名，默认 root |
+| `CORS_ALLOWED_ORIGINS` | 否 | CORS 允许域名，默认 localhost:3000,5173 |
+| `MAIL_HOST/USERNAME/PASSWORD` | 否 | 邮件服务配置 |
+| `LOG_LEVEL` | 否 | 日志级别，默认 INFO |
+
+### 方式一：Docker 部署（推荐）
+
+```bash
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env，至少填写 JWT_SECRET 和 DB_PASSWORD
+
+# 2. 启动全部服务（MySQL + 后端 + Nginx 前端）
+docker compose up -d
+
+# 3. 查看日志
+docker compose logs -f backend
+
+# 4. 访问
+# 前端：http://localhost
+# API：http://localhost:8080/api
+```
+
+首次部署时 `DDL_AUTO` 默认为 `update`，会自动建表。之后建议在 `.env` 中改为 `validate`。
+
+### 方式二：手动部署
+
+#### 1. 数据库初始化
 
 ```sql
 CREATE DATABASE kami DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -87,7 +129,7 @@ CREATE DATABASE kami DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 启动后端后 JPA 会自动创建表结构（`ddl-auto=update`）。
 
-### 2. 启动后端
+#### 2. 启动后端
 
 ```bash
 cd backend
@@ -107,7 +149,7 @@ java -jar target/xxgkami-backend-1.0.2.jar
 
 后端运行在 `http://localhost:8080/api`
 
-### 3. 启动前端
+#### 3. 启动前端
 
 ```bash
 cd frontend
@@ -117,7 +159,7 @@ npm run dev
 
 前端运行在 `http://localhost:5173/`，自动代理 `/api` 到后端。
 
-### 4. 构建 Android (可选)
+#### 4. 构建 Android (可选)
 
 ```bash
 cd mobile
@@ -125,6 +167,17 @@ cd mobile
 ```
 
 APK 生成在 `mobile/androidApp/build/outputs/apk/debug/`
+
+### 健康检查
+
+服务启动后，可通过以下端点检查状态：
+
+```bash
+curl http://localhost:8080/api/system/health
+# 返回: {"status":"UP","timestamp":"..."}
+```
+
+Docker 部署时自动配置了健康检查，无需手动干预。
 
 ---
 

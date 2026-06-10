@@ -5,16 +5,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xxgkami.android.viewmodel.AuthViewModel
 import com.xxgkami.android.viewmodel.CardViewModel
+import com.xxgkami.shared.model.Card
 
 /**
  * 我的卡密列表页面
- * 展示当前用户拥有的所有卡密信息，包括卡密号、类型和状态
+ * 展示当前用户拥有的所有卡密信息，支持下拉刷新
  *
  * @param navController 页面导航控制器
  * @param viewModel 卡密ViewModel，负责加载卡密数据
@@ -27,6 +29,7 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
     val userInfo by authViewModel.userInfo.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    var isRefreshing by remember { mutableStateOf(false) }
 
     // 如果用户信息尚未加载（例如直接导航到此页面），先触发加载
     LaunchedEffect(Unit) {
@@ -39,49 +42,108 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
         userInfo?.id?.let { viewModel.loadUserCards(it) }
     }
 
-    // 卡密状态码映射为中文
-    fun statusText(status: Int?): String = when (status) {
-        0 -> "未使用"
-        1 -> "已使用"
-        2 -> "已停用"
-        else -> "未知"
+    // 监听加载状态，加载完成后关闭下拉刷新指示器
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            isRefreshing = false
+        }
     }
 
     Scaffold(topBar = { TopAppBar(title = { Text("我的卡密") }) }) { padding ->
         when {
-            isLoading -> {
-                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            isLoading && !isRefreshing -> {
+                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             }
             error != null -> {
-                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
-                        Text(error ?: "加载失败", color = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = { userInfo?.id?.let { viewModel.loadUserCards(it) } }) {
-                            Text("重试")
-                        }
-                    }
-                }
-            }
-            cards.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    Text("暂无卡密", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                CardErrorState(
+                    message = error ?: "加载失败",
+                    onRetry = { userInfo?.id?.let { viewModel.loadUserCards(it, forceRefresh = true) } },
+                    modifier = Modifier.padding(padding)
+                )
             }
             else -> {
-                LazyColumn(modifier = Modifier.padding(padding).padding(16.dp)) {
-                    items(cards, key = { card -> card.id ?: card.hashCode() }) { card ->
-                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text("卡密: ${card.cardKey ?: ""}", style = MaterialTheme.typography.bodyMedium)
-                                Text("类型: ${card.cardType ?: "未知"} | 状态: ${statusText(card.status)}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        isRefreshing = true
+                        userInfo?.id?.let { viewModel.loadUserCards(it, forceRefresh = true) }
+                    },
+                    modifier = Modifier.fillMaxSize().padding(padding)
+                ) {
+                    if (cards.isEmpty()) {
+                        CardEmptyState()
+                    } else {
+                        CardList(cards = cards)
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * 卡密列表内容
+ * @param cards 卡密数据列表
+ */
+@Composable
+private fun CardList(cards: List<Card>) {
+    LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        items(cards, key = { card -> card.id ?: card.hashCode() }) { card ->
+            CardItemCard(card = card)
+        }
+    }
+}
+
+/**
+ * 单个卡密卡片
+ * 展示卡密号、类型和状态
+ * @param card 卡密数据对象
+ */
+@Composable
+private fun CardItemCard(card: Card) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("卡密: ${card.cardKey ?: ""}", style = MaterialTheme.typography.bodyMedium)
+            Text("类型: ${card.cardType ?: "未知"} | 状态: ${statusText(card.status)}", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * 卡密空状态提示
+ */
+@Composable
+private fun CardEmptyState() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("暂无卡密", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * 卡密加载错误状态
+ * @param message 错误提示信息
+ * @param onRetry 重试回调
+ * @param modifier 修饰符
+ */
+@Composable
+private fun CardErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(message, color = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onRetry) {
+                Text("重试")
+            }
+        }
+    }
+}
+
+// 卡密状态码映射为中文
+private fun statusText(status: Int?): String = when (status) {
+    0 -> "未使用"
+    1 -> "已使用"
+    2 -> "已停用"
+    else -> "未知"
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.xxgkami.shared.api.ApiProvider
 import com.xxgkami.shared.api.CardApi
 import com.xxgkami.shared.model.*
+import com.xxgkami.android.util.ErrorMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,8 +55,8 @@ class CardViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "验证失败"
-                _verifyResult.value = CardVerifyResponse(false, e.message)
+                _error.value = ErrorMapper.mapError(e)
+                _verifyResult.value = CardVerifyResponse(false, ErrorMapper.mapError(e))
             } finally {
                 _isLoading.value = false
             }
@@ -80,7 +81,7 @@ class CardViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "加载卡密失败"
+                _error.value = ErrorMapper.mapError(e)
             } finally {
                 _isLoading.value = false
             }
@@ -100,7 +101,7 @@ class CardViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = e.message ?: "解绑失败"
+                _error.value = ErrorMapper.mapError(e)
             }
         }
     }
