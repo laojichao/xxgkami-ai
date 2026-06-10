@@ -63,8 +63,35 @@ public class AuthService {
         Admin admin = adminRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
+        // Check account lockout
+        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= 5
+                && admin.getLockTime() != null
+                && admin.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
+            throw new BusinessException("账户已锁定，请15分钟后重试");
+        }
+        // If lock has expired, reset attempts
+        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= 5
+                && admin.getLockTime() != null
+                && admin.getLockTime().plusMinutes(15).isBefore(LocalDateTime.now())) {
+            admin.setFailedLoginAttempts(0);
+            admin.setLockTime(null);
+        }
+
         if (!passwordUtil.matches(request.getPassword(), admin.getPassword())) {
+            // Record failed attempt
+            int attempts = (admin.getFailedLoginAttempts() == null ? 0 : admin.getFailedLoginAttempts()) + 1;
+            admin.setFailedLoginAttempts(attempts);
+            if (attempts >= 5) {
+                admin.setLockTime(LocalDateTime.now());
+            }
+            adminRepository.save(admin);
             throw new BusinessException("用户名或密码错误");
+        }
+
+        // Reset failed attempts on successful login
+        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() > 0) {
+            admin.setFailedLoginAttempts(0);
+            admin.setLockTime(null);
         }
 
         // 强制 TOTP 二次验证：管理员启用 TOTP 后必须提供验证码
@@ -72,7 +99,8 @@ public class AuthService {
             if (request.getTotpCode() == null || request.getTotpCode().isBlank()) {
                 throw new BusinessException("请输入 TOTP 验证码");
             }
-            if (!totpService.verifyCode(admin.getTotpSecret(), request.getTotpCode())) {
+            String decryptedSecret = totpService.decryptSecret(admin.getTotpSecret());
+            if (!totpService.verifyCode(decryptedSecret, request.getTotpCode())) {
                 throw new BusinessException("TOTP 验证码错误");
             }
         }
@@ -107,8 +135,35 @@ public class AuthService {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
+        // Check account lockout
+        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= 5
+                && user.getLockTime() != null
+                && user.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
+            throw new BusinessException("账户已锁定，请15分钟后重试");
+        }
+        // If lock has expired, reset attempts
+        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= 5
+                && user.getLockTime() != null
+                && user.getLockTime().plusMinutes(15).isBefore(LocalDateTime.now())) {
+            user.setFailedLoginAttempts(0);
+            user.setLockTime(null);
+        }
+
         if (!passwordUtil.matches(request.getPassword(), user.getPassword())) {
+            // Record failed attempt
+            int attempts = (user.getFailedLoginAttempts() == null ? 0 : user.getFailedLoginAttempts()) + 1;
+            user.setFailedLoginAttempts(attempts);
+            if (attempts >= 5) {
+                user.setLockTime(LocalDateTime.now());
+            }
+            userRepository.save(user);
             throw new BusinessException("用户名或密码错误");
+        }
+
+        // Reset failed attempts on successful login
+        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() > 0) {
+            user.setFailedLoginAttempts(0);
+            user.setLockTime(null);
         }
 
         if (!user.getStatus()) {
@@ -160,6 +215,13 @@ public class AuthService {
         if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException("验证码已过期");
         }
+        // 限制验证码尝试次数，防止暴力破解
+        if (vCode.getAttempts() != null && vCode.getAttempts() >= 5) {
+            verificationCodeRepository.delete(vCode);
+            throw new BusinessException("验证码已失效，请重新获取");
+        }
+        vCode.setAttempts((vCode.getAttempts() == null ? 0 : vCode.getAttempts()) + 1);
+        verificationCodeRepository.save(vCode);
         if (!constantTimeEquals(vCode.getCode(), request.getCode())) {
             throw new BusinessException("验证码错误");
         }
@@ -338,6 +400,13 @@ public class AuthService {
         if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException("验证码已过期");
         }
+        // 限制验证码尝试次数，防止暴力破解
+        if (vCode.getAttempts() != null && vCode.getAttempts() >= 5) {
+            verificationCodeRepository.delete(vCode);
+            throw new BusinessException("验证码已失效，请重新获取");
+        }
+        vCode.setAttempts((vCode.getAttempts() == null ? 0 : vCode.getAttempts()) + 1);
+        verificationCodeRepository.save(vCode);
         if (!constantTimeEquals(vCode.getCode(), request.getCode())) {
             throw new BusinessException("验证码错误");
         }

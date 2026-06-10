@@ -50,6 +50,12 @@ public class Admin {
     @Column(length = 100)
     private String email; // 管理员邮箱
 
+    @Column(name = "failed_login_attempts")
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "lock_time")
+    private LocalDateTime lockTime;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

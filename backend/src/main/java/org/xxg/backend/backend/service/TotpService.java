@@ -1,9 +1,15 @@
 package org.xxg.backend.backend.service;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import javax.crypto.Cipher;
 import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -14,6 +20,79 @@ import java.util.Base64;
  */
 @Service
 public class TotpService {
+
+    private static final String AES_ALGORITHM = "AES/GCM/NoPadding";
+    private static final int GCM_TAG_LENGTH = 128;
+    private static final int GCM_IV_LENGTH = 12;
+
+    /** JWT secret used to derive the AES encryption key for TOTP secrets */
+    @Value("${jwt.secret}")
+    private String jwtSecret;
+
+    /**
+     * Derive a 256-bit AES key from the JWT secret using SHA-256.
+     */
+    private SecretKey deriveAesKey() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] keyBytes = digest.digest(jwtSecret.getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(keyBytes, "AES");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to derive AES key", e);
+        }
+    }
+
+    /**
+     * Encrypt a TOTP secret using AES-GCM. The IV is prepended to the ciphertext.
+     * @param secret the plaintext TOTP secret
+     * @return Base64-encoded string (IV + ciphertext)
+     */
+    public String encryptSecret(String secret) {
+        try {
+            SecretKey key = deriveAesKey();
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            new SecureRandom().nextBytes(iv);
+            GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+
+            Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+            cipher.init(Cipher.ENCRYPT_MODE, key, gcmSpec);
+            byte[] encrypted = cipher.doFinal(secret.getBytes(StandardCharsets.UTF_8));
+
+            // Prepend IV to ciphertext
+            ByteBuffer buffer = ByteBuffer.allocate(iv.length + encrypted.length);
+            buffer.put(iv);
+            buffer.put(encrypted);
+            return Base64.getEncoder().encodeToString(buffer.array());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to encrypt TOTP secret", e);
+        }
+    }
+
+    /**
+     * Decrypt a TOTP secret that was encrypted by {@link #encryptSecret(String)}.
+     * @param encryptedSecret Base64-encoded string (IV + ciphertext)
+     * @return the plaintext TOTP secret
+     */
+    public String decryptSecret(String encryptedSecret) {
+        try {
+            SecretKey key = deriveAesKey();
+            byte[] decoded = Base64.getDecoder().decode(encryptedSecret);
+            ByteBuffer buffer = ByteBuffer.wrap(decoded);
+
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            buffer.get(iv);
+            byte[] ciphertext = new byte[buffer.remaining()];
+            buffer.get(ciphertext);
+
+            GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+            cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec);
+            byte[] decrypted = cipher.doFinal(ciphertext);
+            return new String(decrypted, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to decrypt TOTP secret", e);
+        }
+    }
 
     /**
      * 生成TOTP密钥（20字节随机数的Base64编码）

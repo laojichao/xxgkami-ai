@@ -61,6 +61,12 @@ public class User {
     @Column(name = "update_time")
     private LocalDateTime updateTime = LocalDateTime.now();
 
+    @Column(name = "failed_login_attempts")
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "lock_time")
+    private LocalDateTime lockTime;
+
     @JsonIgnore
     @Column(name = "access_token", length = 512)
     private String accessToken; // JWT访问令牌

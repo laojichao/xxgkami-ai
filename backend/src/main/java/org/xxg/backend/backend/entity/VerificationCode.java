@@ -31,4 +31,7 @@ public class VerificationCode {
 
     @Column(name = "create_time")
     private LocalDateTime createTime = LocalDateTime.now();
+
+    @Column(name = "attempts")
+    private Integer attempts = 0;
 }

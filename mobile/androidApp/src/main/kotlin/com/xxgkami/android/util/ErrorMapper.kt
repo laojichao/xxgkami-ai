@@ -1,5 +1,6 @@
 package com.xxgkami.android.util
 
+import android.util.Log
 import kotlinx.serialization.SerializationException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -24,7 +25,10 @@ object ErrorMapper {
             is UnknownHostException -> "无法连接服务器，请检查网络"
             is SerializationException -> "数据解析错误，请稍后重试"
             is java.io.IOException -> "网络异常，请检查网络连接"
-            else -> e.message ?: "未知错误"
+            else -> {
+                Log.e("ErrorMapper", "Unhandled exception: ${e.javaClass.simpleName}: ${e.message}", e)
+                "操作失败，请稍后重试"
+            }
         }
     }
 }

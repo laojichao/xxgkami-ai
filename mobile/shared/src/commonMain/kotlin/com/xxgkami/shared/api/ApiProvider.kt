@@ -9,7 +9,7 @@ import kotlinx.serialization.json.Json
  */
 object ApiProvider {
     // 全局共享的 JSON 序列化配置，避免各 API 类重复创建实例导致配置不一致
-    val json: Json = Json { ignoreUnknownKeys = true; isLenient = true }
+    val json: Json = Json { ignoreUnknownKeys = true }
 
     // 全局共享的 API 客户端实例
     val apiClient: ApiClient = ApiClient()

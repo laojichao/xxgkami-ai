@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -86,7 +87,7 @@ fun AppNavigation() {
     val navController = rememberNavController()
     // 全局登录状态，控制页面路由切换
     // 从 TokenStore 恢复登录状态，防止进程死亡后丢失登录态
-    var isLoggedIn by remember { mutableStateOf(TokenStore.isLoggedIn()) }
+    var isLoggedIn by rememberSaveable { mutableStateOf(TokenStore.isLoggedIn()) }
 
     // 根据登录状态选择起始目的地，避免启动时闪屏
     val startDestination = if (isLoggedIn) "main" else "home"

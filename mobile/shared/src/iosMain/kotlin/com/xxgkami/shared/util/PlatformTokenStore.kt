@@ -25,7 +25,7 @@ import platform.darwin.OSStatus
  * 使用 Apple Keychain Services 存储 Token，具备以下安全特性：
  * - 数据由 iOS 系统加密保护（硬件级加密）
  * - 仅本应用可访问（通过 Bundle ID 隔离）
- * - 设备锁定后首次解锁即可访问（kSecAttrAccessibleAfterFirstUnlock）
+ * - 仅在设备解锁时可访问（kSecAttrAccessibleWhenUnlockedThisDeviceOnly）
  *
  * Keychain 条目以 kSecClassGenericPassword 类型存储，
  * 以 service + account 作为唯一标识。
@@ -73,11 +73,13 @@ actual class PlatformTokenStore actual constructor() {
             kSecAttrService to service,
             kSecAttrAccount to key,
             kSecValueData to data,
-            kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible to kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrSynchronizable to false
         )
 
         val status: OSStatus = SecItemAdd(query as NSDictionary, null)
         if (status != errSecSuccess) {
+            // TODO: Replace with a proper logging framework; remove println in production builds
             println("[PlatformTokenStore] Failed to save keychain item '$key', status: $status")
         }
     }
@@ -133,6 +135,7 @@ actual class PlatformTokenStore actual constructor() {
                 String(bytes, Charsets.UTF_8)
             }
         } catch (e: Exception) {
+            // TODO: Replace with a proper logging framework; remove println in production builds
             println("[PlatformTokenStore] Failed to read keychain item '$key': ${e.message}")
             null
         }

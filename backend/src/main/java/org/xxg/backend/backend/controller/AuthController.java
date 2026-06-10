@@ -315,7 +315,7 @@ public class AuthController {
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
         String secret = totpService.generateSecret();
-        admin.setTotpSecret(secret);
+        admin.setTotpSecret(totpService.encryptSecret(secret));
         adminRepository.save(admin);
         Map<String, String> result = new HashMap<>();
         result.put("secret", secret);
@@ -340,7 +340,8 @@ public class AuthController {
             throw new BusinessException("请先设置 TOTP");
         }
         String code = body.get("code");
-        if (!totpService.verifyCode(admin.getTotpSecret(), code)) {
+        String decryptedSecret = totpService.decryptSecret(admin.getTotpSecret());
+        if (!totpService.verifyCode(decryptedSecret, code)) {
             throw new BusinessException("验证码错误");
         }
         admin.setTotpEnabled(true);
@@ -362,7 +363,8 @@ public class AuthController {
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
         String code = body.get("code");
-        if (code == null || !totpService.verifyCode(admin.getTotpSecret(), code)) {
+        String decryptedSecret = totpService.decryptSecret(admin.getTotpSecret());
+        if (code == null || !totpService.verifyCode(decryptedSecret, code)) {
             throw new BusinessException("验证码错误");
         }
         admin.setTotpEnabled(false);
@@ -422,7 +424,7 @@ public class AuthController {
      * <ul>
      *   <li>httpOnly=true: 禁止 JavaScript 读取，防止 XSS 窃取 Token</li>
      *   <li>secure=true: 仅通过 HTTPS 传输（开发环境可通过 localhost 豁免）</li>
-     *   <li>sameSite=Lax: 防止 CSRF 攻击，允许顶级导航携带 Cookie</li>
+     *   <li>sameSite=Strict: 防止 CSRF 攻击，完全禁止跨站携带 Cookie</li>
      *   <li>path: access_token 为 "/"（全局可用），refresh_token 为 "/auth/refresh"（最小权限）</li>
      * </ul>
      */
@@ -432,14 +434,14 @@ public class AuthController {
                 .secure(true)
                 .path("/")
                 .maxAge(3600)
-                .sameSite("Lax")
+                .sameSite("Strict")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", refreshToken)
                 .httpOnly(true)
                 .secure(true)
                 .path("/auth/refresh")
                 .maxAge(604800)
-                .sameSite("Lax")
+                .sameSite("Strict")
                 .build();
         response.addHeader("Set-Cookie", accessCookie.toString());
         response.addHeader("Set-Cookie", refreshCookie.toString());
@@ -455,14 +457,14 @@ public class AuthController {
                 .secure(true)
                 .path("/")
                 .maxAge(0)
-                .sameSite("Lax")
+                .sameSite("Strict")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", "")
                 .httpOnly(true)
                 .secure(true)
                 .path("/auth/refresh")
                 .maxAge(0)
-                .sameSite("Lax")
+                .sameSite("Strict")
                 .build();
         response.addHeader("Set-Cookie", accessCookie.toString());
         response.addHeader("Set-Cookie", refreshCookie.toString());

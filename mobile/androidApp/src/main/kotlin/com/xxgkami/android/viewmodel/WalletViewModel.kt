@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -52,7 +53,7 @@ class WalletViewModel : ViewModel() {
     fun loadWallet(forceRefresh: Boolean = false) {
         if (walletLoaded && !forceRefresh) return
         viewModelScope.launch {
-            _loadingCount.value++
+            _loadingCount.update { it + 1 }
             _error.value = null
             try {
                 val response = walletApi.getWallet()
@@ -63,7 +64,7 @@ class WalletViewModel : ViewModel() {
             } catch (e: Exception) {
                 _error.value = ErrorMapper.mapError(e)
             } finally {
-                _loadingCount.value--
+                _loadingCount.update { it - 1 }
             }
         }
     }
@@ -80,7 +81,7 @@ class WalletViewModel : ViewModel() {
             return
         }
         viewModelScope.launch {
-            _loadingCount.value++
+            _loadingCount.update { it + 1 }
             _error.value = null
             try {
                 val response = walletApi.recharge(amount)
@@ -90,7 +91,7 @@ class WalletViewModel : ViewModel() {
             } catch (e: Exception) {
                 _error.value = ErrorMapper.mapError(e)
             } finally {
-                _loadingCount.value--
+                _loadingCount.update { it - 1 }
             }
         }
     }
@@ -103,7 +104,7 @@ class WalletViewModel : ViewModel() {
     fun loadTransactions(forceRefresh: Boolean = false) {
         if (transactionsLoaded && !forceRefresh) return
         viewModelScope.launch {
-            _loadingCount.value++
+            _loadingCount.update { it + 1 }
             _error.value = null
             try {
                 val response = walletApi.getTransactions()
@@ -114,7 +115,7 @@ class WalletViewModel : ViewModel() {
             } catch (e: Exception) {
                 _error.value = ErrorMapper.mapError(e)
             } finally {
-                _loadingCount.value--
+                _loadingCount.update { it - 1 }
             }
         }
     }

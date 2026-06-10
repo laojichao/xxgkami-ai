@@ -263,7 +263,13 @@ const handleOAuthCallback = async () => {
           const error = urlParams.get('error') || (hashQs2 ? new URLSearchParams(hashQs2).get('error') : null);
           if (error) {
               console.error('OAuth Error from provider:', error);
-              ElMessage.error('登录失败: ' + error);
+              const errorMessages = {
+                'access_denied': '用户取消授权',
+                'invalid_token': '无效的授权令牌',
+                'token_expired': '授权已过期',
+                'server_error': '服务器错误'
+              };
+              ElMessage.error('登录失败: ' + (errorMessages[error] || '未知错误'));
               currentPage.value = 'login';
               return true;
           }
