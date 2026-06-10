@@ -698,800 +698,702 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi } from '../services/api.js'
 import UserSettingsPage from './UserSettingsPage.vue'
 
-export default {
-  name: 'UserPage',
-  components: {
-    UserSettingsPage
-  },
-  props: {
-    userInfo: {
-      type: Object,
-      default: () => ({})
+// Props 和 Emits
+const props = defineProps({
+  userInfo: {
+    type: Object,
+    default: () => ({})
+  }
+})
+
+const emit = defineEmits(['logout'])
+
+// 响应式数据
+const activeMenu = ref('dashboard')
+const drawerVisible = ref(false)
+const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(10)
+// 使用记录总数（响应式）
+const total = computed(() => usageRecords.value.length)
+
+// 用户信息 - 使用props传入的数据，并监听props变化保持同步
+const userInfo = reactive({
+  id: props.userInfo.id,
+  username: props.userInfo.username || '普通用户',
+  avatar: props.userInfo.avatar || '',
+  email: props.userInfo.email || 'user@example.com',
+  phone: props.userInfo.phone || '138****8888',
+  hasPassword: props.userInfo.hasPassword
+})
+
+// 监听 props.userInfo 变化，同步到本地 reactive 对象
+watch(() => props.userInfo, (newVal) => {
+  if (newVal) {
+    Object.assign(userInfo, {
+      id: newVal.id,
+      username: newVal.username || userInfo.username,
+      avatar: newVal.avatar || userInfo.avatar,
+      email: newVal.email || userInfo.email,
+      phone: newVal.phone || userInfo.phone,
+      hasPassword: newVal.hasPassword
+    })
+  }
+}, { deep: true })
+
+// 统计数据
+const stats = reactive({
+  totalCards: 0,
+  usedCards: 0,
+  unusedCards: 0,
+  expiredCards: 0
+})
+
+// 查询表单
+const queryForm = reactive({
+  cardKey: ''
+})
+
+// 查询结果
+const queryResult = ref(null)
+
+// 卡密详情对话框
+const cardDetailVisible = ref(false)
+const selectedCard = ref(null)
+
+// 个人资料表单
+const profileForm = reactive({
+  nickname: '',
+  email: '',
+  phone: ''
+})
+
+// 修改密码表单
+const passwordForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+const passwordLoading = ref(false)
+
+// 社交绑定
+const socialBindings = ref([])
+const loadingSocial = ref(false)
+const oauthLoginTypes = reactive({
+  qq: false,
+  wx: false,
+  alipay: false
+})
+
+// 最近使用记录
+const recentRecords = ref([])
+
+// 使用记录
+const usageRecords = ref([])
+
+// 我的卡密
+const myCards = ref([])
+
+// 购买卡密相关数据
+const timeCardOptions = ref([])
+const countCardOptions = ref([])
+const selectedTimeCard = ref(null)
+const selectedCountCard = ref(null)
+const timeCardQuantity = ref(1)
+const countCardQuantity = ref(1)
+const paymentMethod = ref('alipay')
+const purchaseHistory = ref([])
+const purchaseLoading = ref(false)
+
+// 轮询订单状态（保存 interval 引用以便组件卸载时清理）
+let pollTimer = null
+
+// 修改密码
+const handleChangePassword = async () => {
+  if (userInfo.hasPassword && !passwordForm.oldPassword) {
+    ElMessage.warning('请输入旧密码')
+    return
+  }
+  if (!passwordForm.newPassword) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+
+  passwordLoading.value = true
+  try {
+    const res = await userProfileApi.changePassword(passwordForm.oldPassword, passwordForm.newPassword)
+    if (res.success) {
+       ElMessage.success(userInfo.hasPassword ? '密码修改成功' : '密码设置成功')
+       passwordForm.oldPassword = ''
+       passwordForm.newPassword = ''
+       passwordForm.confirmPassword = ''
+       // Refresh profile to update hasPassword status
+       fetchUserProfile();
+    } else {
+       ElMessage.error(res.message || '操作失败')
     }
-  },
-  emits: ['logout'],
-  setup(props, { emit }) {
-    // 响应式数据
-    const activeMenu = ref('dashboard')
-    const drawerVisible = ref(false)
-    const loading = ref(false)
-    const currentPage = ref(1)
-    const pageSize = ref(10)
-    // 使用记录总数（响应式）
-    const total = computed(() => usageRecords.value.length)
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
+  } finally {
+    passwordLoading.value = false
+  }
+}
 
-    // 用户信息 - 使用props传入的数据，并监听props变化保持同步
-    const userInfo = reactive({
-      id: props.userInfo.id,
-      username: props.userInfo.username || '普通用户',
-      avatar: props.userInfo.avatar || '',
-      email: props.userInfo.email || 'user@example.com',
-      phone: props.userInfo.phone || '138****8888',
-      hasPassword: props.userInfo.hasPassword
-    })
+// 获取社交绑定列表
+const fetchSocialBindings = async () => {
+  loadingSocial.value = true
+  try {
+    const res = await userProfileApi.getSocialBindings()
+    if (res.success) {
+      socialBindings.value = res.data || []
+    }
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingSocial.value = false
+  }
+}
 
-    // 监听 props.userInfo 变化，同步到本地 reactive 对象
-    watch(() => props.userInfo, (newVal) => {
-      if (newVal) {
-        Object.assign(userInfo, {
-          id: newVal.id,
-          username: newVal.username || userInfo.username,
-          avatar: newVal.avatar || userInfo.avatar,
-          email: newVal.email || userInfo.email,
-          phone: newVal.phone || userInfo.phone,
-          hasPassword: newVal.hasPassword
-        })
-      }
-    }, { deep: true })
+// 获取OAuth配置
+const fetchOAuthSettings = async () => {
+   try {
+     const res = await settingsApi.getAllSettings()
+     if (res.success && res.data) {
+         const types = res.data.oauth_login_types || ''
+         oauthLoginTypes.qq = types.includes('qq')
+         oauthLoginTypes.wx = types.includes('wx')
+         oauthLoginTypes.alipay = types.includes('alipay')
+     }
+   } catch (e) {
+     console.error(e)
+   }
+}
 
-    // 统计数据
-    const stats = reactive({
-      totalCards: 0,
-      usedCards: 0,
-      unusedCards: 0,
-      expiredCards: 0
-    })
+const isBound = (type) => {
+   return socialBindings.value.some(b => b.socialType === type)
+}
 
-    // 查询表单
-    const queryForm = reactive({
-      cardKey: ''
-    })
+const handleBindSocial = (type) => {
+   sessionStorage.setItem('binding_mode', 'true');
+   const apiUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+   window.location.href = `${apiUrl}/oauth/login/${type}`;
+}
 
-    // 查询结果
-    const queryResult = ref(null)
+const handleUnbindSocial = async (type) => {
+   try {
+     await ElMessageBox.confirm('确定要解绑该账号吗？', '提示', {
+       type: 'warning',
+       confirmButtonText: '确定',
+       cancelButtonText: '取消'
+     })
+     const res = await userProfileApi.unbindSocial(type)
+     if (res.success) {
+        ElMessage.success('解绑成功')
+        fetchSocialBindings()
+     } else {
+        ElMessage.error(res.message || '解绑失败')
+     }
+   } catch (e) {
+     if (e !== 'cancel') ElMessage.error(e.message || '解绑失败')
+   }
+}
 
-    // 卡密详情对话框
-    const cardDetailVisible = ref(false)
-    const selectedCard = ref(null)
-
-    // 个人资料表单
-    const profileForm = reactive({
-      nickname: '',
-      email: '',
-      phone: ''
-    })
-
-    // 修改密码表单
-    const passwordForm = reactive({
-      oldPassword: '',
-      newPassword: '',
-      confirmPassword: ''
-    })
-    const passwordLoading = ref(false)
-
-    // 社交绑定
-    const socialBindings = ref([])
-    const loadingSocial = ref(false)
-    const oauthLoginTypes = reactive({
-      qq: false,
-      wx: false,
-      alipay: false
-    })
-
-    // 修改密码
-    const handleChangePassword = async () => {
-      if (userInfo.hasPassword && !passwordForm.oldPassword) {
-        ElMessage.warning('请输入旧密码')
-        return
-      }
-      if (!passwordForm.newPassword) {
-        ElMessage.warning('请输入新密码')
-        return
-      }
-      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-        ElMessage.warning('两次输入的密码不一致')
-        return
-      }
-      
-      passwordLoading.value = true
-      try {
-        const res = await userProfileApi.changePassword(passwordForm.oldPassword, passwordForm.newPassword)
-        if (res.success) {
-           ElMessage.success(userInfo.hasPassword ? '密码修改成功' : '密码设置成功')
-           passwordForm.oldPassword = ''
-           passwordForm.newPassword = ''
-           passwordForm.confirmPassword = ''
-           // Refresh profile to update hasPassword status
-           fetchUserProfile();
+// 获取用户资料
+const fetchUserProfile = async () => {
+    try {
+        const result = await userProfileApi.getProfile();
+        if (result && result.success && result.data) {
+            Object.assign(userInfo, result.data);
+            Object.assign(profileForm, {
+                nickname: result.data.nickname,
+                email: result.data.email,
+                phone: result.data.phone
+            });
         } else {
-           ElMessage.error(res.message || '操作失败')
+            ElMessage.error(result?.message || '获取个人信息失败');
         }
-      } catch (e) {
-        ElMessage.error(e.message || '操作失败')
-      } finally {
-        passwordLoading.value = false
-      }
+    } catch (error) {
+        console.error('Failed to fetch user profile:', error);
+        ElMessage.error('获取个人信息失败');
     }
+}
 
-    // 获取社交绑定列表
-    const fetchSocialBindings = async () => {
-      loadingSocial.value = true
-      try {
-        const res = await userProfileApi.getSocialBindings()
-        if (res.success) {
-          socialBindings.value = res.data || []
+// 更新用户资料
+const updateProfile = async () => {
+    try {
+        const result = await userProfileApi.updateProfile(profileForm);
+        if (result.success) {
+            ElMessage.success('个人信息更新成功');
+            await fetchUserProfile();
+        } else {
+            ElMessage.error(result.message || '更新失败');
         }
-      } catch (e) {
-        console.error(e)
-      } finally {
-        loadingSocial.value = false
-      }
+    } catch (error) {
+        console.error('Failed to update profile:', error);
+        ElMessage.error('更新失败');
     }
+}
 
-    // 获取OAuth配置
-    const fetchOAuthSettings = async () => {
-       try {
-         const res = await settingsApi.getAllSettings()
-         if (res.success && res.data) {
-             const types = res.data.oauth_login_types || ''
-             oauthLoginTypes.qq = types.includes('qq')
-             oauthLoginTypes.wx = types.includes('wx')
-             oauthLoginTypes.alipay = types.includes('alipay')
-         }
-       } catch (e) {
-         console.error(e)
-       }
-    }
+// 上传头像
+const handleAvatarUpload = async (file) => {
+    try {
+        const isJPG = file.raw.type === 'image/jpeg' || file.raw.type === 'image/png';
+        const isLt2M = file.raw.size / 1024 / 1024 < 2;
 
-    const isBound = (type) => {
-       return socialBindings.value.some(b => b.socialType === type)
-    }
-
-    const handleBindSocial = (type) => {
-       sessionStorage.setItem('binding_mode', 'true');
-       // Store current path to return to? App.vue usually redirects to home/user.
-       const apiUrl = import.meta.env.VITE_API_BASE_URL || '/api';
-       // We use the same login endpoint. Backend will return register token if not bound.
-       window.location.href = `${apiUrl}/oauth/login/${type}`;
-    }
-
-    const handleUnbindSocial = async (type) => {
-       try {
-         await ElMessageBox.confirm('确定要解绑该账号吗？', '提示', {
-           type: 'warning',
-           confirmButtonText: '确定',
-           cancelButtonText: '取消'
-         })
-         const res = await userProfileApi.unbindSocial(type)
-         if (res.success) {
-            ElMessage.success('解绑成功')
-            fetchSocialBindings()
-         } else {
-            ElMessage.error(res.message || '解绑失败')
-         }
-       } catch (e) {
-         if (e !== 'cancel') ElMessage.error(e.message || '解绑失败')
-       }
-    }
-
-    // 获取用户资料
-    const fetchUserProfile = async () => {
-        try {
-            const result = await userProfileApi.getProfile();
-            if (result && result.success && result.data) {
-                Object.assign(userInfo, result.data);
-                Object.assign(profileForm, {
-                    nickname: result.data.nickname,
-                    email: result.data.email,
-                    phone: result.data.phone
-                });
-            } else {
-                ElMessage.error(result?.message || '获取个人信息失败');
-            }
-        } catch (error) {
-            console.error('Failed to fetch user profile:', error);
-            ElMessage.error('获取个人信息失败');
+        if (!isJPG) {
+            ElMessage.error('上传头像图片只能是 JPG/PNG 格式!');
+            return false;
         }
-    }
-
-    // 更新用户资料
-    const updateProfile = async () => {
-        try {
-            const result = await userProfileApi.updateProfile(profileForm);
-            if (result.success) {
-                ElMessage.success('个人信息更新成功');
-                await fetchUserProfile();
-            } else {
-                ElMessage.error(result.message || '更新失败');
-            }
-        } catch (error) {
-            console.error('Failed to update profile:', error);
-            ElMessage.error('更新失败');
+        if (!isLt2M) {
+            ElMessage.error('上传头像图片大小不能超过 2MB!');
+            return false;
         }
-    }
 
-    // 上传头像
-    const handleAvatarUpload = async (file) => {
-        try {
-            const isJPG = file.raw.type === 'image/jpeg' || file.raw.type === 'image/png';
-            const isLt2M = file.raw.size / 1024 / 1024 < 2;
-
-            if (!isJPG) {
-                ElMessage.error('上传头像图片只能是 JPG/PNG 格式!');
-                return false;
-            }
-            if (!isLt2M) {
-                ElMessage.error('上传头像图片大小不能超过 2MB!');
-                return false;
-            }
-
-            const result = await userProfileApi.uploadAvatar(file.raw);
-            if (result.success) {
-                ElMessage.success('头像上传成功');
-                userInfo.avatar = result.url;
-                // update props/store if needed, here we just update local state
-                // fetchUserProfile(); // Refresh full profile to be safe
-            } else {
-                ElMessage.error(result.message || '头像上传失败');
-            }
-        } catch (error) {
-            console.error('Failed to upload avatar:', error);
-            ElMessage.error('头像上传失败');
+        const result = await userProfileApi.uploadAvatar(file.raw);
+        if (result.success) {
+            ElMessage.success('头像上传成功');
+            userInfo.avatar = result.url;
+        } else {
+            ElMessage.error(result.message || '头像上传失败');
         }
+    } catch (error) {
+        console.error('Failed to upload avatar:', error);
+        ElMessage.error('头像上传失败');
     }
+}
 
+const fetchOrders = async () => {
+    try {
+        const userId = userInfo.id || 1;
+        const timestamp = new Date().getTime();
 
-    // 最近使用记录
-    const recentRecords = ref([])
+        const [ordersResult, cardsResult] = await Promise.all([
+            orderApi.getOrders(),
+            cardApi.getUserCards(userId)
+        ]);
 
-    // 使用记录
-    const usageRecords = ref([])
+        if (Array.isArray(ordersResult)) {
+            purchaseHistory.value = ordersResult.map(order => ({
+                orderNo: order.order_id,
+                cardType: order.card_type,
+                specification: order.card_spec,
+                quantity: order.quantity,
+                totalPrice: order.total_price,
+                purchaseTime: order.purchase_time,
+                status: order.status,
+                paymentMethod: order.payment_method,
+                cardKeys: order.card_keys
+            }));
+        }
 
-    // 我的卡密
-    const myCards = ref([])
+        if (cardsResult && cardsResult.success && Array.isArray(cardsResult.data)) {
+            myCards.value = cardsResult.data.map(card => ({
+                cardKey: card.card_key,
+                status: card.status,
+                createTime: card.create_time,
+                useTime: card.use_time,
+                expireTime: card.expire_time
+            }));
 
-    // 购买卡密相关数据
-    const timeCardOptions = ref([])
-    const countCardOptions = ref([])
-    const selectedTimeCard = ref(null)
-    const selectedCountCard = ref(null)
-    const timeCardQuantity = ref(1)
-    const countCardQuantity = ref(1)
-    const paymentMethod = ref('alipay')
-    const purchaseHistory = ref([])
-    const purchaseLoading = ref(false)
+            const usedCardsList = cardsResult.data
+                .filter(card => card.status === 1);
 
-    const fetchOrders = async () => {
-        try {
-            const userId = userInfo.id || 1; // Fallback
-            const timestamp = new Date().getTime(); // Add timestamp to prevent caching
-
-            // 并行获取订单和卡密状态
-            const [ordersResult, cardsResult] = await Promise.all([
-                orderApi.getOrders(),
-                cardApi.getUserCards(userId)
-            ]);
-
-            // 处理订单数据
-            if (Array.isArray(ordersResult)) {
-                purchaseHistory.value = ordersResult.map(order => ({
-                    orderNo: order.order_id,
-                    cardType: order.card_type,
-                    specification: order.card_spec,
-                    quantity: order.quantity,
-                    totalPrice: order.total_price,
-                    purchaseTime: order.purchase_time,
-                    status: order.status,
-                    paymentMethod: order.payment_method,
-                    cardKeys: order.card_keys
-                }));
-            }
-
-            // 处理卡密数据
-            if (cardsResult && cardsResult.success && Array.isArray(cardsResult.data)) {
-                // 1. 处理所有卡密
-                myCards.value = cardsResult.data.map(card => ({
+            usageRecords.value = usedCardsList
+                .map(card => ({
                     cardKey: card.card_key,
-                    status: card.status,
-                    createTime: card.create_time,
                     useTime: card.use_time,
-                    expireTime: card.expire_time
-                }));
+                    deviceId: card.device_id || 'Unknown',
+                    ipAddress: card.ip_address || '-',
+                    status: '成功',
+                    remark: '正常使用'
+                }))
+                .sort((a, b) => new Date(b.useTime) - new Date(a.useTime));
 
-                // 2. 处理使用记录（状态为1已使用的卡密）
-                const usedCardsList = cardsResult.data
-                    .filter(card => card.status === 1);
+            stats.totalCards = cardsResult.data.length;
+            stats.usedCards = usedCardsList.length;
+            stats.unusedCards = cardsResult.data.filter(card => card.status === 0).length;
+            stats.expiredCards = cardsResult.data.filter(card => card.status === 2).length;
 
-                usageRecords.value = usedCardsList
-                    .map(card => ({
-                        cardKey: card.card_key,
-                        useTime: card.use_time,
-                        deviceId: card.device_id || 'Unknown',
-                        ipAddress: card.ip_address || '-',
-                        status: '成功', // 只要是status=1就是成功
-                        remark: '正常使用' // 暂无remark字段，默认显示
-                    }))
-                    .sort((a, b) => new Date(b.useTime) - new Date(a.useTime));
-
-                // 3. 更新仪表盘统计数据
-                stats.totalCards = cardsResult.data.length;
-                stats.usedCards = usedCardsList.length;
-                stats.unusedCards = cardsResult.data.filter(card => card.status === 0).length;
-                stats.expiredCards = cardsResult.data.filter(card => card.status === 2).length;
-
-                // 4. 更新仪表盘最近使用记录（取前5条）
-                recentRecords.value = usageRecords.value.slice(0, 5);
-            } else {
-                // 如果获取卡密详情失败，回退到从订单解析（但状态可能不准）
-                console.warn('Failed to fetch card details, falling back to orders');
-                const cards = [];
-                if (Array.isArray(ordersResult)) {
-                    ordersResult.forEach(order => {
-                        if (order.card_keys) {
-                            const keys = order.card_keys.split(',');
-                            keys.forEach(key => {
-                                cards.push({
-                                    cardKey: key,
-                                    status: 0, // 无法获取真实状态
-                                    createTime: order.purchase_time,
-                                    useTime: null,
-                                    expireTime: null 
-                                });
+            recentRecords.value = usageRecords.value.slice(0, 5);
+        } else {
+            console.warn('Failed to fetch card details, falling back to orders');
+            const cards = [];
+            if (Array.isArray(ordersResult)) {
+                ordersResult.forEach(order => {
+                    if (order.card_keys) {
+                        const keys = order.card_keys.split(',');
+                        keys.forEach(key => {
+                            cards.push({
+                                cardKey: key,
+                                status: 0,
+                                createTime: order.purchase_time,
+                                useTime: null,
+                                expireTime: null
                             });
-                        }
-                    });
-                    myCards.value = cards;
-                }
+                        });
+                    }
+                });
+                myCards.value = cards;
             }
-        } catch (e) {
-            console.error("Failed to fetch data", e);
-            ElMessage.error("获取数据失败");
         }
-    };
+    } catch (e) {
+        console.error(“Failed to fetch data”, e);
+        ElMessage.error(“获取数据失败”);
+    }
+};
 
-    const fetchPricing = async () => {
-      try {
-        const result = await pricingApi.getAllPricing();
-        if (result.success && result.data) {
-          timeCardOptions.value = result.data.timeCards || [];
-          countCardOptions.value = result.data.countCards || [];
-        }
-      } catch (e) {
-        console.error("Failed to fetch pricing", e);
-        ElMessage.error("获取定价信息失败");
-      }
+const fetchPricing = async () => {
+  try {
+    const result = await pricingApi.getAllPricing();
+    if (result.success && result.data) {
+      timeCardOptions.value = result.data.timeCards || [];
+      countCardOptions.value = result.data.countCards || [];
+    }
+  } catch (e) {
+    console.error(“Failed to fetch pricing”, e);
+    ElMessage.error(“获取定价信息失败”);
+  }
+}
+
+const pollOrderStatus = async (orderId) => {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  await fetchOrders();
+
+  const maxAttempts = 20;
+  let attempts = 0;
+
+  pollTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > maxAttempts) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      return;
     }
 
-    // 轮询订单状态（保存 interval 引用以便组件卸载时清理）
-    let pollTimer = null;
+    await fetchOrders();
 
-    const pollOrderStatus = async (orderId) => {
-      // 先清理之前的轮询（如有）
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-
-      // 立即检查一次
-      await fetchOrders();
-
-      const maxAttempts = 20; // 最多轮询20次
-      let attempts = 0;
-
-      pollTimer = setInterval(async () => {
-        attempts++;
-        if (attempts > maxAttempts) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-          return;
+    const order = purchaseHistory.value.find(o => o.orderNo === orderId);
+    if (order && order.status === 'completed') {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      ElMessageBox.alert(
+        `订单号：${order.orderNo}\n购买成功！\n\n您可以在”我的卡密”中查看和使用卡密。`,
+        '支付成功',
+        {
+          confirmButtonText: '查看卡密',
+          type: 'success',
+          callback: () => {
+            activeMenu.value = 'my-cards';
+          }
         }
+      );
+    }
+  }, 3000);
+}
 
-        await fetchOrders();
+// 组件卸载前清理轮询定时器，防止内存泄漏
+onBeforeUnmount(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+})
 
-        // 检查订单是否已完成
-        const order = purchaseHistory.value.find(o => o.orderNo === orderId);
-        if (order && order.status === 'completed') {
-          clearInterval(pollTimer);
-          pollTimer = null;
-          ElMessageBox.alert(
-            `订单号：${order.orderNo}\n购买成功！\n\n您可以在”我的卡密”中查看和使用卡密。`,
-            '支付成功',
-            {
-              confirmButtonText: '查看卡密',
-              type: 'success',
-              callback: () => {
-                activeMenu.value = 'my-cards';
-              }
-            }
-          );
-        }
-      }, 3000); // 每3秒轮询一次
+onMounted(() => {
+    fetchOrders();
+    fetchUserProfile();
+    fetchPricing();
+    fetchSocialBindings();
+    fetchOAuthSettings();
+
+    let paymentStatus = null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('payment') === 'success') {
+        paymentStatus = 'success';
     }
 
-    // 组件卸载前清理轮询定时器，防止内存泄漏
-    onBeforeUnmount(() => {
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    })
-
-    onMounted(() => {
-        fetchOrders();
-        fetchUserProfile();
-        fetchPricing();
-        fetchSocialBindings();
-        fetchOAuthSettings();
-        
-        // Check if returned from payment with success
-        // Use window.location.hash to parse params in hash mode
-        let paymentStatus = null;
-        
-        // Try getting from search query (http://example.com/?payment=success#/user)
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('payment') === 'success') {
+    if (!paymentStatus && window.location.hash.includes('?')) {
+        const hashQuery = window.location.hash.split('?')[1];
+        const hashParams = new URLSearchParams(hashQuery);
+        if (hashParams.get('payment') === 'success') {
             paymentStatus = 'success';
         }
-        
-        // Try getting from hash query (http://example.com/#/user?payment=success)
-        if (!paymentStatus && window.location.hash.includes('?')) {
-            const hashQuery = window.location.hash.split('?')[1];
-            const hashParams = new URLSearchParams(hashQuery);
-            if (hashParams.get('payment') === 'success') {
-                paymentStatus = 'success';
-            }
-        }
+    }
 
-        if (paymentStatus === 'success') {
-             // 页面加载时如果是支付回调，立即刷新并开始轮询最新订单（假设最新订单是刚支付的）
-             // 由于不知道具体 orderId，只能刷新列表。
-             // 也可以尝试获取最新 pending 订单进行轮询。
-             fetchOrders().then(() => {
-                 // 查找最近一个已完成或待处理的订单
-                 const latestOrder = purchaseHistory.value[0]; // 假设列表按时间倒序
-                 if (latestOrder) {
-                     if (latestOrder.status === 'completed') {
-                         ElMessageBox.alert(
-                            `订单号：${latestOrder.orderNo}\n购买成功！\n\n您可以在“我的卡密”中查看和使用卡密。`,
-                            '支付成功',
-                            {
-                              confirmButtonText: '查看卡密',
-                              type: 'success',
-                              callback: () => {
-                                activeMenu.value = 'my-cards';
-                              }
-                            }
-                          );
-                     } else if (latestOrder.status === 'pending') {
-                         pollOrderStatus(latestOrder.orderNo);
-                     }
+    if (paymentStatus === 'success') {
+         fetchOrders().then(() => {
+             const latestOrder = purchaseHistory.value[0];
+             if (latestOrder) {
+                 if (latestOrder.status === 'completed') {
+                     ElMessageBox.alert(
+                        `订单号：${latestOrder.orderNo}\n购买成功！\n\n您可以在”我的卡密”中查看和使用卡密。`,
+                        '支付成功',
+                        {
+                          confirmButtonText: '查看卡密',
+                          type: 'success',
+                          callback: () => {
+                            activeMenu.value = 'my-cards';
+                          }
+                        }
+                      );
+                 } else if (latestOrder.status === 'pending') {
+                     pollOrderStatus(latestOrder.orderNo);
                  }
-             });
-        }
-    })
-
-    // 方法
-    const toggleDrawer = () => {
-      drawerVisible.value = !drawerVisible.value
+             }
+         });
     }
+})
 
-    const handleMenuSelect = (index) => {
-      activeMenu.value = index
+// 方法
+const toggleDrawer = () => {
+  drawerVisible.value = !drawerVisible.value
+}
+
+const handleMenuSelect = (index) => {
+  activeMenu.value = index
+}
+
+const queryCard = async () => {
+  if (!queryForm.cardKey) {
+    ElMessage.warning('请输入卡密')
+    return
+  }
+
+  loading.value = true
+  try {
+    const result = await cardApi.queryCard(queryForm.cardKey)
+    if (result.success) {
+      queryResult.value = result.data
+      ElMessage.success('查询成功')
+    } else {
+      ElMessage.error(result.message || '查询失败')
+      queryResult.value = null
     }
+  } catch (error) {
+    console.error(error)
+    ElMessage.error(error.message || '查询失败')
+    queryResult.value = null
+  } finally {
+    loading.value = false
+  }
+}
 
-    const queryCard = async () => {
-      if (!queryForm.cardKey) {
-        ElMessage.warning('请输入卡密')
-        return
+const getStatusType = (status) => {
+  const types = { 0: 'info', 1: 'success', 2: 'danger' }
+  return types[status] || 'info'
+}
+
+const getStatusText = (status) => {
+  const texts = { 0: '未使用', 1: '已使用', 2: '已停用' }
+  return texts[status] || '未知'
+}
+
+const useCard = (card) => {
+  ElMessageBox.confirm('确定要使用这张卡密吗？', '确认使用', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    try {
+      const result = await cardApi.useCard(card.cardKey);
+      if (result.success) {
+        ElMessage.success('卡密使用成功');
+        fetchOrders();
+      } else {
+        ElMessage.error(result.message || '使用失败');
       }
-
-      loading.value = true
-      try {
-        const result = await cardApi.queryCard(queryForm.cardKey)
-        if (result.success) {
-          queryResult.value = result.data
-          ElMessage.success('查询成功')
-        } else {
-          ElMessage.error(result.message || '查询失败')
-          queryResult.value = null
-        }
-      } catch (error) {
-        console.error(error)
-        ElMessage.error(error.message || '查询失败')
-        queryResult.value = null
-      } finally {
-        loading.value = false
-      }
+    } catch (error) {
+      console.error(error);
+      ElMessage.error(error.message || '使用失败');
     }
+  })
+}
 
-    const getStatusType = (status) => {
-      const types = { 0: 'info', 1: 'success', 2: 'danger' }
-      return types[status] || 'info'
-    }
+const viewCardDetail = (card) => {
+  selectedCard.value = card
+  cardDetailVisible.value = true
+}
 
-    const getStatusText = (status) => {
-      const texts = { 0: '未使用', 1: '已使用', 2: '已停用' }
-      return texts[status] || '未知'
-    }
+const showProfile = () => {
+  activeMenu.value = 'profile'
+}
 
-    const useCard = (card) => {
-      ElMessageBox.confirm('确定要使用这张卡密吗？', '确认使用', {
-        confirmButtonText: '确定',
+const showSettings = () => {
+  activeMenu.value = 'settings'
+}
+
+const logout = () => {
+  ElMessageBox.confirm('确定要退出登录吗？', '确认退出', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    ElMessage.success('已退出登录')
+    emit('logout')
+  }).catch(() => {
+    // 用户取消退出
+  })
+}
+
+const handleSizeChange = (val) => {
+  pageSize.value = val
+  currentPage.value = 1
+}
+
+const handleCurrentChange = (val) => {
+  currentPage.value = val
+}
+
+// 分页后的使用记录
+const paginatedRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return usageRecords.value.slice(start, start + pageSize.value)
+})
+
+// 购买卡密相关方法
+const purchaseCard = async (cardType) => {
+  const selectedOption = cardType === 'time' ? selectedTimeCard.value : selectedCountCard.value
+  const quantity = cardType === 'time' ? timeCardQuantity.value : countCardQuantity.value
+
+  if (!selectedOption) {
+    ElMessage.warning('请选择卡密规格')
+    return
+  }
+
+  const option = cardType === 'time'
+    ? timeCardOptions.value.find(item => item.id === selectedOption)
+    : countCardOptions.value.find(item => item.id === selectedOption)
+
+  const totalPrice = option.price * quantity
+
+  try {
+    await ElMessageBox.confirm(
+      `确认购买 ${quantity} 张 ${option.description}？\n总价：¥${totalPrice}`,
+      '确认购买',
+      {
+        confirmButtonText: '确认支付',
         cancelButtonText: '取消',
         type: 'warning'
-      }).then(async () => {
-        try {
-          const result = await cardApi.useCard(card.cardKey);
-          if (result.success) {
-            ElMessage.success('卡密使用成功');
-            // 刷新列表以获取最新状态
-            fetchOrders();
-          } else {
-            ElMessage.error(result.message || '使用失败');
-          }
-        } catch (error) {
-          console.error(error);
-          ElMessage.error(error.message || '使用失败');
-        }
-      })
-    }
-
-    const viewCardDetail = (card) => {
-      selectedCard.value = card
-      cardDetailVisible.value = true
-    }
-
-    // Removed old updateProfile and resetProfile
-
-    const showProfile = () => {
-      activeMenu.value = 'profile'
-    }
-
-    const showSettings = () => {
-      activeMenu.value = 'settings'
-    }
-
-    const logout = () => {
-      ElMessageBox.confirm('确定要退出登录吗？', '确认退出', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(() => {
-        ElMessage.success('已退出登录')
-        emit('logout')
-      }).catch(() => {
-        // 用户取消退出
-      })
-    }
-
-    const handleSizeChange = (val) => {
-      pageSize.value = val
-      currentPage.value = 1
-    }
-
-    const handleCurrentChange = (val) => {
-      currentPage.value = val
-    }
-
-    // 分页后的使用记录
-    const paginatedRecords = computed(() => {
-      const start = (currentPage.value - 1) * pageSize.value
-      return usageRecords.value.slice(start, start + pageSize.value)
-    })
-
-    // 购买卡密相关方法
-    const purchaseCard = async (cardType) => {
-      const selectedOption = cardType === 'time' ? selectedTimeCard.value : selectedCountCard.value
-      const quantity = cardType === 'time' ? timeCardQuantity.value : countCardQuantity.value
-      
-      if (!selectedOption) {
-        ElMessage.warning('请选择卡密规格')
-        return
       }
-      
-      const option = cardType === 'time' 
-        ? timeCardOptions.value.find(item => item.id === selectedOption)
-        : countCardOptions.value.find(item => item.id === selectedOption)
-      
-      const totalPrice = option.price * quantity
-      
-      try {
-        await ElMessageBox.confirm(
-          `确认购买 ${quantity} 张 ${option.description}？\n总价：¥${totalPrice}`,
-          '确认购买',
-          {
-            confirmButtonText: '确认支付',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }
-        )
-        
-        purchaseLoading.value = true
-        ElMessage.info('正在处理支付...')
-        
-        const createOrderData = {
-          userId: userInfo.id || 1, // Fallback for dev
-          username: userInfo.username,
-          cardType: cardType,
-          cardSpec: option.description,
-          pricingId: option.id,
-          quantity: quantity,
-          paymentMethod: paymentMethod.value, 
-          email: userInfo.email
-        }
+    )
 
-        const result = await orderApi.createOrder(createOrderData)
-        
-        if (result.success) {
-          if (result.paymentUrl) {
-            // 安全校验：防止开放重定向漏洞，只允许相对路径或受信域名
-            const url = result.paymentUrl;
-            const isRelativeUrl = url.startsWith('/') && !url.startsWith('//');
-            let isTrustedUrl = isRelativeUrl;
-            if (!isRelativeUrl) {
-              try {
-                const parsed = new URL(url);
-                // 只允许当前站点同源的绝对 URL
-                isTrustedUrl = parsed.origin === window.location.origin;
-              } catch (e) {
-                isTrustedUrl = false;
-              }
-            }
-            if (!isTrustedUrl) {
-              ElMessage.error('支付链接异常，请联系管理员');
-              return;
-            }
-            ElMessage.success('订单创建成功，正在跳转支付...');
-            // 开始轮询该订单状态，防止用户在手机端支付后切回来页面未刷新
-            pollOrderStatus(result.data.order_id);
+    purchaseLoading.value = true
+    ElMessage.info('正在处理支付...')
 
-            window.location.href = url;
-            return;
-          }
-        
-          ElMessage.success(result.message)
-          // 刷新购买记录
-          await fetchOrders();
-          
-          // 重置选择
-          if (cardType === 'time') {
-            selectedTimeCard.value = null
-            timeCardQuantity.value = 1
-          } else {
-            selectedCountCard.value = null
-            countCardQuantity.value = 1
-          }
-          
-          // 显示购买成功的详细信息
-          ElMessageBox.alert(
-            `订单号：${result.data.order_id}\n购买成功！\n支付金额：¥${result.data.total_price}\n\n系统已发送订单通知邮件到您的邮箱：${userInfo.email}`,
-            '购买成功',
-            {
-              confirmButtonText: '确定',
-              type: 'success'
-            }
-          )
-        } else {
-          ElMessage.error(result.message || '购买失败')
-        }
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error(error)
-          ElMessage.error('购买过程中发生错误: ' + (error.message || '未知错误'))
-        }
-      } finally {
-        purchaseLoading.value = false
-      }
+    const createOrderData = {
+      userId: userInfo.id || 1,
+      username: userInfo.username,
+      cardType: cardType,
+      cardSpec: option.description,
+      pricingId: option.id,
+      quantity: quantity,
+      paymentMethod: paymentMethod.value,
+      email: userInfo.email
     }
 
-    const getOrderStatusType = (status) => {
-      const types = { 
-        'pending': 'warning', 
-        'paid': 'success', 
-        'completed': 'success',
-        'cancelled': 'danger',
-        'refunded': 'info'
-      }
-      return types[status] || 'info'
-    }
+    const result = await orderApi.createOrder(createOrderData)
 
-    const getOrderStatusText = (status) => {
-      const texts = { 
-        'pending': '待支付', 
-        'paid': '已支付', 
-        'completed': '已完成',
-        'cancelled': '已取消',
-        'refunded': '已退款'
-      }
-      return texts[status] || '未知'
-    }
+    if (result.success) {
+      if (result.paymentUrl) {
+        const url = result.paymentUrl;
+        const isRelativeUrl = url.startsWith('/') && !url.startsWith('//');
+        let isTrustedUrl = isRelativeUrl;
+        if (!isRelativeUrl) {
+          try {
+            const parsed = new URL(url);
+            isTrustedUrl = parsed.origin === window.location.origin;
+          } catch (e) {
+            isTrustedUrl = false;
+          }
+        }
+        if (!isTrustedUrl) {
+          ElMessage.error('支付链接异常，请联系管理员');
+          return;
+        }
+        ElMessage.success('订单创建成功，正在跳转支付...');
+        pollOrderStatus(result.data.order_id);
 
-    const viewOrderDetail = (order) => {
+        window.location.href = url;
+        return;
+      }
+
+      ElMessage.success(result.message)
+      await fetchOrders();
+
+      if (cardType === 'time') {
+        selectedTimeCard.value = null
+        timeCardQuantity.value = 1
+      } else {
+        selectedCountCard.value = null
+        countCardQuantity.value = 1
+      }
+
       ElMessageBox.alert(
-        `订单号：${order.orderNo}\n卡密类型：${order.cardType === 'time' ? '时间卡' : '次数卡'}\n规格：${order.specification}\n数量：${order.quantity}\n总价：¥${order.totalPrice}\n购买时间：${order.purchaseTime}`,
-        '订单详情',
+        `订单号：${result.data.order_id}\n购买成功！\n支付金额：¥${result.data.total_price}\n\n系统已发送订单通知邮件到您的邮箱：${userInfo.email}`,
+        '购买成功',
         {
-          confirmButtonText: '确定'
+          confirmButtonText: '确定',
+          type: 'success'
         }
       )
+    } else {
+      ElMessage.error(result.message || '购买失败')
     }
-
-    return {
-        activeMenu,
-        loading,
-        currentPage,
-        pageSize,
-        total,
-        userInfo,
-        stats,
-        queryForm,
-        queryResult,
-        cardDetailVisible,
-        selectedCard,
-        profileForm,
-        recentRecords,
-        usageRecords,
-        paginatedRecords,
-        myCards,
-        // 购买卡密相关
-        timeCardOptions,
-        countCardOptions,
-        selectedTimeCard,
-        selectedCountCard,
-        timeCardQuantity,
-        countCardQuantity,
-        paymentMethod,
-        purchaseHistory,
-        purchaseLoading,
-        handleMenuSelect,
-        queryCard,
-        getStatusType,
-        getStatusText,
-        useCard,
-        viewCardDetail,
-        updateProfile,
-        handleAvatarUpload,
-        // Password & Social
-        passwordForm,
-        passwordLoading,
-        handleChangePassword,
-        socialBindings,
-        loadingSocial,
-        oauthLoginTypes,
-        isBound,
-        handleBindSocial,
-        handleUnbindSocial,
-        
-        showProfile,
-        showSettings,
-        logout,
-        handleSizeChange,
-        handleCurrentChange,
-        // 购买卡密相关方法
-        purchaseCard,
-        getOrderStatusType,
-        getOrderStatusText,
-        viewOrderDetail,
-        toggleDrawer,
-        drawerVisible
-      }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error(error)
+      ElMessage.error('购买过程中发生错误: ' + (error.message || '未知错误'))
+    }
+  } finally {
+    purchaseLoading.value = false
   }
+}
+
+const getOrderStatusType = (status) => {
+  const types = {
+    'pending': 'warning',
+    'paid': 'success',
+    'completed': 'success',
+    'cancelled': 'danger',
+    'refunded': 'info'
+  }
+  return types[status] || 'info'
+}
+
+const getOrderStatusText = (status) => {
+  const texts = {
+    'pending': '待支付',
+    'paid': '已支付',
+    'completed': '已完成',
+    'cancelled': '已取消',
+    'refunded': '已退款'
+  }
+  return texts[status] || '未知'
+}
+
+const viewOrderDetail = (order) => {
+  ElMessageBox.alert(
+    `订单号：${order.orderNo}\n卡密类型：${order.cardType === 'time' ? '时间卡' : '次数卡'}\n规格：${order.specification}\n数量：${order.quantity}\n总价：¥${order.totalPrice}\n购买时间：${order.purchaseTime}`,
+    '订单详情',
+    {
+      confirmButtonText: '确定'
+    }
+  )
 }
 </script>
 

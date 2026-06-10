@@ -5,16 +5,14 @@ import App from './App.vue'
 // Element Plus
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import registerIcons from './utils/icons'
 
 const app = createApp(App)
 
 // 使用Element Plus
 app.use(ElementPlus)
 
-// 注册所有图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
+// 按需注册项目中使用的图标
+registerIcons(app)
 
 app.mount('#app')
