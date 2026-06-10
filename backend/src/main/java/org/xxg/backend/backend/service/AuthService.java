@@ -79,8 +79,11 @@ public class AuthService {
         String accessToken = jwtUtil.generateAccessToken(admin.getUsername(), "admin");
         String refreshToken = jwtUtil.generateRefreshToken(admin.getUsername(), "admin");
 
-        admin.setAccessToken(accessToken);
-        admin.setRefreshToken(refreshToken);
+        // 存储哈希后的 token，防止数据库泄露时明文 token 被直接利用
+        String hashedAccessToken = hashToken(accessToken);
+        String hashedRefreshToken = hashToken(refreshToken);
+        admin.setAccessToken(hashedAccessToken);
+        admin.setRefreshToken(hashedRefreshToken);
         admin.setLastLogin(LocalDateTime.now());
         adminRepository.save(admin);
 
@@ -113,8 +116,11 @@ public class AuthService {
         String accessToken = jwtUtil.generateAccessToken(user.getUsername(), "user");
         String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), "user");
 
-        user.setAccessToken(accessToken);
-        user.setRefreshToken(refreshToken);
+        // 存储哈希后的 token，防止数据库泄露时明文 token 被直接利用
+        String hashedAccessToken = hashToken(accessToken);
+        String hashedRefreshToken = hashToken(refreshToken);
+        user.setAccessToken(hashedAccessToken);
+        user.setRefreshToken(hashedRefreshToken);
         user.setLastLoginTime(LocalDateTime.now());
         user.setLoginCount(user.getLoginCount() + 1);
         userRepository.save(user);
@@ -202,17 +208,18 @@ public class AuthService {
         String username = jwtUtil.extractUsername(refreshToken);
         String role = jwtUtil.extractRole(refreshToken);
 
-        // 验证 refresh token 是否与数据库中存储的一致，防止已失效的 token 被重复使用
+        // 验证 refresh token 是否与数据库中存储的哈希值一致，防止已失效的 token 被重复使用
+        String hashedRefreshToken = hashToken(refreshToken);
         if ("admin".equals(role)) {
             Admin admin = adminRepository.findByUsername(username).orElse(null);
             if (admin == null || admin.getRefreshToken() == null
-                    || !admin.getRefreshToken().equals(refreshToken)) {
+                    || !admin.getRefreshToken().equals(hashedRefreshToken)) {
                 throw new BusinessException("Refresh token 已失效，请重新登录");
             }
         } else {
             User user = userRepository.findByUsername(username).orElse(null);
             if (user == null || user.getRefreshToken() == null
-                    || !user.getRefreshToken().equals(refreshToken)) {
+                    || !user.getRefreshToken().equals(hashedRefreshToken)) {
                 throw new BusinessException("Refresh token 已失效，请重新登录");
             }
         }
@@ -220,20 +227,20 @@ public class AuthService {
         String newAccessToken = jwtUtil.generateAccessToken(username, role);
         String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
 
-        // 更新数据库中的 token，使旧 refresh token 失效
+        // 更新数据库中的哈希 token，使旧 refresh token 失效
         // 复用前面已查询的用户对象，避免重复查询数据库
         if ("admin".equals(role)) {
             Admin admin = adminRepository.findByUsername(username).orElse(null);
             if (admin != null) {
-                admin.setAccessToken(newAccessToken);
-                admin.setRefreshToken(newRefreshToken);
+                admin.setAccessToken(hashToken(newAccessToken));
+                admin.setRefreshToken(hashToken(newRefreshToken));
                 adminRepository.save(admin);
             }
         } else {
             User user = userRepository.findByUsername(username).orElse(null);
             if (user != null) {
-                user.setAccessToken(newAccessToken);
-                user.setRefreshToken(newRefreshToken);
+                user.setAccessToken(hashToken(newAccessToken));
+                user.setRefreshToken(hashToken(newRefreshToken));
                 userRepository.save(user);
             }
         }
@@ -323,5 +330,19 @@ public class AuthService {
         return MessageDigest.isEqual(
                 a.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 b.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 对 JWT token 进行 SHA-256 哈希，用于数据库存储。
+     * 避免数据库泄露时明文 token 直接被利用，提升会话安全性。
+     */
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.Base64.getEncoder().encodeToString(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("Token hashing failed", e);
+        }
     }
 }

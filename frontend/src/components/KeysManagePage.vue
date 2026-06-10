@@ -518,6 +518,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { cardApi } from '../services/api.js'
+import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
 
 const props = defineProps({
@@ -627,7 +628,7 @@ const obfuscateCardKey = (rawKey) => {
     const base64 = btoa(reversed)
     return base64.replace(/e/g, '*').replace(/U/g, '-')
   } catch (e) {
-    console.error('Obfuscation failed:', e)
+    logger.error('Obfuscation failed:', e)
     return rawKey
   }
 }
@@ -750,7 +751,7 @@ const exportData = async () => {
     ElMessage.success('导出成功')
     showExportModal.value = false
   } catch (error) {
-    console.error('Export failed:', error)
+    logger.error('Export failed:', error)
     ElMessage.error('导出失败')
   } finally {
     exporting.value = false

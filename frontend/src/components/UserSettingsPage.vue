@@ -45,6 +45,7 @@ import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { authApi } from '../services/api'
+import logger from '../utils/logger'
 
 /** 二维码弹窗是否可见 */
 const qrDialogVisible = ref(false)
@@ -82,7 +83,7 @@ const showBindQRCode = async () => {
         protocol = url.protocol.replace(':', '')
         baseUrl = siteUrl
       } catch (e) {
-        console.warn('Invalid siteUrl format:', siteUrl)
+        logger.warn('Invalid siteUrl format:', siteUrl)
       }
     }
     
@@ -125,7 +126,7 @@ const showBindQRCode = async () => {
     })
     
   } catch (error) {
-    console.error('生成二维码失败:', error)
+    logger.error('生成二维码失败:', error)
     ElMessage.error(error.message || '生成二维码失败，请重试')
     qrDialogVisible.value = false
   }

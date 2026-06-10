@@ -1,4 +1,5 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
+import logger from '../utils/logger'
 
 // API服务配置
 // 优先使用环境变量中的配置，如果没有则根据环境自动判断
@@ -192,7 +193,7 @@ async function apiRequest(endpoint, options = {}) {
       return { success: true, data: text, message: text };
     }
   } catch (error) {
-    console.error('API request failed:', error);
+    logger.error('API request failed:', error);
     throw error;
   }
 }
