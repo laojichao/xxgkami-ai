@@ -1,6 +1,7 @@
 package org.xxg.backend.backend.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
 import org.xxg.backend.backend.service.OnlineUserService;
@@ -34,12 +35,14 @@ public class OnlineUserController {
      * 用户登录上线
      * <p>POST /online/login</p>
      * <p>权限：已认证用户</p>
-     * @param body 请求体，包含 username 字段
+     * <p>安全修复：从 Authentication 对象获取用户名，防止身份伪造</p>
+     * @param auth 当前认证信息
      * @return 操作结果
      */
     @PostMapping("/online/login")
-    public ResponseEntity<ApiResponse<Void>> userLogin(@RequestBody Map<String, String> body) {
-        service.userOnline(body.getOrDefault("username", "unknown"));
+    public ResponseEntity<ApiResponse<Void>> userLogin(Authentication auth) {
+        String username = (auth != null) ? auth.getName() : "unknown";
+        service.userOnline(username);
         return ResponseEntity.ok(ApiResponse.ok("用户上线"));
     }
 
@@ -47,12 +50,14 @@ public class OnlineUserController {
      * 用户登出下线
      * <p>POST /online/logout</p>
      * <p>权限：已认证用户</p>
-     * @param body 请求体，包含 username 字段
+     * <p>安全修复：从 Authentication 对象获取用户名，防止身份伪造</p>
+     * @param auth 当前认证信息
      * @return 操作结果
      */
     @PostMapping("/online/logout")
-    public ResponseEntity<ApiResponse<Void>> userLogout(@RequestBody Map<String, String> body) {
-        service.userOffline(body.getOrDefault("username", "unknown"));
+    public ResponseEntity<ApiResponse<Void>> userLogout(Authentication auth) {
+        String username = (auth != null) ? auth.getName() : "unknown";
+        service.userOffline(username);
         return ResponseEntity.ok(ApiResponse.ok("用户下线"));
     }
 
@@ -60,13 +65,14 @@ public class OnlineUserController {
      * 用户心跳保活
      * <p>POST /online/heartbeat</p>
      * <p>权限：已认证用户</p>
-     * <p>客户端定期调用此接口维持在线状态，超时未心跳将自动标记为离线。</p>
-     * @param body 请求体，包含 username 字段
+     * <p>安全修复：从 Authentication 对象获取用户名，防止身份伪造</p>
+     * @param auth 当前认证信息
      * @return 操作结果
      */
     @PostMapping("/online/heartbeat")
-    public ResponseEntity<ApiResponse<Void>> heartbeat(@RequestBody Map<String, String> body) {
-        service.userOnline(body.getOrDefault("username", "unknown"));
+    public ResponseEntity<ApiResponse<Void>> heartbeat(Authentication auth) {
+        String username = (auth != null) ? auth.getName() : "unknown";
+        service.userOnline(username);
         return ResponseEntity.ok(ApiResponse.ok("心跳更新"));
     }
 

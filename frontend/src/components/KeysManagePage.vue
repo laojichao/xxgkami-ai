@@ -517,7 +517,6 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import * as XLSX from 'xlsx'
 import { cardApi } from '../services/api.js'
 import { copyToClipboard } from '../utils/clipboard.js'
 
@@ -730,18 +729,20 @@ const exportData = async () => {
 
   exporting.value = true
   try {
+    // 动态导入 xlsx 库，减少初始打包体积（~400KB）
+    const XLSX = await import('xlsx')
     const dataToExport = processExportData(allData)
-    
+
     // 创建工作簿
     const wb = XLSX.utils.book_new()
-    
+
     // 转换表头为中文
     const header = selectedColumns.value.map(key => getColumnLabel(key))
     const body = dataToExport.map(row => selectedColumns.value.map(key => row[key]))
-    
+
     const ws = XLSX.utils.aoa_to_sheet([header, ...body])
     XLSX.utils.book_append_sheet(wb, ws, "卡密数据")
-    
+
     // 导出文件
     const fileName = `卡密导出_${new Date().toISOString().slice(0,10)}.${exportFormat.value}`
     XLSX.writeFile(wb, fileName)

@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
@@ -54,6 +55,7 @@ public class Order {
     @Column(name = "pay_time")
     private LocalDateTime payTime; // 支付完成时间
 
+    @JsonIgnore
     @Column(name = "card_keys", columnDefinition = "TEXT")
     private String cardKeys; // 购买的卡密内容(支付成功后填充, JSON格式)
 }

@@ -60,7 +60,15 @@ public class WalletService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("充值金额必须大于0");
         }
-        Wallet wallet = getOrCreateWallet(userId);
+        // 使用悲观锁防止并发充值导致余额计算错误（与 consume 方法保持一致）
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseGet(() -> {
+                    Wallet w = new Wallet();
+                    w.setUserId(userId);
+                    w.setBalance(BigDecimal.ZERO);
+                    return walletRepository.save(w);
+                });
+        entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
         wallet.setBalance(wallet.getBalance().add(amount));
         wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
         wallet.setUpdateTime(LocalDateTime.now());

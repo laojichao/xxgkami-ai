@@ -488,10 +488,10 @@ const stats = computed(() => {
 const getOrders = async () => {
   loading.value = true
   try {
-    // 后端仅支持 page/size/status 筛选，其他筛选参数在前端处理
+    // 使用合理的分页大小，避免一次性加载过多数据导致性能问题
     const params = {
       page: 0,
-      size: 9999,
+      size: 200,
       status: searchParams.status === 'all' ? '' : searchParams.status
     }
 

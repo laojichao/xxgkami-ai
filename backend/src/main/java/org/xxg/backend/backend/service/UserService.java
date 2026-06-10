@@ -44,7 +44,7 @@ public class UserService {
      */
     public User getUserByUsername(String username) {
         return userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException("用户不存在: " + username));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
     }
 
     /**

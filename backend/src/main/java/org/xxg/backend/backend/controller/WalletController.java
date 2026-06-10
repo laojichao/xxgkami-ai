@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.controller;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -78,16 +80,22 @@ public class WalletController {
     }
 
     /**
-     * 获取当前用户的交易记录
+     * 获取当前用户的交易记录（分页）
      * <p>GET /wallet/transactions</p>
      * <p>权限：已认证用户</p>
      * @param auth Spring Security认证对象，用于获取当前用户ID
-     * @return 该用户的钱包交易记录列表
+     * @param page 页码，默认0
+     * @param size 每页条数，默认20
+     * @return 该用户的钱包交易记录分页结果
      */
     @GetMapping("/transactions")
-    public ResponseEntity<ApiResponse<List<WalletTransaction>>> getTransactions(Authentication auth) {
+    public ResponseEntity<ApiResponse<Page<WalletTransaction>>> getTransactions(
+            Authentication auth,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         Integer userId = userRepository.findByUsername(auth.getName())
                 .orElseThrow(() -> new org.xxg.backend.backend.exception.BusinessException("用户不存在")).getId();
-        return ResponseEntity.ok(ApiResponse.ok(walletService.getTransactions(userId)));
+        size = Math.min(size, 100); // 防止过大的分页请求
+        return ResponseEntity.ok(ApiResponse.ok(walletService.getTransactions(userId, PageRequest.of(page, size))));
     }
 }

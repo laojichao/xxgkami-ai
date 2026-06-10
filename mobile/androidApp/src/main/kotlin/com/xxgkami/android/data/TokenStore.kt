@@ -2,12 +2,15 @@ package com.xxgkami.android.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.xxgkami.shared.api.ApiProvider
 
 object TokenStore {
+    private const val TAG = "TokenStore"
     private const val PREFS_NAME = "xxgkami_auth_encrypted"
+    private const val PREFS_NAME_FALLBACK = "xxgkami_auth_fallback"
     private const val KEY_ACCESS_TOKEN = "access_token"
     private const val KEY_REFRESH_TOKEN = "refresh_token"
     private const val KEY_USERNAME = "username"
@@ -17,17 +20,24 @@ object TokenStore {
 
     fun init(context: Context) {
         // 使用 EncryptedSharedPreferences 加密存储 Token，防止 root 设备提取明文
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        // 添加 try-catch 降级处理：部分设备（三星/华为等）可能出现 GeneralSecurityException
+        prefs = try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
 
-        prefs = EncryptedSharedPreferences.create(
-            context,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+            EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // 加密存储初始化失败，降级使用普通 SharedPreferences
+            Log.w(TAG, "EncryptedSharedPreferences init failed, falling back to plain storage", e)
+            context.getSharedPreferences(PREFS_NAME_FALLBACK, Context.MODE_PRIVATE)
+        }
 
         // Restore tokens from storage
         val accessToken = prefs?.getString(KEY_ACCESS_TOKEN, null)

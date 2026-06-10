@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.controller;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
@@ -20,6 +21,12 @@ import java.util.*;
 @RequestMapping("/monitor")
 public class MonitorController {
     private final OnlineUserService onlineUserService;
+
+    @Value("${app.version:1.0.2}")
+    private String appVersion;
+
+    @Value("${app.repo-url:https://github.com/user/xxgkami-ai}")
+    private String repoUrl;
 
     public MonitorController(OnlineUserService onlineUserService) {
         this.onlineUserService = onlineUserService;
@@ -151,11 +158,11 @@ public class MonitorController {
     public ResponseEntity<Map<String, Object>> checkUpdate() {
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
-        result.put("version", "1.0.2");
-        result.put("repoUrl", "https://github.com/user/xxgkami-ai");
+        result.put("version", appVersion);
+        result.put("repoUrl", repoUrl);
         Map<String, String> scripts = new HashMap<>();
-        scripts.put("cn", "curl -sSL https://raw.githubusercontent.com/user/xxgkami-ai/main/install.sh | bash");
-        scripts.put("global", "curl -sSL https://raw.githubusercontent.com/user/xxgkami-ai/main/install.sh | bash");
+        scripts.put("cn", "curl -sSL " + repoUrl + "/raw/main/install.sh | bash");
+        scripts.put("global", "curl -sSL " + repoUrl + "/raw/main/install.sh | bash");
         result.put("updateScripts", scripts);
         return ResponseEntity.ok(result);
     }

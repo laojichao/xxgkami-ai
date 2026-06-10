@@ -165,7 +165,7 @@ public class AuthController {
      */
     @GetMapping("/user/info")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getUserInfo(Authentication auth) {
-        if (auth == null) return ResponseEntity.ok(ApiResponse.error("未登录"));
+        if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         // 先查用户表，再查管理员表，兼容两种角色
         User user = userRepository.findByUsername(username).orElse(null);

@@ -12,8 +12,8 @@ import kotlinx.serialization.json.buildJsonObject
  * @param client HTTP客户端实例
  */
 class WalletApi(private val client: ApiClient) {
-    // JSON解析器
-    private val json = Json { ignoreUnknownKeys = true }
+    // 使用全局共享的 JSON 解析器，保持配置一致性
+    private val json = ApiProvider.json
 
     /** 获取用户钱包信息 */
     suspend fun getWallet(): ApiResponse<Wallet> {

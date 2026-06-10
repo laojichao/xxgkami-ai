@@ -30,9 +30,9 @@ import kotlinx.serialization.json.jsonPrimitive
  * @property onLogout Token 刷新失败后的登出回调，用于清理本地状态
  */
 class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
-    var token: String? = null
+    @Volatile var token: String? = null
         private set
-    var refreshToken: String? = null
+    @Volatile var refreshToken: String? = null
         private set
     var onTokenRefreshed: ((newToken: String, newRefreshToken: String) -> Unit)? = null
     var onLogout: (() -> Unit)? = null
@@ -43,8 +43,8 @@ class ApiClient(var baseUrl: String = "http://10.0.2.2:8080/api") {
     /** JSON 序列化配置：忽略未知字段、宽松模式 */
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    /** Ktor HTTP 客户端实例，配置了 JSON 内容协商和请求超时 */
-    val httpClient = HttpClient {
+    /** Ktor HTTP 客户端实例，配置了 JSON 内容协商和请求超时。private 防止外部绕过 Token 注入逻辑 */
+    private val httpClient = HttpClient {
         // 安装 JSON 内容协商插件，自动处理请求/响应的 JSON 序列化
         install(ContentNegotiation) {
             json(json)

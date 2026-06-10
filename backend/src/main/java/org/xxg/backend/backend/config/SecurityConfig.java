@@ -82,6 +82,8 @@ public class SecurityConfig {
                         "/system/**", "/orders/admin/**",
                         "/user/admin/**", "/user/stats",
                         "/actuator/**").hasRole("ADMIN")
+                // === 在线用户接口：需认证（防止未登录用户伪造上线状态） ===
+                .requestMatchers("/online/login", "/online/logout", "/online/heartbeat").authenticated()
                 // === 用户接口 ===
                 .requestMatchers("/user/profile", "/user/password", "/user/avatar",
                         "/user/social/**", "/wallet/**", "/orders").hasAnyRole("USER", "ADMIN")

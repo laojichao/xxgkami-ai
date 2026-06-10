@@ -122,7 +122,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         // 敏感认证接口限流：同一IP每分钟最多5次（防止邮箱轰炸和验证码暴力破解）
         if (uri.contains("/auth/register") || uri.contains("/auth/email-code")
-                || uri.contains("/auth/reset-code") || uri.contains("/auth/reset-password")) {
+                || uri.contains("/auth/reset-code") || uri.contains("/auth/reset-password")
+                || uri.contains("/auth/totp/enable") || uri.contains("/auth/totp/disable")
+                || uri.contains("/auth/totp/setup")) {
             if (!tryAcquire(sensitiveAttempts, clientIp, SENSITIVE_MAX_REQUESTS, SENSITIVE_WINDOW_SECONDS)) {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setContentType("application/json;charset=UTF-8");

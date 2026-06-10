@@ -13,8 +13,8 @@ import kotlinx.serialization.json.buildJsonObject
  * @param client HTTP客户端实例
  */
 class AuthApi(private val client: ApiClient) {
-    // JSON解析器，忽略未知字段以兼容后端返回格式变化
-    private val json = Json { ignoreUnknownKeys = true }
+    // 使用全局共享的 JSON 解析器，保持配置一致性
+    private val json = ApiProvider.json
 
     /** 管理员登录 */
     suspend fun adminLogin(request: LoginRequest): ApiResponse<LoginResponse> {

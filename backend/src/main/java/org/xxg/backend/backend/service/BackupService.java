@@ -19,11 +19,12 @@ public class BackupService {
     private String dbUser;
     @Value("${spring.datasource.password:}")
     private String dbPass;
+    @Value("${backup.dir:${user.home}/backups}")
+    private String backupDir;
 
     public String backup() throws Exception {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         String filename = "backup_" + timestamp + ".sql";
-        String backupDir = System.getProperty("user.home") + "/backups";
         new File(backupDir).mkdirs();
 
         // Validate dbUser to prevent command injection

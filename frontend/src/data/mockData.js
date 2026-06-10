@@ -590,27 +590,27 @@ export const mockDeleteKey = (keyId) => {
   })
 }
 
-// API密钥数据 (基于 api_keys 表)
+// API密钥数据 (基于 api_keys 表) — 使用占位符，不包含真实密钥
 export const mockApiKeys = [
   {
     id: 3,
-    key_name: '123',
-    api_key: '8WAD3TN9YCUZivmDAdicvYs5Q7Hj0zcB',
+    key_name: '示例密钥1',
+    api_key: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     status: 1,
     create_time: '2025-05-13 15:44:55',
     last_use_time: '2025-05-13 17:42:27',
     use_count: 5,
-    description: '123'
+    description: '测试用途'
   },
   {
     id: 4,
-    key_name: '456',
-    api_key: '1jTQXXpBBRMgdPjv63QpU29k4tUwCY78',
+    key_name: '示例密钥2',
+    api_key: 'sk-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy',
     status: 1,
     create_time: '2025-05-13 16:56:51',
     last_use_time: null,
     use_count: 0,
-    description: '456'
+    description: '测试用途'
   }
 ]
 
@@ -623,7 +623,7 @@ export const mockSettings = {
   contact_wechat_qr: 'assets/images/wechat-qr.jpg',
   contact_email: 'support@example.com',
   api_enabled: '1',
-  api_key: 'c3d01e574865a180a20f71c4a0e41c07'
+  api_key: 'sk-placeholder-api-key-not-real'
 }
 
 // 轮播图数据 (基于 slides 表)

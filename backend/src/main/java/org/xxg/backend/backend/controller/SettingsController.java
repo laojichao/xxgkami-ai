@@ -30,23 +30,37 @@ public class SettingsController {
         return getAllSettings();
     }
 
+    // 敏感字段关键字列表 — 包含这些关键字的配置项都会被脱敏（白名单模式，新增配置自动受保护）
+    private static final String[] SENSITIVE_KEYWORDS = {
+        "key", "secret", "password", "token", "credential", "private"
+    };
+
     @GetMapping("/all")
     public ResponseEntity<ApiResponse<Map<String, String>>> getAllSettings() {
         Map<String, String> settings = settingsService.getAllSettings();
-        // 脱敏处理：掩码已知的敏感字段
-        maskSensitiveField(settings, "epay_key");
-        maskSensitiveField(settings, "mail_password");
-        maskSensitiveField(settings, "smtp_password");
-        maskSensitiveField(settings, "secret");
-        maskSensitiveField(settings, "jwt_secret");
+        // 脱敏处理：遍历所有配置项，包含敏感关键字的字段自动脱敏
+        for (Map.Entry<String, String> entry : settings.entrySet()) {
+            if (isSensitiveKey(entry.getKey())) {
+                entry.setValue(maskValue(entry.getValue()));
+            }
+        }
         return ResponseEntity.ok(ApiResponse.ok(settings));
     }
 
-    private void maskSensitiveField(Map<String, String> settings, String key) {
-        String value = settings.get(key);
-        if (value != null && !value.isEmpty() && value.length() > 4) {
-            settings.put(key, value.substring(0, 2) + "****" + value.substring(value.length() - 2));
+    /** 判断配置项名称是否包含敏感关键字（不区分大小写） */
+    private boolean isSensitiveKey(String key) {
+        String lowerKey = key.toLowerCase();
+        for (String keyword : SENSITIVE_KEYWORDS) {
+            if (lowerKey.contains(keyword)) return true;
         }
+        return false;
+    }
+
+    /** 对敏感值进行脱敏：保留首尾各2字符，中间用****替代 */
+    private String maskValue(String value) {
+        if (value == null || value.isEmpty()) return value;
+        if (value.length() <= 4) return "****";
+        return value.substring(0, 2) + "****" + value.substring(value.length() - 2);
     }
 
     @PutMapping

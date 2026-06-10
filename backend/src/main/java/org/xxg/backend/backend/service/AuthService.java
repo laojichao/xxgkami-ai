@@ -60,10 +60,10 @@ public class AuthService {
 
     public LoginResponse adminLogin(LoginRequest request) {
         Admin admin = adminRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException("管理员不存在"));
+                .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
         if (!passwordUtil.matches(request.getPassword(), admin.getPassword())) {
-            throw new BusinessException("密码错误");
+            throw new BusinessException("用户名或密码错误");
         }
 
         // 强制 TOTP 二次验证：管理员启用 TOTP 后必须提供验证码
@@ -100,10 +100,10 @@ public class AuthService {
 
     public LoginResponse userLogin(LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
         if (!passwordUtil.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException("密码错误");
+            throw new BusinessException("用户名或密码错误");
         }
 
         if (!user.getStatus()) {
@@ -221,18 +221,21 @@ public class AuthService {
         String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
 
         // 更新数据库中的 token，使旧 refresh token 失效
+        // 复用前面已查询的用户对象，避免重复查询数据库
         if ("admin".equals(role)) {
-            adminRepository.findByUsername(username).ifPresent(admin -> {
+            Admin admin = adminRepository.findByUsername(username).orElse(null);
+            if (admin != null) {
                 admin.setAccessToken(newAccessToken);
                 admin.setRefreshToken(newRefreshToken);
                 adminRepository.save(admin);
-            });
+            }
         } else {
-            userRepository.findByUsername(username).ifPresent(user -> {
+            User user = userRepository.findByUsername(username).orElse(null);
+            if (user != null) {
                 user.setAccessToken(newAccessToken);
                 user.setRefreshToken(newRefreshToken);
                 userRepository.save(user);
-            });
+            }
         }
 
         Map<String, Object> userInfo = new HashMap<>();

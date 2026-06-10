@@ -98,8 +98,10 @@ const showBindQRCode = async () => {
     
     const jsonString = JSON.stringify(data)
 
-    // AES加密 — 使用随机 IV 增强安全性，防止相同明文产生相同密文
-    const key = CryptoJS.enc.Utf8.parse('xxgyyds-github-1')
+    // AES加密 — 使用从绑定Token派生的密钥，避免硬编码密钥泄露
+    // 通过 SHA256(token + salt) 派生 16 字节密钥，每次绑定密钥不同
+    const derivedKey = CryptoJS.SHA256(token + ':xxgkami-bind-salt').toString(CryptoJS.enc.Hex).substring(0, 32)
+    const key = CryptoJS.enc.Utf8.parse(derivedKey)
     const iv = CryptoJS.lib.WordArray.random(16)
 
     const encrypted = CryptoJS.AES.encrypt(jsonString, key, {

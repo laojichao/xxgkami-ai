@@ -765,7 +765,7 @@ export const apiKeyApi = {
   },
 
   async getAllUsers() {
-    return await apiRequest('/admin/users?size=9999');
+    return await apiRequest('/admin/users?size=500');
   }
 };
 

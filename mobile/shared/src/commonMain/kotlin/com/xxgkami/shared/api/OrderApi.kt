@@ -10,8 +10,8 @@ import kotlinx.serialization.json.Json
  * @param client HTTP客户端实例
  */
 class OrderApi(private val client: ApiClient) {
-    // JSON解析器
-    private val json = Json { ignoreUnknownKeys = true }
+    // 使用全局共享的 JSON 解析器，保持配置一致性
+    private val json = ApiProvider.json
 
     /** 获取当前用户的订单列表 */
     suspend fun getMyOrders(): ApiResponse<List<Order>> {

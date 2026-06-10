@@ -80,10 +80,10 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 onClick = {
                     val userId = userInfo?.id ?: 0
                     val role = userInfo?.role ?: "user"
-                    // 先清除本地 Token 并导航，服务端登出在后台完成（fire-and-forget）
-                    // 即使服务端请求失败也不影响本地状态清理
-                    onLogout()
+                    // 修复：先发起服务端登出请求（此时 token 仍有效），再清理本地状态并导航
+                    // 原代码先清理 token 导致服务端请求因无 token 而失败
                     authViewModel.logout(userId, role)
+                    onLogout()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
