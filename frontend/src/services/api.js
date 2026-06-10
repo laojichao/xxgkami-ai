@@ -22,24 +22,25 @@ const processQueue = (error, token = null) => {
 
 /**
  * 通用的API请求函数
+ * <p>使用 httpOnly Cookie 进行认证，所有请求自动携带 Cookie（credentials: 'include'），
+ * 不再从 localStorage 读取 Token，也不再设置 Authorization 头部。</p>
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  // Get token from storage
-  const token = localStorage.getItem('token');
-
   const defaultOptions = {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      'Content-Type': 'application/json'
     },
+    credentials: 'include',  // 自动携带 httpOnly Cookie
   };
 
   const config = { ...defaultOptions, ...options };
   // Merge headers carefully
   config.headers = { ...defaultOptions.headers, ...options.headers };
+  // 确保 credentials 始终为 include
+  config.credentials = 'include';
 
   // If body is FormData, let the browser set the Content-Type header
   if (options.body instanceof FormData) {
@@ -67,8 +68,8 @@ async function apiRequest(endpoint, options = {}) {
        if (isRefreshing) {
          return new Promise((resolve, reject) => {
            failedQueue.push({ resolve, reject });
-         }).then(newToken => {
-           config.headers['Authorization'] = `Bearer ${newToken}`;
+         }).then(() => {
+           // Token 已通过 Cookie 自动刷新，直接重试原请求
            return fetch(url, config).then(res => {
              if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
              const ct = res.headers.get("content-type");
@@ -78,34 +79,22 @@ async function apiRequest(endpoint, options = {}) {
        }
 
        isRefreshing = true;
-       const refreshToken = localStorage.getItem('refreshToken');
-
-       if (!refreshToken) {
-           isRefreshing = false;
-           throw new Error('No refresh token available');
-       }
 
        try {
+           // 刷新 Token：服务端会从 Cookie 中读取 refresh_token 并更新 Cookie
            const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ refreshToken })
+               credentials: 'include'
            });
 
            const refreshData = await refreshResponse.json();
 
            if (refreshData.success) {
-               const newToken = refreshData.data.token;
-               localStorage.setItem('token', newToken);
-               if (refreshData.data.refreshToken) {
-                   localStorage.setItem('refreshToken', refreshData.data.refreshToken);
-               }
-
-               processQueue(null, newToken);
+               processQueue(null);
                isRefreshing = false;
 
-               // Retry original request
-               config.headers['Authorization'] = `Bearer ${newToken}`;
+               // Retry original request（新 Token 已通过 Cookie 自动携带）
                const retryResponse = await fetch(url, config);
                if (!retryResponse.ok) {
                  const errText = await retryResponse.text().catch(() => '');
@@ -122,7 +111,7 @@ async function apiRequest(endpoint, options = {}) {
            // 先重置标志再处理队列，防止队列中的回调再次触发刷新循环
            isRefreshing = false;
            processQueue(refreshError, null);
-           // Clear auth data
+           // Clear auth data（清除 localStorage 中的非敏感状态信息）
            const storedUserInfo = localStorage.getItem('userInfo');
            let isAdmin = false;
            if (storedUserInfo) {
@@ -132,8 +121,6 @@ async function apiRequest(endpoint, options = {}) {
                } catch (e) {}
            }
 
-           localStorage.removeItem('token');
-           localStorage.removeItem('refreshToken');
            localStorage.removeItem('user');
            localStorage.removeItem('userInfo');
            localStorage.removeItem('isLoggedIn');
@@ -144,16 +131,12 @@ async function apiRequest(endpoint, options = {}) {
              type: 'warning',
              showClose: false,
              callback: () => {
-                // If admin, go to admin login (via reload or specific path)
-                // App.vue will handle routing based on URL
                 if (isAdmin) {
-                    // Ensure we are on an admin path so App.vue redirects to admin login
                     if (!window.location.hash.includes('admin') && !window.location.pathname.includes('admin')) {
                          window.location.href = '/#/admin';
                     }
                     window.location.reload();
                 } else {
-                    // User -> Home
                     window.location.href = '/';
                 }
              }

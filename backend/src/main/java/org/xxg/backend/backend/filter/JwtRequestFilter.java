@@ -2,6 +2,7 @@ package org.xxg.backend.backend.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -36,6 +37,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     /**
      * 拦截每个请求，提取并验证 JWT Token。
+     * <p>优先从 httpOnly Cookie（access_token）中读取 Token，
+     * 若不存在则回退到 Authorization 请求头（Bearer Token），
+     * 保证新旧客户端均能正常认证。</p>
      *
      * @param request     HTTP 请求
      * @param response    HTTP 响应
@@ -44,12 +48,26 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        // 从 Authorization 头部获取 Token
-        String authHeader = request.getHeader("Authorization");
+        // 优先从 httpOnly Cookie 中获取 Token
+        String token = null;
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                if ("access_token".equals(cookie.getName())) {
+                    token = cookie.getValue();
+                    break;
+                }
+            }
+        }
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            // 截取 "Bearer " 前缀后的 Token 字符串
-            String token = authHeader.substring(7);
+        // Cookie 中未找到，回退到 Authorization 头部（兼容旧客户端或移动端）
+        if (token == null) {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+            }
+        }
+
+        if (token != null) {
             try {
                 // 验证 Token 有效性且必须是 Access Token（非 Refresh Token）
                 if (jwtUtil.isTokenValid(token) && jwtUtil.isAccessToken(token)) {

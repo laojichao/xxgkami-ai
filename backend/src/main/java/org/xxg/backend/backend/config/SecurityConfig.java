@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -8,9 +9,15 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.xxg.backend.backend.filter.JwtRequestFilter;
 import org.xxg.backend.backend.filter.RateLimitFilter;
 import org.xxg.backend.backend.filter.RequestMonitorFilter;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Spring Security 安全配置。
@@ -21,6 +28,9 @@ import org.xxg.backend.backend.filter.RequestMonitorFilter;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    private String corsOrigins;
+
     private final JwtRequestFilter jwtRequestFilter;
     private final RequestMonitorFilter requestMonitorFilter;
     private final RateLimitFilter rateLimitFilter;
@@ -30,6 +40,26 @@ public class SecurityConfig {
         this.jwtRequestFilter = jwtRequestFilter;
         this.requestMonitorFilter = requestMonitorFilter;
         this.rateLimitFilter = rateLimitFilter;
+    }
+
+    /**
+     * CORS 配置源（供 Spring Security 使用）。
+     * <p>允许指定源的跨域请求，启用凭据传递以支持 httpOnly Cookie 认证。</p>
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        String[] origins = Arrays.stream(corsOrigins.split(","))
+                .map(String::trim)
+                .toArray(String[]::new);
+        config.setAllowedOrigins(Arrays.asList(origins));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     /**
@@ -52,7 +82,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(cors -> cors.configure(http))
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 // === 公开接口 ===
@@ -61,6 +91,7 @@ public class SecurityConfig {
                     "/auth/user/login", "/auth/admin/login",
                     "/auth/email-code", "/auth/reset-code", "/auth/reset-password",
                     "/auth/bind/validate", "/auth/refresh",
+                    "/auth/oauth/set-cookies",
                     "/public/**",
                     "/payment/notify", "/payment/return",
                     "/system/health", "/error",

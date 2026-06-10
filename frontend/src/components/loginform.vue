@@ -847,11 +847,9 @@ const handleOAuthRegister = async () => {
      const res = await authApi.registerBind(payload);
      
      if (res.success) {
-         // Login success
-         localStorage.setItem('token', res.data.token);
-         localStorage.setItem('refreshToken', res.data.refreshToken);
+         // Login success - Token 已通过 httpOnly Cookie 设置，无需存储到 localStorage
          localStorage.setItem('isLoggedIn', 'true');
-         
+
          // Get User Info
          const userRes = await authApi.getUserInfo();
          if (userRes.success) {
@@ -903,14 +901,9 @@ const handleLogin = async () => {
       successMessage.value = response.message || '登录成功！'
       
       if (resultData && resultData.userInfo) {
+        // Token 已通过 httpOnly Cookie 设置，仅存储用户基本信息和登录状态
         localStorage.setItem('userInfo', JSON.stringify(resultData.userInfo))
         localStorage.setItem('isLoggedIn', 'true')
-        if (resultData.token) {
-          localStorage.setItem('token', resultData.token);
-        }
-        if (resultData.refreshToken) {
-          localStorage.setItem('refreshToken', resultData.refreshToken);
-        }
       }
       
       emit('login-success', {

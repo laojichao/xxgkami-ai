@@ -18,36 +18,45 @@ const loading = ref(true)
 const maintenanceData = ref({ enabled: false, content: '', maintenanceTime: '' })
 
 // 检查登录状态
+// <p>不再依赖 localStorage 中的 token，改为通过后端接口验证 Cookie 中的登录状态。</p>
 const checkLoginStatus = async () => {
   try {
-    // 从 localStorage 获取登录信息
-    const storedToken = localStorage.getItem('token')
     const storedUserInfo = localStorage.getItem('userInfo')
     const storedIsLoggedIn = localStorage.getItem('isLoggedIn')
 
-    // 1. 优先尝试恢复登录状态
-    if (storedToken && storedUserInfo && storedIsLoggedIn === 'true') {
+    // 1. 如果 localStorage 中有登录标记，尝试通过后端验证 Cookie 是否仍然有效
+    if (storedUserInfo && storedIsLoggedIn === 'true') {
       let parsedUserInfo;
       try {
         parsedUserInfo = JSON.parse(storedUserInfo);
       } catch (parseError) {
         console.error('localStorage userInfo 数据损坏，清除登录状态:', parseError);
-        localStorage.removeItem('userInfo');
-        localStorage.removeItem('isLoggedIn');
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        isLoggedIn.value = false;
-        userInfo.value = null;
+        clearLocalAuthState();
         return;
       }
-      isLoggedIn.value = true
-      userInfo.value = parsedUserInfo
 
-      // 如果已登录，根据用户类型跳转到对应页面
-      if (parsedUserInfo.role === 'admin') {
-        currentPage.value = 'dashboard'
-      } else {
-        currentPage.value = 'user'
+      // 通过后端接口验证 Cookie 中的 Token 是否有效
+      try {
+        const res = await authApi.getUserInfo();
+        if (res.success && res.data) {
+          // Cookie 有效，使用后端返回的最新用户信息
+          isLoggedIn.value = true;
+          userInfo.value = res.data;
+          localStorage.setItem('userInfo', JSON.stringify(res.data));
+
+          if (res.data.role === 'admin') {
+            currentPage.value = 'dashboard';
+          } else {
+            currentPage.value = 'user';
+          }
+        } else {
+          // Cookie 已失效，清除本地状态
+          clearLocalAuthState();
+        }
+      } catch (e) {
+        // 请求失败（如 401），Cookie 已失效
+        console.error('验证登录状态失败:', e);
+        clearLocalAuthState();
       }
     } else {
       // 2. 如果未登录，再检查是否是管理员登录路径
@@ -58,12 +67,7 @@ const checkLoginStatus = async () => {
         currentPage.value = 'login'
       } else {
         // 默认状态
-        isLoggedIn.value = false
-        userInfo.value = null
-        localStorage.removeItem('userInfo')
-        localStorage.removeItem('isLoggedIn')
-        localStorage.removeItem('token')
-        localStorage.removeItem('refreshToken')
+        clearLocalAuthState();
       }
     }
   } catch (error) {
@@ -73,6 +77,16 @@ const checkLoginStatus = async () => {
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 清除前端本地认证状态（不涉及 Token，Token 由 httpOnly Cookie 管理）
+ */
+const clearLocalAuthState = () => {
+  isLoggedIn.value = false;
+  userInfo.value = null;
+  localStorage.removeItem('userInfo');
+  localStorage.removeItem('isLoggedIn');
 }
 
 // 显示登录页面
@@ -104,12 +118,11 @@ const handleLogout = async () => {
     console.error('登出失败:', error)
   } finally {
     // 无论后端是否成功，前端都清除状态
+    // Token 存储在 httpOnly Cookie 中，由后端 logout 接口清除
     isLoggedIn.value = false
     userInfo.value = null
     localStorage.removeItem('userInfo')
     localStorage.removeItem('isLoggedIn')
-    localStorage.removeItem('token')
-    localStorage.removeItem('refreshToken')
 
     currentPage.value = 'login'
 
@@ -169,11 +182,20 @@ const handleOAuthCallback = async () => {
     }
 
     try {
-      localStorage.setItem('token', token)
-      localStorage.setItem('refreshToken', refreshToken)
+      // OAuth 回调：Token 通过 URL 参数传递，需要通过后端接口设置 httpOnly Cookie
+      // 调用后端接口将 URL 中的 Token 设置为 httpOnly Cookie
+      const setCookieRes = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/oauth/set-cookies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ token, refreshToken })
+      });
+
+      // 如果后端没有实现 OAuth set-cookies 接口，回退到直接使用 getUserInfo
+      // （后端 OAuth 回调可能已直接设置了 Cookie）
       localStorage.setItem('isLoggedIn', 'true')
 
-      // 获取用户信息
+      // 获取用户信息（通过 Cookie 认证）
       const res = await authApi.getUserInfo()
       if (res.success) {
         userInfo.value = res.data
