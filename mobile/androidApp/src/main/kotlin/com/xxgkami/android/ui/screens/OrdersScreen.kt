@@ -144,5 +144,8 @@ private fun orderStatusText(status: String?): String = when (status) {
     "pending" -> "待支付"
     "completed" -> "已完成"
     "failed" -> "已失败"
+    "paid" -> "已支付"
+    "cancelled" -> "已取消"
+    "refunded" -> "已退款"
     else -> status ?: "未知"
 }

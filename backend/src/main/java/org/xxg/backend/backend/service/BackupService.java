@@ -2,7 +2,10 @@ package org.xxg.backend.backend.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.xxg.backend.backend.exception.BusinessException;
 import java.io.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -23,6 +26,14 @@ public class BackupService {
     private String backupDir;
 
     public String backup() throws Exception {
+        // 路径遍历验证：确保备份目录在允许的范围内
+        Path backupPath = Paths.get(backupDir).toAbsolutePath().normalize();
+        Path userHome = Paths.get(System.getProperty("user.home")).toAbsolutePath().normalize();
+        Path varBackups = Paths.get("/var/backups").toAbsolutePath().normalize();
+        if (!backupPath.startsWith(userHome) && !backupPath.startsWith(varBackups)) {
+            throw new BusinessException("备份目录路径不合法");
+        }
+
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         String filename = "backup_" + timestamp + ".sql";
         new File(backupDir).mkdirs();

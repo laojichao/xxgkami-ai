@@ -77,6 +77,7 @@
 import { ref, onMounted } from 'vue'
 import { maintenanceApi } from '../services/api.js'
 import { ElMessage } from 'element-plus'
+import logger from '../utils/logger'
 
 /** 保存按钮加载状态 */
 const loading = ref(false)
@@ -108,7 +109,8 @@ const loadSettings = async () => {
       }
     }
   } catch (error) {
-    console.error('加载维护设置失败:', error)
+    logger.error('加载维护设置失败:', error)
+    ElMessage.error('加载维护设置失败')
   }
 }
 
@@ -130,7 +132,7 @@ const saveSettings = async () => {
       ElMessage.error('保存失败: ' + res.message)
     }
   } catch (error) {
-    console.error('保存失败:', error)
+    logger.error('保存失败:', error)
     ElMessage.error('保存失败')
   } finally {
     loading.value = false

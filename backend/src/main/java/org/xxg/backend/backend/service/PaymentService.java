@@ -10,6 +10,7 @@ import org.xxg.backend.backend.util.PaymentUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -109,6 +110,22 @@ public class PaymentService {
             if (!"pending".equals(order.getStatus())) {
                 log.info("订单已处理过，跳过: {}，当前状态: {}", orderNo, order.getStatus());
                 return "success";
+            }
+
+            // 验证回调金额与订单金额一致性（防止支付金额被篡改）
+            String callbackMoney = params.get("money");
+            if (callbackMoney != null && !callbackMoney.isBlank()) {
+                try {
+                    BigDecimal paidAmount = new BigDecimal(callbackMoney);
+                    if (paidAmount.compareTo(order.getTotalPrice()) != 0) {
+                        log.warn("支付回调金额不匹配，订单号: {}, 回调金额: {}, 订单金额: {}",
+                                orderNo, paidAmount, order.getTotalPrice());
+                        return "fail";
+                    }
+                } catch (NumberFormatException e) {
+                    log.warn("支付回调金额格式异常，订单号: {}, money: {}", orderNo, callbackMoney);
+                    return "fail";
+                }
             }
 
             // 根据订单信息生成卡密

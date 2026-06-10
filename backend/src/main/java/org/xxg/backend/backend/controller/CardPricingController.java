@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.controller;
 
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
@@ -38,7 +39,7 @@ public class CardPricingController {
      * @return 新创建的定价信息
      */
     @PostMapping({"/card-pricing", "/pricing"})
-    public ResponseEntity<ApiResponse<CardPricing>> save(@RequestBody CardPricing pricing) {
+    public ResponseEntity<ApiResponse<CardPricing>> save(@Valid @RequestBody CardPricing pricing) {
         return ResponseEntity.ok(ApiResponse.ok(service.save(pricing)));
     }
 
@@ -51,7 +52,7 @@ public class CardPricingController {
      * @return 更新后的定价信息
      */
     @PutMapping({"/card-pricing/{id}", "/pricing/{id}"})
-    public ResponseEntity<ApiResponse<CardPricing>> update(@PathVariable Integer id, @RequestBody CardPricing pricing) {
+    public ResponseEntity<ApiResponse<CardPricing>> update(@PathVariable Integer id, @Valid @RequestBody CardPricing pricing) {
         pricing.setId(id);
         return ResponseEntity.ok(ApiResponse.ok(service.save(pricing)));
     }

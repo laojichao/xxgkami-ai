@@ -141,6 +141,7 @@
 import { reactive, ref, onMounted } from 'vue'
 import { settingsApi } from '../services/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import logger from '../utils/logger'
 
 // 邮箱设置
 const emailSettings = reactive({
@@ -208,7 +209,7 @@ const loadSettings = async () => {
       if (settings.tpl_sys_maint) emailTemplates.systemMaintenance = settings.tpl_sys_maint
     }
   } catch (error) {
-    console.error('加载设置失败:', error)
+    logger.error('加载设置失败:', error)
     showToast('加载设置失败: ' + error.message, 'error')
   } finally {
     loading.value = false
@@ -251,7 +252,7 @@ const saveSettings = async () => {
         showToast(res.message || '保存失败', 'error')
     }
   } catch (error) {
-    console.error('保存设置失败:', error)
+    logger.error('保存设置失败:', error)
     showToast('保存设置失败: ' + error.message, 'error')
   } finally {
     loading.value = false
@@ -262,37 +263,38 @@ const saveSettings = async () => {
 const resetSettings = async () => {
   try {
     await ElMessageBox.confirm('确定要重置所有通知设置吗？这将恢复到默认配置。', '确认重置', { type: 'warning' })
-  } catch { return }
-  {
-    // 重置邮箱设置
-    Object.assign(emailSettings, {
-      smtpServer: 'smtp.qq.com',
-      smtpPort: 587,
-      senderEmail: 'admin@example.com',
-      senderPassword: '',
-      enableSSL: true,
-      senderName: 'XXG卡密系统'
-    })
-    
-    // 重置通知类型
-    Object.assign(notificationTypes, {
-      userRegistration: true,
-      orderCreated: true,
-      keyUsed: false,
-      systemMaintenance: true,
-      securityAlert: true
-    })
-    
-    // 重置邮件模板
-    Object.assign(emailTemplates, {
-      userRegistration: '欢迎注册XXG卡密系统！您的账户已成功创建。',
-      orderNotification: '您的订单已创建成功，订单号：{orderNumber}，请及时查看。',
-      systemMaintenance: '系统将于{time}进行维护，预计维护时间{duration}，请提前做好准备。'
-    })
-    
-    testEmail.value = ''
-    showToast('通知设置已重置，请记得保存', 'info')
+  } catch {
+    return
   }
+  // This code runs only if confirm succeeded (user clicked OK)
+  // 重置邮箱设置
+  Object.assign(emailSettings, {
+    smtpServer: 'smtp.qq.com',
+    smtpPort: 587,
+    senderEmail: 'admin@example.com',
+    senderPassword: '',
+    enableSSL: true,
+    senderName: 'XXG卡密系统'
+  })
+
+  // 重置通知类型
+  Object.assign(notificationTypes, {
+    userRegistration: true,
+    orderCreated: true,
+    keyUsed: false,
+    systemMaintenance: true,
+    securityAlert: true
+  })
+
+  // 重置邮件模板
+  Object.assign(emailTemplates, {
+    userRegistration: '欢迎注册XXG卡密系统！您的账户已成功创建。',
+    orderNotification: '您的订单已创建成功，订单号：{orderNumber}，请及时查看。',
+    systemMaintenance: '系统将于{time}进行维护，预计维护时间{duration}，请提前做好准备。'
+  })
+
+  testEmail.value = ''
+  showToast('通知设置已重置，请记得保存', 'info')
 }
 
 // 发送测试邮件
@@ -318,7 +320,7 @@ const sendTestEmail = async () => {
     await settingsApi.sendTestEmail(testEmail.value, currentSettings)
     showToast(`测试邮件已发送到 ${testEmail.value}`, 'success')
   } catch (error) {
-    console.error('发送测试邮件失败:', error)
+    logger.error('发送测试邮件失败:', error)
     showToast('发送测试邮件失败: ' + error.message, 'error')
   } finally {
     loading.value = false

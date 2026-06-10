@@ -92,6 +92,16 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理数据完整性约束违反异常（如唯一键冲突、外键约束等）
+     * 返回 409 冲突状态码
+     */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException e) {
+        log.warn("Data integrity violation: {}", e.getMessage());
+        return ResponseEntity.status(409).body(ApiResponse.error("数据冲突，请检查输入后重试"));
+    }
+
+    /**
      * 兜底异常处理器，捕获所有未处理的异常
      * 记录错误日志，返回500通用错误信息，避免泄露内部细节
      */

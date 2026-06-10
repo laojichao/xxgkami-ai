@@ -115,6 +115,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { pricingApi } from '../services/api.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import logger from '../utils/logger'
 
 const timeCards = ref([])
 const countCards = ref([])
@@ -136,7 +137,7 @@ const fetchPricing = async () => {
       countCards.value = res.data.countCards || []
     }
   } catch (error) {
-    console.error('Failed to fetch pricing:', error)
+    logger.error('Failed to fetch pricing:', error)
     // alert('获取定价失败')
   }
 }
@@ -174,7 +175,7 @@ const deletePricing = async (id) => {
       ElMessage.error(res.message || '删除失败')
     }
   } catch (error) {
-    console.error('Failed to delete pricing:', error)
+    logger.error('Failed to delete pricing:', error)
     ElMessage.error('删除失败')
   }
 }
@@ -202,7 +203,7 @@ const savePricing = async () => {
       ElMessage.error(res.message || '保存失败')
     }
   } catch (error) {
-    console.error('Failed to save pricing:', error)
+    logger.error('Failed to save pricing:', error)
     ElMessage.error('保存失败')
   }
 }

@@ -111,6 +111,7 @@ import { ref, reactive, onMounted, onUnmounted, defineAsyncComponent } from 'vue
 import { cardApi, statsApi, apiKeyApi, publicApi, settingsApi, maintenanceApi } from '../services/api.js'
 import { ElMessage } from 'element-plus'
 import NavigationBar from './NavigationBar.vue'
+import logger from '../utils/logger'
 
 // 首屏组件直接加载
 import OverviewPage from './OverviewPage.vue'
@@ -232,7 +233,7 @@ const handleCreateKeys = async (keyData) => {
         ElMessage.success(`成功创建 ${totalCount} 条卡密`)
       }
     } catch (error) {
-      console.error('生成卡密失败:', error)
+      logger.error('生成卡密失败:', error)
       ElMessage.error('生成卡密失败: ' + error.message)
     }
     return
@@ -258,7 +259,7 @@ const handleCreateKeys = async (keyData) => {
         createProgress.fail++
       }
     } catch (error) {
-      console.error(`创建第 ${i + 1} 条失败:`, error)
+      logger.error(`创建第 ${i + 1} 条失败:`, error)
       createProgress.fail++
     }
     createProgress.current = i + 1
@@ -286,7 +287,7 @@ const handleDeleteKey = async (keyId) => {
       ElMessage.error(result.message)
     }
   } catch (error) {
-    console.error('删除卡密失败:', error)
+    logger.error('删除卡密失败:', error)
     ElMessage.error('删除卡密失败')
   }
 }
@@ -301,7 +302,7 @@ const handleUpdateKey = async (keyData) => {
       ElMessage.error(result.message || '更新失败')
     }
   } catch (error) {
-    console.error('更新卡密失败:', error)
+    logger.error('更新卡密失败:', error)
     ElMessage.error(error.message || '更新卡密失败')
   }
 }
@@ -321,7 +322,7 @@ const handleToggleKeyStatus = async ({ id, status }) => {
       ElMessage.error(result.message || '操作失败')
     }
   } catch (error) {
-    console.error('更新卡密状态失败:', error)
+    logger.error('更新卡密状态失败:', error)
     ElMessage.error(error.message || '更新卡密状态失败')
   }
 }
@@ -337,7 +338,7 @@ const loadDashboardStats = async () => {
       stats.totalUsers = result.totalUsers ?? result.data?.totalUsers ?? 0
     }
   } catch (error) {
-    console.error('加载统计数据失败:', error)
+    logger.error('加载统计数据失败:', error)
   }
 }
 
@@ -351,7 +352,7 @@ const loadKeys = async () => {
     // 加载统计数据
     await loadDashboardStats()
   } catch (error) {
-    console.error('加载卡密数据失败:', error)
+    logger.error('加载卡密数据失败:', error)
   }
 }
 
@@ -454,7 +455,7 @@ onMounted(async () => {
     features.value = featuresRes.data || []
     apiKeys.value = apiKeysRes.data || []
   } catch (e) {
-    console.error('加载初始数据失败:', e)
+    logger.error('加载初始数据失败:', e)
   }
 
   // 异步加载卡密数据

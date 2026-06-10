@@ -86,20 +86,33 @@ async function apiRequest(endpoint, options = {}) {
 
        try {
            // 刷新 Token：服务端会从 Cookie 中读取 refresh_token 并更新 Cookie
+           const refreshController = new AbortController();
+           const refreshTimeout = setTimeout(() => refreshController.abort(), 15000);
            const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               credentials: 'include'
+               credentials: 'include',
+               signal: refreshController.signal
            });
+           clearTimeout(refreshTimeout);
 
-           const refreshData = await refreshResponse.json();
+           let refreshData;
+           try {
+               refreshData = await refreshResponse.json();
+           } catch (parseError) {
+               throw new Error('令牌刷新失败: 服务器返回无效响应');
+           }
 
            if (refreshData.success) {
                processQueue(null);
                isRefreshing = false;
 
-               // Retry original request（新 Token 已通过 Cookie 自动携带）
-               const retryResponse = await fetch(url, config);
+               // Retry original request with a NEW AbortController（新 Token 已通过 Cookie 自动携带）
+               const retryController = new AbortController();
+               const retryTimeout = setTimeout(() => retryController.abort(), 30000);
+               const retryConfig = { ...config, signal: retryController.signal };
+               const retryResponse = await fetch(url, retryConfig);
+               clearTimeout(retryTimeout);
                if (!retryResponse.ok) {
                  const errText = await retryResponse.text().catch(() => '');
                  throw new Error(errText || `HTTP error! status: ${retryResponse.status}`);
@@ -181,6 +194,9 @@ async function apiRequest(endpoint, options = {}) {
       return { success: true, data: text, message: text };
     }
   } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('请求超时，请检查网络连接');
+    }
     logger.error('API request failed:', error);
     throw error;
   }

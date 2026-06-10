@@ -297,7 +297,7 @@ public class AuthController {
      * @return 验证结果
      */
     @PostMapping("/bind/validate")
-    public ResponseEntity<ApiResponse<Void>> validateBindToken(@RequestBody RegisterBindRequest request) {
+    public ResponseEntity<ApiResponse<Void>> validateBindToken(@Valid @RequestBody RegisterBindRequest request) {
         boolean result = authService.validateBindToken(request.getUserId(), request.getToken());
         return ResponseEntity.ok(result ? ApiResponse.ok("验证成功") : ApiResponse.error("验证失败"));
     }

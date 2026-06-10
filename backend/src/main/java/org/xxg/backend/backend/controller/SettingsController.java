@@ -7,6 +7,7 @@ import org.xxg.backend.backend.service.SettingsService;
 import org.xxg.backend.backend.service.EmailService;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 系统设置接口控制器
@@ -38,6 +39,13 @@ public class SettingsController {
     private static final String[] SENSITIVE_KEYWORDS = {
         "key", "secret", "password", "token", "credential", "private"
     };
+
+    // 禁止修改的敏感配置键（防止通过设置接口篡改核心安全配置，值全部小写用于比较）
+    private static final Set<String> BLOCKED_KEYS = Set.of(
+        "jwt.secret", "jwt_secret",
+        "spring.datasource.password", "db.password", "db_password",
+        "spring.datasource.username", "db.username", "db_username"
+    );
 
     @GetMapping("/all")
     public ResponseEntity<ApiResponse<Map<String, String>>> getAllSettings() {
@@ -73,12 +81,22 @@ public class SettingsController {
     @Deprecated(since = "2026-06-10", forRemoval = false)
     @PutMapping
     public ResponseEntity<ApiResponse<Void>> update(@RequestBody Map<String, String> settings) {
+        for (String key : settings.keySet()) {
+            if (BLOCKED_KEYS.contains(key.toLowerCase())) {
+                return ResponseEntity.ok(ApiResponse.error("不允许修改敏感配置项: " + key));
+            }
+        }
         settingsService.updateSettings(settings);
         return ResponseEntity.ok(ApiResponse.ok("设置已更新"));
     }
 
     @PostMapping("/save")
     public ResponseEntity<ApiResponse<Void>> saveSettings(@RequestBody Map<String, String> settings) {
+        for (String key : settings.keySet()) {
+            if (BLOCKED_KEYS.contains(key.toLowerCase())) {
+                return ResponseEntity.ok(ApiResponse.error("不允许修改敏感配置项: " + key));
+            }
+        }
         settingsService.updateSettings(settings);
         return ResponseEntity.ok(ApiResponse.ok("设置已保存"));
     }

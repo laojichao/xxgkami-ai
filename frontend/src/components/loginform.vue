@@ -360,6 +360,7 @@
 <script setup>
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { authApi, settingsApi } from '../services/api.js'
+import logger from '../utils/logger'
 
 /** 父组件传入的初始用户类型（user/admin） */
 const props = defineProps({
@@ -537,7 +538,7 @@ onMounted(async () => {
         }
      }
   } catch (e) {
-     console.error('Failed to load settings:', e)
+     logger.error('Failed to load settings:', e)
   }
 })
 
@@ -946,7 +947,7 @@ const handleLogin = async () => {
       }
     }
   } catch (error) {
-    console.error('登录请求失败:', error)
+    logger.error('登录请求失败:', error)
     errorMessage.value = '登录验证失败，请稍后重试'
   } finally {
     loading.value = false

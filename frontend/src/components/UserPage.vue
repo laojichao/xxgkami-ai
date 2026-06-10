@@ -703,6 +703,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi } from '../services/api.js'
 import UserSettingsPage from './UserSettingsPage.vue'
+import logger from '../utils/logger'
 
 // Props 和 Emits
 const props = defineProps({
@@ -858,7 +859,7 @@ const fetchSocialBindings = async () => {
       socialBindings.value = res.data || []
     }
   } catch (e) {
-    console.error(e)
+    logger.error(e)
   } finally {
     loadingSocial.value = false
   }
@@ -875,7 +876,7 @@ const fetchOAuthSettings = async () => {
          oauthLoginTypes.alipay = types.includes('alipay')
      }
    } catch (e) {
-     console.error(e)
+     logger.error(e)
    }
 }
 
@@ -923,7 +924,7 @@ const fetchUserProfile = async () => {
             ElMessage.error(result?.message || '获取个人信息失败');
         }
     } catch (error) {
-        console.error('Failed to fetch user profile:', error);
+        logger.error('Failed to fetch user profile:', error);
         ElMessage.error('获取个人信息失败');
     }
 }
@@ -939,7 +940,7 @@ const updateProfile = async () => {
             ElMessage.error(result.message || '更新失败');
         }
     } catch (error) {
-        console.error('Failed to update profile:', error);
+        logger.error('Failed to update profile:', error);
         ElMessage.error('更新失败');
     }
 }
@@ -967,7 +968,7 @@ const handleAvatarUpload = async (file) => {
             ElMessage.error(result.message || '头像上传失败');
         }
     } catch (error) {
-        console.error('Failed to upload avatar:', error);
+        logger.error('Failed to upload avatar:', error);
         ElMessage.error('头像上传失败');
     }
 }
@@ -1026,7 +1027,7 @@ const fetchOrders = async () => {
 
             recentRecords.value = usageRecords.value.slice(0, 5);
         } else {
-            console.warn('Failed to fetch card details, falling back to orders');
+            logger.warn('Failed to fetch card details, falling back to orders');
             const cards = [];
             if (Array.isArray(ordersResult)) {
                 ordersResult.forEach(order => {
@@ -1047,7 +1048,7 @@ const fetchOrders = async () => {
             }
         }
     } catch (e) {
-        console.error("Failed to fetch data", e);
+        logger.error("Failed to fetch data", e);
         ElMessage.error("获取数据失败");
     }
 };
@@ -1060,7 +1061,7 @@ const fetchPricing = async () => {
       countCardOptions.value = result.data.countCards || [];
     }
   } catch (e) {
-    console.error("Failed to fetch pricing", e);
+    logger.error("Failed to fetch pricing", e);
     ElMessage.error("获取定价信息失败");
   }
 }
@@ -1185,7 +1186,7 @@ const queryCard = async () => {
       queryResult.value = null
     }
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     ElMessage.error(error.message || '查询失败')
     queryResult.value = null
   } finally {
@@ -1218,7 +1219,7 @@ const useCard = (card) => {
         ElMessage.error(result.message || '使用失败');
       }
     } catch (error) {
-      console.error(error);
+      logger.error(error);
       ElMessage.error(error.message || '使用失败');
     }
   })
@@ -1356,7 +1357,7 @@ const purchaseCard = async (cardType) => {
     }
   } catch (error) {
     if (error !== 'cancel') {
-      console.error(error)
+      logger.error(error)
       ElMessage.error('购买过程中发生错误: ' + (error.message || '未知错误'))
     }
   } finally {

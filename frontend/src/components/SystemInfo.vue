@@ -220,6 +220,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { copyToClipboard } from '../utils/clipboard.js'
 import { monitorApi } from '../services/api.js'
+import logger from '../utils/logger'
 
 /** 当前系统版本号 */
 const currentVersion = 'v1.0.6'
@@ -255,7 +256,7 @@ const checkUpdate = async () => {
       ElMessage.success('当前已是最新版本')
     }
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     ElMessage.error('检查更新失败，请稍后重试')
   } finally {
     checking.value = false

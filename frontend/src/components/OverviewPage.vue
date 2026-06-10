@@ -184,6 +184,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { monitorApi, statsApi } from '../services/api.js'
+import logger from '../utils/logger'
 
 const props = defineProps({
   stats: Object
@@ -417,7 +418,7 @@ const loadChartData = async () => {
       chartData.value.activity.inactive = activityData.inactive || 0
     }
   } catch (error) {
-    console.error('加载图表数据失败:', error)
+    logger.error('加载图表数据失败:', error)
   }
 }
 
@@ -469,7 +470,7 @@ const loadServerStatus = async () => {
     }
 
   } catch (error) {
-    console.error('加载服务器状态失败:', error)
+    logger.error('加载服务器状态失败:', error)
     
     // 设置错误状态
     systemStatus.value.loading = false
