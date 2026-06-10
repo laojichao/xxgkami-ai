@@ -9,6 +9,10 @@ import registerIcons from './utils/icons'
 
 const app = createApp(App)
 
+app.config.errorHandler = (err, instance, info) => {
+  console.error('[Global Error]', err, info)
+}
+
 // 使用Element Plus
 app.use(ElementPlus)
 

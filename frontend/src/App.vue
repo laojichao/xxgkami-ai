@@ -42,7 +42,13 @@ const checkLoginStatus = async () => {
           // Cookie 有效，使用后端返回的最新用户信息
           isLoggedIn.value = true;
           userInfo.value = res.data;
-          localStorage.setItem('userInfo', JSON.stringify(res.data));
+          const minimalInfo = {
+            id: res.data.id,
+            username: res.data.username,
+            role: res.data.role,
+            nickname: res.data.nickname
+          }
+          localStorage.setItem('userInfo', JSON.stringify(minimalInfo));
 
           if (res.data.role === 'admin') {
             currentPage.value = 'dashboard';
@@ -199,7 +205,13 @@ const handleOAuthCallback = async () => {
       const res = await authApi.getUserInfo()
       if (res.success) {
         userInfo.value = res.data
-        localStorage.setItem('userInfo', JSON.stringify(res.data))
+        const minimalInfo = {
+          id: res.data.id,
+          username: res.data.username,
+          role: res.data.role,
+          nickname: res.data.nickname
+        }
+        localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
         isLoggedIn.value = true
         // Clean URL
         window.history.replaceState({}, document.title, window.location.pathname);

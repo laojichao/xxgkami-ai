@@ -99,6 +99,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { apiKeyApi, cardApi } from '../services/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
 import ApiKeyCard from './api/ApiKeyCard.vue'
 import CreateApiKeyDialog from './api/CreateApiKeyDialog.vue'
@@ -173,7 +174,7 @@ const fetchApiKeys = async () => {
           }));
         }
       } catch (e) {
-        console.warn(`Failed to fetch cards for key ${key.id}`, e);
+        logger.warn(`Failed to fetch cards for key ${key.id}`, e);
       }
 
       return {
@@ -186,7 +187,7 @@ const fetchApiKeys = async () => {
         lastUsed: null,
         requestCount: 0,
         cardCodes: cardCodes,
-        webhookConfig: (() => { try { return key.webhook_config ? JSON.parse(key.webhook_config) : null } catch(e) { console.warn('Invalid webhook_config JSON:', e); return null } })(),
+        webhookConfig: (() => { try { return key.webhook_config ? JSON.parse(key.webhook_config) : null } catch(e) { logger.warn('Invalid webhook_config JSON:', e); return null } })(),
         assignedUsers: key.assignedUsers || [],
         enableCardEncryption: key.enable_card_encryption || false,
         requireMachineCode: key.require_machine_code || false,
@@ -194,7 +195,7 @@ const fetchApiKeys = async () => {
       }
     }))
   } catch (error) {
-    console.error('Failed to fetch API keys:', error)
+    logger.error('Failed to fetch API keys:', error)
     ElMessage.error('获取API密钥失败')
   }
 }
@@ -205,7 +206,7 @@ const fetchUsers = async () => {
     const data = await apiKeyApi.getAllUsers()
     allUsers.value = data?.users || data || []
   } catch (error) {
-    console.error('Failed to fetch users:', error)
+    logger.error('Failed to fetch users:', error)
     allUsers.value = []
   }
 }
@@ -223,7 +224,7 @@ const handleCreateApiKey = async ({ name, description, enableCardEncryption }) =
     showCreateModal.value = false
     fetchApiKeys()
   } catch (error) {
-    console.error('Create failed:', error)
+    logger.error('Create failed:', error)
     ElMessage.error('创建失败')
   }
 }
@@ -253,7 +254,7 @@ const handleSaveApiKey = async (formData) => {
     showEditModal.value = false
     fetchApiKeys()
   } catch (error) {
-    console.error('Update failed:', error)
+    logger.error('Update failed:', error)
     ElMessage.error('保存失败')
   }
 }
@@ -271,7 +272,7 @@ const deleteApiKey = async (id) => {
     fetchApiKeys()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('Delete failed:', error)
+      logger.error('Delete failed:', error)
       ElMessage.error('删除失败')
     }
   }
@@ -290,7 +291,7 @@ const toggleApiKey = async (apiKey) => {
     apiKey.isActive = newStatus
     ElMessage.success(newStatus ? '已启用' : '已禁用')
   } catch (error) {
-    console.error('Toggle failed:', error)
+    logger.error('Toggle failed:', error)
     ElMessage.error('操作失败')
   }
 }
@@ -307,7 +308,7 @@ const handleAssignUser = async (userId) => {
       currentApiKey.value = updatedKey
     }
   } catch (error) {
-    console.error('Assign failed:', error)
+    logger.error('Assign failed:', error)
     ElMessage.error('分配用户失败')
   }
 }
@@ -324,7 +325,7 @@ const handleUnassignUser = async (userId) => {
       currentApiKey.value = updatedKey
     }
   } catch (error) {
-    console.error('Unassign failed:', error)
+    logger.error('Unassign failed:', error)
     ElMessage.error('移除用户失败')
   }
 }
@@ -355,7 +356,7 @@ const fetchCardCodes = async (apiKeyId) => {
       apiKeys.value[keyIndex].cardCodes = cards
     }
   } catch (error) {
-    console.error('Fetch cards failed:', error)
+    logger.error('Fetch cards failed:', error)
     ElMessage.error('获取卡密失败')
   }
 }
@@ -378,7 +379,7 @@ const handleGenerateCardCodes = async ({ count, type, value, stackTime }) => {
     ElMessage.success(`成功生成 ${res.data.length} 个卡密`)
     await fetchCardCodes(currentApiKey.value.id)
   } catch (error) {
-    console.error('Generate cards failed:', error)
+    logger.error('Generate cards failed:', error)
     ElMessage.error('生成卡密失败')
   }
 }
@@ -400,7 +401,7 @@ const deleteCardCode = async (cardId) => {
     }
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除卡密失败:', error)
+      logger.error('删除卡密失败:', error)
       ElMessage.error(error.message || '删除失败')
     }
   }
@@ -428,7 +429,7 @@ const obfuscateCardKey = (rawKey) => {
     const base64 = btoa(reversed)
     return base64.replace(/e/g, '*').replace(/U/g, '-')
   } catch (e) {
-    console.error('Obfuscation failed:', e)
+    logger.error('Obfuscation failed:', e)
     return rawKey
   }
 }
@@ -500,7 +501,7 @@ const handleSaveInterfaceConfig = async (configData) => {
     ElMessage.success('接口配置已保存')
     showInterfaceModal.value = false
   } catch (error) {
-    console.error('Save interface config failed:', error)
+    logger.error('Save interface config failed:', error)
     ElMessage.error('保存失败')
   }
 }

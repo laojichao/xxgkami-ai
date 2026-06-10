@@ -89,6 +89,7 @@
               class="password-toggle"
               @click="showPassword = !showPassword"
               :disabled="loading"
+              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
             >
               <svg v-if="showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -546,8 +547,7 @@ onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
   if (forgotTimerInterval) clearInterval(forgotTimerInterval)
   // 清理 autoDismiss 创建的 watcher 和 setTimeout
-  autoDismissWatchers.forEach(stop => stop())
-  autoDismissTimers.forEach(t => clearTimeout(t))
+  autoDismissCleanups.forEach(cleanup => cleanup())
 })
 
 /** 跳转到第三方OAuth登录页面 */
@@ -683,10 +683,9 @@ const forgotPasswordLoading = ref(false)
 /**
  * 自动清除消息提示（3秒后淡出）
  * 统一应用于所有错误/成功消息ref
- * 返回 stop 函数用于在组件卸载时清理 watcher 和 timer
+ * 使用 Map 存储每个 messageRef 的清理函数，防止 timer 泄漏
  */
-const autoDismissTimers = []
-const autoDismissWatchers = []
+const autoDismissCleanups = new Map()
 const autoDismiss = (messageRef) => {
   let timer = null
   const stopWatch = watch(messageRef, (newVal) => {
@@ -695,10 +694,12 @@ const autoDismiss = (messageRef) => {
       timer = setTimeout(() => {
         messageRef.value = ''
       }, 3000)
-      autoDismissTimers.push(timer)
     }
   })
-  autoDismissWatchers.push(stopWatch)
+  autoDismissCleanups.set(messageRef, () => {
+    if (timer) clearTimeout(timer)
+    stopWatch()
+  })
 }
 
 [errorMessage, successMessage, registerError, registerSuccess, forgotPasswordError, forgotPasswordSuccess, recoveryError, recoverySuccess].forEach(autoDismiss)
@@ -853,7 +854,13 @@ const handleOAuthRegister = async () => {
          // Get User Info
          const userRes = await authApi.getUserInfo();
          if (userRes.success) {
-             localStorage.setItem('userInfo', JSON.stringify(userRes.data));
+             const minimalInfo = {
+               id: userRes.data.id,
+               username: userRes.data.username,
+               role: userRes.data.role,
+               nickname: userRes.data.nickname
+             }
+             localStorage.setItem('userInfo', JSON.stringify(minimalInfo));
              window.location.reload(); // Reload to refresh App state
          }
      } else {
@@ -902,7 +909,13 @@ const handleLogin = async () => {
       
       if (resultData && resultData.userInfo) {
         // Token 已通过 httpOnly Cookie 设置，仅存储用户基本信息和登录状态
-        localStorage.setItem('userInfo', JSON.stringify(resultData.userInfo))
+        const minimalInfo = {
+          id: resultData.userInfo.id,
+          username: resultData.userInfo.username,
+          role: resultData.userInfo.role,
+          nickname: resultData.userInfo.nickname
+        }
+        localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
         localStorage.setItem('isLoggedIn', 'true')
       }
       

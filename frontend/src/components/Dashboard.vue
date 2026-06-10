@@ -116,15 +116,51 @@ import NavigationBar from './NavigationBar.vue'
 import OverviewPage from './OverviewPage.vue'
 
 // 非首屏组件懒加载，减少初始打包体积
-const KeysManagePage = defineAsyncComponent(() => import('./KeysManagePage.vue'))
-const PricingManagePage = defineAsyncComponent(() => import('./PricingManagePage.vue'))
-const OrdersManagePage = defineAsyncComponent(() => import('./OrdersManagePage.vue'))
-const ApiManagePage = defineAsyncComponent(() => import('./ApiManagePage.vue'))
-const UserManagePage = defineAsyncComponent(() => import('./UserManagePage.vue'))
-const SettingsPage = defineAsyncComponent(() => import('./SettingsPage.vue'))
-const NotificationPage = defineAsyncComponent(() => import('./NotificationPage.vue'))
-const MaintenanceAdmin = defineAsyncComponent(() => import('./MaintenanceAdmin.vue'))
-const SystemInfo = defineAsyncComponent(() => import('./SystemInfo.vue'))
+const KeysManagePage = defineAsyncComponent({
+  loader: () => import('./KeysManagePage.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const PricingManagePage = defineAsyncComponent({
+  loader: () => import('./PricingManagePage.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const OrdersManagePage = defineAsyncComponent({
+  loader: () => import('./OrdersManagePage.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const ApiManagePage = defineAsyncComponent({
+  loader: () => import('./ApiManagePage.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const UserManagePage = defineAsyncComponent({
+  loader: () => import('./UserManagePage.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const SettingsPage = defineAsyncComponent({
+  loader: () => import('./SettingsPage.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const NotificationPage = defineAsyncComponent({
+  loader: () => import('./NotificationPage.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const MaintenanceAdmin = defineAsyncComponent({
+  loader: () => import('./MaintenanceAdmin.vue'),
+  delay: 200,
+  timeout: 15000
+})
+const SystemInfo = defineAsyncComponent({
+  loader: () => import('./SystemInfo.vue'),
+  delay: 200,
+  timeout: 15000
+})
 
 const props = defineProps({
   userInfo: Object

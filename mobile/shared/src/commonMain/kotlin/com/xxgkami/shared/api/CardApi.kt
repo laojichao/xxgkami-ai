@@ -22,7 +22,7 @@ class CardApi(private val client: ApiClient) {
      * @param ipAddress IP地址（可选）
      * @return 验证结果，包含成功状态、剩余次数、到期时间等
      */
-    suspend fun useCard(cardKey: String, deviceId: String = "Unknown", ipAddress: String = ""): CardVerifyResponse {
+    suspend fun useCard(cardKey: String, deviceId: String, ipAddress: String = ""): CardVerifyResponse {
         val body = buildJsonObject {
             put("card_key", JsonPrimitive(cardKey))
             put("device_id", JsonPrimitive(deviceId))

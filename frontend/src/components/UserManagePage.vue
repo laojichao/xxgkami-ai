@@ -188,6 +188,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { userApi } from '../services/api.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import logger from '../utils/logger'
 
 /** 用户列表数据 */
 const users = ref([])
@@ -244,7 +245,7 @@ const fetchUsers = async () => {
       total.value = res.data.totalElements || 0
     }
   } catch (error) {
-    console.error('Failed to fetch users:', error)
+    logger.error('Failed to fetch users:', error)
     ElMessage.error('获取用户列表失败: ' + error.message)
   } finally {
     loading.value = false
@@ -316,7 +317,7 @@ const submitForm = async () => {
     fetchUsers()
     ElMessage.success(isEditing.value ? '用户更新成功' : '用户创建成功')
   } catch (error) {
-    console.error('Submit failed:', error)
+    logger.error('Submit failed:', error)
     ElMessage.error('操作失败: ' + error.message)
   } finally {
     loading.value = false
@@ -338,7 +339,7 @@ const toggleUserStatus = async (id, currentStatus) => {
     fetchUsers()
     ElMessage.success(`用户已${action}`)
   } catch (error) {
-    console.error('Status update failed:', error)
+    logger.error('Status update failed:', error)
     ElMessage.error('状态更新失败: ' + error.message)
   }
 }
@@ -359,7 +360,7 @@ const handleDeleteUser = async (id) => {
     fetchUsers()
     ElMessage.success('用户已删除')
   } catch (error) {
-    console.error('Delete failed:', error)
+    logger.error('Delete failed:', error)
     ElMessage.error('删除失败: ' + error.message)
   }
 }

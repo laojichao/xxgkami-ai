@@ -8,6 +8,7 @@ import logger from '../utils/logger'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 let isRefreshing = false;
 let failedQueue = [];
+let isRedirecting = false;
 
 const processQueue = (error, token = null) => {
   failedQueue.forEach(prom => {
@@ -26,6 +27,9 @@ const processQueue = (error, token = null) => {
  * 不再从 localStorage 读取 Token，也不再设置 Authorization 头部。</p>
  */
 async function apiRequest(endpoint, options = {}) {
+  if (isRedirecting) {
+    return Promise.reject(new Error('Session expired'))
+  }
   const url = `${API_BASE_URL}${endpoint}`;
 
   const defaultOptions = {
@@ -126,6 +130,7 @@ async function apiRequest(endpoint, options = {}) {
            localStorage.removeItem('isLoggedIn');
 
            // Show popup and redirect
+           isRedirecting = true
            ElMessageBox.alert('当前登录已过期，请重新登录', '登录过期', {
              confirmButtonText: '确定',
              type: 'warning',

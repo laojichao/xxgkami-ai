@@ -342,6 +342,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { settingsApi, maintenanceApi, authApi } from '../services/api.js'
 import { copyToClipboard as copyToClipboardUtil } from '../utils/clipboard.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import logger from '../utils/logger'
 
 const props = defineProps({
   userInfo: Object
@@ -405,7 +406,7 @@ const fetchTotpSetup = async () => {
             showToast(res.message || '获取配置失败', 'error');
         }
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         showToast('获取配置失败', 'error');
     }
 }
@@ -537,7 +538,7 @@ const loadSettings = async () => {
       }
     }
   } catch (error) {
-    console.error('Failed to load settings:', error)
+    logger.error('Failed to load settings:', error)
   }
 }
 
@@ -574,7 +575,7 @@ const saveSettings = async () => {
       showToast(res.message || '保存失败', 'error')
     }
   } catch (error) {
-    console.error('Failed to save settings:', error)
+    logger.error('Failed to save settings:', error)
     showToast('保存失败: ' + (error.message || '未知错误'), 'error')
   }
 }
@@ -604,7 +605,7 @@ const clearCache = async () => {
     await maintenanceApi.clearCache()
     showToast('缓存清理完成', 'success')
   } catch (error) {
-    console.error('Clear cache failed:', error)
+    logger.error('Clear cache failed:', error)
     showToast('缓存清理失败', 'error')
   }
 }
@@ -614,7 +615,7 @@ const clearLogs = async () => {
     await maintenanceApi.clearLogs()
     showToast('日志清理完成', 'success')
   } catch (error) {
-    console.error('Clear logs failed:', error)
+    logger.error('Clear logs failed:', error)
     showToast('日志清理失败', 'error')
   }
 }
@@ -631,7 +632,7 @@ const createBackup = async () => {
     await maintenanceApi.createBackup();
     showToast('备份创建成功', 'success')
   } catch (error) {
-    console.error('Backup failed:', error);
+    logger.error('Backup failed:', error);
     showToast('备份创建失败', 'error')
   }
 }

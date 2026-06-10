@@ -46,7 +46,7 @@ class CardViewModel : ViewModel() {
      * @param cardKey 卡密字符串
      * @param deviceId 设备标识，默认为"Android"
      */
-    fun verify(cardKey: String, deviceId: String = "Android") {
+    fun verify(cardKey: String, deviceId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null

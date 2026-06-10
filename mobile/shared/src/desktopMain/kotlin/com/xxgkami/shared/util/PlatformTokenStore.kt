@@ -1,6 +1,8 @@
 package com.xxgkami.shared.util
 
 import com.xxgkami.shared.api.ApiProvider
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
@@ -24,6 +26,9 @@ import javax.crypto.spec.SecretKeySpec
  *
  * 文件格式：Base64( IV[12 bytes] + AES-GCM-Ciphertext + AuthTag[16 bytes] )
  */
+@Serializable
+private data class TokenPair(val access: String, val refresh: String)
+
 actual class PlatformTokenStore actual constructor() {
     /** 配置目录：用户主目录下的 .xxgkami 隐藏文件夹 */
     private val configDir = File(System.getProperty("user.home"), ".xxgkami")
@@ -45,7 +50,7 @@ actual class PlatformTokenStore actual constructor() {
     }
 
     actual fun saveTokens(accessToken: String, refreshToken: String) {
-        val data = "$accessToken|$refreshToken"
+        val data = Json.encodeToString(TokenPair(accessToken, refreshToken))
         val encrypted = encrypt(data)
         tokenFile.writeText(encrypted)
         ApiProvider.setTokens(accessToken, refreshToken)
@@ -77,8 +82,15 @@ actual class PlatformTokenStore actual constructor() {
         if (!tokenFile.exists()) return null
         return try {
             val decrypted = decrypt(tokenFile.readText())
-            val parts = decrypted.split("|", limit = 2)
-            if (parts.size == 2) Pair(parts[0], parts[1]) else null
+            val tokens = try {
+                Json.decodeFromString<TokenPair>(decrypted)
+            } catch (e: Exception) {
+                // Backwards compatibility with old pipe-delimited format
+                val parts = decrypted.split("|", limit = 2)
+                if (parts.size == 2) TokenPair(parts[0], parts[1])
+                else null
+            }
+            if (tokens != null) Pair(tokens.access, tokens.refresh) else null
         } catch (e: Exception) {
             // 解密失败（文件损坏、密钥变更等），清除无效文件
             println("[PlatformTokenStore] Failed to decrypt tokens: ${e.message}")

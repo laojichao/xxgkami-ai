@@ -14,10 +14,10 @@
         <div class="user-info">
           <el-dropdown>
             <span class="user-dropdown">
-              <el-avatar :size="32" :src="userInfo.avatar">
+              <el-avatar :size="32" :src="localUserInfo.avatar">
                 <el-icon><User /></el-icon>
               </el-avatar>
-              <span class="username">{{ userInfo.username }}</span>
+              <span class="username">{{ localUserInfo.username }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -87,7 +87,7 @@
         <div v-if="activeMenu === 'dashboard'" class="content-section">
           <div class="section-header">
             <h2>仪表盘</h2>
-            <p>欢迎回来，{{ userInfo.username }}！</p>
+            <p>欢迎回来，{{ localUserInfo.username }}！</p>
           </div>
           
           <!-- 统计卡片 -->
@@ -493,7 +493,7 @@
                   <span>头像设置</span>
                 </template>
                 <div class="avatar-section">
-                  <el-avatar :size="120" :src="userInfo.avatar">
+                  <el-avatar :size="120" :src="localUserInfo.avatar">
                     <el-icon><User /></el-icon>
                   </el-avatar>
                   <el-upload
@@ -516,7 +516,7 @@
                 </template>
                 <el-form :model="profileForm" label-width="100px">
                   <el-form-item label="用户名">
-                    <el-input v-model="userInfo.username" disabled />
+                    <el-input v-model="localUserInfo.username" disabled />
                   </el-form-item>
                   <el-form-item label="昵称">
                     <el-input v-model="profileForm.nickname" placeholder="请输入昵称" />
@@ -535,10 +535,10 @@
 
               <el-card shadow="never" style="margin-top: 20px;">
                 <template #header>
-                  <span>{{ userInfo.hasPassword ? '修改密码' : '设置密码' }}</span>
+                  <span>{{ localUserInfo.hasPassword ? '修改密码' : '设置密码' }}</span>
                 </template>
                 <el-form :model="passwordForm" label-width="100px">
-                  <el-form-item label="旧密码" v-if="userInfo.hasPassword">
+                  <el-form-item label="旧密码" v-if="localUserInfo.hasPassword">
                     <el-input v-model="passwordForm.oldPassword" type="password" placeholder="请输入旧密码" show-password />
                   </el-form-item>
                   <el-form-item label="新密码">
@@ -548,7 +548,7 @@
                     <el-input v-model="passwordForm.confirmPassword" type="password" placeholder="请确认新密码" show-password />
                   </el-form-item>
                   <el-form-item>
-                    <el-button type="primary" @click="handleChangePassword" :loading="passwordLoading">{{ userInfo.hasPassword ? '修改密码' : '设置密码' }}</el-button>
+                    <el-button type="primary" @click="handleChangePassword" :loading="passwordLoading">{{ localUserInfo.hasPassword ? '修改密码' : '设置密码' }}</el-button>
                   </el-form-item>
                 </el-form>
               </el-card>
@@ -724,7 +724,7 @@ const pageSize = ref(10)
 const total = computed(() => usageRecords.value.length)
 
 // 用户信息 - 使用props传入的数据，并监听props变化保持同步
-const userInfo = reactive({
+const localUserInfo = reactive({
   id: props.userInfo.id,
   username: props.userInfo.username || '普通用户',
   avatar: props.userInfo.avatar || '',
@@ -736,12 +736,12 @@ const userInfo = reactive({
 // 监听 props.userInfo 变化，同步到本地 reactive 对象
 watch(() => props.userInfo, (newVal) => {
   if (newVal) {
-    Object.assign(userInfo, {
+    Object.assign(localUserInfo, {
       id: newVal.id,
-      username: newVal.username || userInfo.username,
-      avatar: newVal.avatar || userInfo.avatar,
-      email: newVal.email || userInfo.email,
-      phone: newVal.phone || userInfo.phone,
+      username: newVal.username || localUserInfo.username,
+      avatar: newVal.avatar || localUserInfo.avatar,
+      email: newVal.email || localUserInfo.email,
+      phone: newVal.phone || localUserInfo.phone,
       hasPassword: newVal.hasPassword
     })
   }
@@ -816,7 +816,7 @@ let pollTimer = null
 
 // 修改密码
 const handleChangePassword = async () => {
-  if (userInfo.hasPassword && !passwordForm.oldPassword) {
+  if (localUserInfo.hasPassword && !passwordForm.oldPassword) {
     ElMessage.warning('请输入旧密码')
     return
   }
@@ -833,7 +833,7 @@ const handleChangePassword = async () => {
   try {
     const res = await userProfileApi.changePassword(passwordForm.oldPassword, passwordForm.newPassword)
     if (res.success) {
-       ElMessage.success(userInfo.hasPassword ? '密码修改成功' : '密码设置成功')
+       ElMessage.success(localUserInfo.hasPassword ? '密码修改成功' : '密码设置成功')
        passwordForm.oldPassword = ''
        passwordForm.newPassword = ''
        passwordForm.confirmPassword = ''
@@ -913,7 +913,7 @@ const fetchUserProfile = async () => {
     try {
         const result = await userProfileApi.getProfile();
         if (result && result.success && result.data) {
-            Object.assign(userInfo, result.data);
+            Object.assign(localUserInfo, result.data);
             Object.assign(profileForm, {
                 nickname: result.data.nickname,
                 email: result.data.email,
@@ -962,7 +962,7 @@ const handleAvatarUpload = async (file) => {
         const result = await userProfileApi.uploadAvatar(file.raw);
         if (result.success) {
             ElMessage.success('头像上传成功');
-            userInfo.avatar = result.url;
+            localUserInfo.avatar = result.url;
         } else {
             ElMessage.error(result.message || '头像上传失败');
         }
@@ -974,7 +974,7 @@ const handleAvatarUpload = async (file) => {
 
 const fetchOrders = async () => {
     try {
-        const userId = userInfo.id || 1;
+        const userId = localUserInfo.id || 1;
         const timestamp = new Date().getTime();
 
         const [ordersResult, cardsResult] = await Promise.all([
@@ -1296,14 +1296,14 @@ const purchaseCard = async (cardType) => {
     ElMessage.info('正在处理支付...')
 
     const createOrderData = {
-      userId: userInfo.id || 1,
-      username: userInfo.username,
+      userId: localUserInfo.id || 1,
+      username: localUserInfo.username,
       cardType: cardType,
       cardSpec: option.description,
       pricingId: option.id,
       quantity: quantity,
       paymentMethod: paymentMethod.value,
-      email: userInfo.email
+      email: localUserInfo.email
     }
 
     const result = await orderApi.createOrder(createOrderData)
@@ -1344,7 +1344,7 @@ const purchaseCard = async (cardType) => {
       }
 
       ElMessageBox.alert(
-        `订单号：${result.data.order_id}\n购买成功！\n支付金额：¥${result.data.total_price}\n\n系统已发送订单通知邮件到您的邮箱：${userInfo.email}`,
+        `订单号：${result.data.order_id}\n购买成功！\n支付金额：¥${result.data.total_price}\n\n系统已发送订单通知邮件到您的邮箱：${localUserInfo.email}`,
         '购买成功',
         {
           confirmButtonText: '确定',

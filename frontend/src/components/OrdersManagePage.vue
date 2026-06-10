@@ -431,6 +431,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { orderApi } from '../services/api'
 import { copyToClipboard } from '../utils/clipboard.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import logger from '../utils/logger'
 
 // 响应式数据
 const loading = ref(false)
@@ -487,7 +488,7 @@ const loadStats = async () => {
       }
     }
   } catch (error) {
-    console.error('加载统计数据失败:', error)
+    logger.error('加载统计数据失败:', error)
   }
 }
 
@@ -519,7 +520,7 @@ const getOrders = async () => {
       pagination.total = response.data.totalElements || orders.value.length
     }
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     showToast('获取订单列表失败', 'error')
   } finally {
     loading.value = false
