@@ -115,20 +115,29 @@
 | `fc9c5f9` | 初步审查修复（30项） | 33 | +475/-91 |
 | `2677cef` | JWT hash、日志统一、Ktor升级 | 6 | +83/-24 |
 | `51e049c` | 重复端点清理、Lombok修复 | 8 | +85/-8 |
+| `7c1a43e` | BindToken持久化、私钥加密、ViewModel缓存 | 9 | +356/-35 |
+| `8233f21` | 图标按需导入、UserPage迁移Composition API | 3 | +659/-712 |
 
-### 剩余待处理问题
+**总计**: 5 次提交，59 个文件修改，+1658/-960 行变化
 
-| # | 严重度 | 问题 | 建议方案 |
-|---|--------|------|----------|
-| R1 | 🟠高 | bind token 内存存储 | 迁移到 Redis 或数据库 |
-| R2 | 🟠高 | 前端 JWT 存 localStorage | 改用 httpOnly cookie |
-| R3 | 🟠高 | iOS/Desktop Token 持久化缺失 | 实现 Keychain |
-| R4 | 🟡中 | MD5 用于支付签名 | 受限于第三方协议 |
-| R5 | 🟡中 | ECC 私钥明文存储 | 加密存储 |
-| R6 | 🟡中 | Element Plus 图标全量注册 | 按需导入 |
-| R7 | 🟡中 | 大组件文件拆分 | 拆分子组件 |
-| R8 | 🟡中 | ViewModel 缓存 | 添加数据缓存 |
-| R9 | 🟢低 | UserPage Options API | 迁移到 Composition API |
+### 已修复的剩余问题
+
+| # | 问题 | 提交 |
+|---|------|------|
+| R1 | bind token 内存存储 → 数据库持久化 | `7c1a43e` |
+| R5 | ECC 私钥明文存储 → AES-256-GCM 加密 | `7c1a43e` |
+| R6 | Element Plus 图标全量注册 → 按需导入（200+→16个） | `8233f21` |
+| R8 | ViewModel 缓存 → 添加数据缓存机制 | `7c1a43e` |
+| R9 | UserPage Options API → Composition API | `8233f21` |
+
+### 仍待处理问题
+
+| # | 严重度 | 问题 | 建议方案 | 原因 |
+|---|--------|------|----------|------|
+| R2 | 🟠高 | 前端 JWT 存 localStorage | 改用 httpOnly cookie | 需要后端配合设置 cookie，架构改动大 |
+| R3 | 🟠高 | iOS/Desktop Token 持久化缺失 | 实现 Keychain | 需要平台特定代码，当前仅支持 Android |
+| R4 | 🟡中 | MD5 用于支付签名 | 受限于第三方协议 | 需确认支付网关是否支持 HMAC-SHA256 |
+| R7 | 🟡中 | 大组件文件拆分 | 拆分子组件 | 工作量大，功能回归测试复杂 |
 
 ## 6. 风险评估
 
