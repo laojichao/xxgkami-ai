@@ -4,17 +4,52 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * 支付工具类
  * <p>提供易支付接口的签名生成、签名验证和订单号生成功能。</p>
  * <p>签名算法：将参数按key排序拼接后附加密钥，进行MD5哈希并转大写。</p>
+ * <p>安全说明：MD5 是易支付协议要求的签名算法，存在碰撞风险。
+ * 如果支付网关支持 HMAC-SHA256，建议切换到 {@link #generateSignHmac} 方法。</p>
  */
 @Component
 public class PaymentUtil {
 
+    /**
+     * 生成支付签名（MD5，兼容易支付协议）
+     * <p>安全说明：MD5 存在已知碰撞攻击，但这是易支付协议的强制要求。
+     * 如果支付网关支持更安全的算法，请使用 {@link #generateSignHmac}。</p>
+     */
     public String generateSign(Map<String, String> params, String key) {
-        // Sort params by key, concatenate as key=value&key=value, append key
+        String signContent = buildSignContent(params);
+        return md5(signContent + key).toUpperCase();
+    }
+
+    /**
+     * 生成支付签名（HMAC-SHA256，更安全的替代方案）
+     * <p>需要支付网关支持 HMAC-SHA256 签名算法。</p>
+     */
+    public String generateSignHmac(Map<String, String> params, String key) {
+        try {
+            String signContent = buildSignContent(params);
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(keySpec);
+            byte[] result = mac.doFinal(signContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : result) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString().toUpperCase();
+        } catch (Exception e) {
+            throw new RuntimeException("HMAC-SHA256 error", e);
+        }
+    }
+
+    /** 构建签名内容：参数按 key 排序拼接为 key=value&key=value 格式 */
+    private String buildSignContent(Map<String, String> params) {
         TreeMap<String, String> sortedParams = new TreeMap<>(params);
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, String> entry : sortedParams.entrySet()) {
@@ -24,14 +59,22 @@ public class PaymentUtil {
                 sb.append(entry.getKey()).append("=").append(entry.getValue());
             }
         }
-        sb.append(key);
-        return md5(sb.toString()).toUpperCase();
+        return sb.toString();
     }
 
+    /** 验证 MD5 签名 */
     public boolean verifySign(Map<String, String> params, String key) {
         String sign = params.get("sign");
         if (sign == null) return false;
         String calculated = generateSign(params, key);
+        return sign.equalsIgnoreCase(calculated);
+    }
+
+    /** 验证 HMAC-SHA256 签名 */
+    public boolean verifySignHmac(Map<String, String> params, String key) {
+        String sign = params.get("sign");
+        if (sign == null) return false;
+        String calculated = generateSignHmac(params, key);
         return sign.equalsIgnoreCase(calculated);
     }
 
