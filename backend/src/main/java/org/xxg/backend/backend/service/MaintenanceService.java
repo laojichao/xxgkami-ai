@@ -27,7 +27,27 @@ public class MaintenanceService {
     @Transactional
     public MaintenanceSettings updateSettings(MaintenanceSettings settings) {
         settings.setId(1);
+        // Sanitize HTML fields to remove potentially dangerous content
+        settings.setContent(sanitizeHtml(settings.getContent()));
+        settings.setEmailTemplate(sanitizeHtml(settings.getEmailTemplate()));
         return repository.save(settings);
+    }
+
+    /**
+     * Simple HTML sanitizer that removes dangerous elements while keeping safe formatting tags.
+     * Removes script/style tags (with content), event handlers, and javascript: URLs.
+     */
+    private String sanitizeHtml(String html) {
+        if (html == null) return null;
+        // Remove script/style tags and their content
+        html = html.replaceAll("(?i)<script[^>]*>[\\s\\S]*?</script>", "");
+        html = html.replaceAll("(?i)<style[^>]*>[\\s\\S]*?</style>", "");
+        // Remove on* event handlers
+        html = html.replaceAll("(?i)\\s+on\\w+\\s*=\\s*[\"'][^\"']*[\"']", "");
+        html = html.replaceAll("(?i)\\s+on\\w+\\s*=\\s*\\S+", "");
+        // Remove javascript: URLs
+        html = html.replaceAll("(?i)javascript\\s*:", "");
+        return html;
     }
 
     /**

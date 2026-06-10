@@ -45,6 +45,9 @@
       <div class="charts-grid">
         <!-- 卡密使用趋势图 -->
         <div class="chart-card">
+          <div v-if="chartError" style="color: #e6a23c; font-size: 12px; text-align: center; padding: 4px;">
+            数据加载失败，显示默认值
+          </div>
           <div class="chart-header">
             <h3>卡密使用趋势</h3>
             <div class="chart-controls">
@@ -194,6 +197,7 @@ const props = defineProps({
 const chartPeriod = ref('7')
 const usageChart = ref(null)
 const activityChart = ref(null)
+const chartError = ref(false)
 
 // 定时器变量
 let statusInterval = null
@@ -402,23 +406,25 @@ const drawActivityChart = () => {
 
 // 加载图表数据
 const loadChartData = async () => {
+  chartError.value = false
   try {
     const [usageData, activityData] = await Promise.all([
       statsApi.getCardUsageTrends(chartPeriod.value),
       statsApi.getUserActivityStats(chartPeriod.value)
     ])
-    
+
     if (usageData && usageData.dates && usageData.counts) {
       chartData.value.usage.labels = usageData.dates
       chartData.value.usage.data = usageData.counts
     }
-    
+
     if (activityData) {
       chartData.value.activity.active = activityData.active || 0
       chartData.value.activity.inactive = activityData.inactive || 0
     }
   } catch (error) {
     logger.error('加载图表数据失败:', error)
+    chartError.value = true
   }
 }
 

@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.controller;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
@@ -49,7 +51,7 @@ public class StatsController {
      * @return 指定天数范围内的用户活跃度统计数据
      */
     @GetMapping("/user-activity")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> userActivity(@RequestParam(defaultValue = "7") int days) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> userActivity(@RequestParam(defaultValue = "7") @Min(1) @Max(365) int days) {
         return ResponseEntity.ok(ApiResponse.ok(statsService.getUserActivityStats(days)));
     }
 }

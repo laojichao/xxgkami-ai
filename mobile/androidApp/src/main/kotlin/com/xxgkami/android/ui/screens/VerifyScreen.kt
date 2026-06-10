@@ -36,7 +36,7 @@ fun VerifyScreen(navController: NavController, viewModel: CardViewModel = viewMo
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(value = machineCode, onValueChange = { machineCode = it }, label = { Text("机器码（可选）") }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(24.dp))
-            // 未输入机器码时使用默认值"Android"
+            // 未输入机器码时使用 "厂商_型号" 作为默认值
             Button(onClick = { viewModel.verify(cardKey, machineCode.ifBlank { defaultMachineCode }) }, enabled = !isLoading && cardKey.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 if (isLoading) CircularProgressIndicator(Modifier.size(24.dp)) else Text("验证")
             }

@@ -29,8 +29,11 @@ public class ApiKeyController {
      */
     @PostMapping
     public ResponseEntity<ApiResponse<ApiKey>> create(@RequestBody Map<String, String> body) {
-        return ResponseEntity.ok(ApiResponse.ok(apiKeyService.createApiKey(
-                body.getOrDefault("name", "API Key"), body.get("description"))));
+        String name = body.getOrDefault("name", "API Key");
+        if (name.length() > 100) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("API Key 名称不能超过100个字符"));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(apiKeyService.createApiKey(name, body.get("description"))));
     }
 
     /**

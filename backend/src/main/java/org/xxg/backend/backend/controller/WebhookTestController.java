@@ -28,7 +28,11 @@ public class WebhookTestController {
      */
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> testWebhook(@RequestBody java.util.Map<String, Object> body) {
-        log.info("[WEBHOOK TEST] Received: {}", body);
+        String bodyStr = body.toString();
+        if (bodyStr.length() > 1000) {
+            bodyStr = bodyStr.substring(0, 1000) + "... (truncated)";
+        }
+        log.info("[WEBHOOK TEST] Received: {}", bodyStr);
         return ResponseEntity.ok(ApiResponse.ok("Webhook 测试成功"));
     }
 }

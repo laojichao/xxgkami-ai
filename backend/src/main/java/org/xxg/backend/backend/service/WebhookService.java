@@ -133,6 +133,21 @@ public class WebhookService {
             String resolvedIp = addr.getHostAddress();
             InetAddress resolvedAddr = InetAddress.getByName(resolvedIp);
 
+            // Check CGNAT range (100.64.0.0/10)
+            if (resolvedAddr.getAddress().length == 4) {
+                int firstOctet = resolvedAddr.getAddress()[0] & 0xFF;
+                int secondOctet = resolvedAddr.getAddress()[1] & 0xFF;
+                if (firstOctet == 100 && (secondOctet >= 64 && secondOctet <= 127)) {
+                    return true;
+                }
+            }
+
+            // Check cloud metadata hostnames
+            if (lowerHost.equals("metadata.google.internal") || lowerHost.equals("metadata.google.com") ||
+                lowerHost.equals("instance-data") || lowerHost.equals("169.254.169.254")) {
+                return true;
+            }
+
             return resolvedAddr.isLoopbackAddress() || resolvedAddr.isSiteLocalAddress()
                     || resolvedAddr.isLinkLocalAddress() || resolvedAddr.isAnyLocalAddress();
         } catch (Exception e) {

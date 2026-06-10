@@ -4,7 +4,7 @@
     <el-header class="user-header">
       <div class="header-content">
         <div class="brand">
-          <div class="mobile-menu-btn" @click="toggleDrawer">
+          <div class="mobile-menu-btn" @click="toggleDrawer" aria-label="打开菜单">
             <el-icon size="24" color="#fff"><Menu /></el-icon>
           </div>
           <img src="../assets/icon.png" alt="XXG-KAMI-PRO" class="brand-icon">
@@ -859,7 +859,7 @@ const fetchSocialBindings = async () => {
       socialBindings.value = res.data || []
     }
   } catch (e) {
-    logger.error(e)
+    logger.error('获取社交绑定信息失败:', e)
   } finally {
     loadingSocial.value = false
   }
@@ -876,7 +876,7 @@ const fetchOAuthSettings = async () => {
          oauthLoginTypes.alipay = types.includes('alipay')
      }
    } catch (e) {
-     logger.error(e)
+     logger.error('获取OAuth配置失败:', e)
    }
 }
 

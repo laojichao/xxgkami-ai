@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.controller;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -24,10 +26,12 @@ public class OnlineUserController {
      * @return 包含 count（在线人数）和 users（用户列表）的信息
      */
     @GetMapping({"/online-users", "/online/list"})
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getOnlineUsers() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOnlineUsers(
+            @RequestParam(defaultValue = "100") @Min(1) @Max(500) int limit) {
         Map<String, Object> result = new HashMap<>();
         result.put("count", service.getOnlineCount());
-        result.put("users", service.getOnlineUsers());
+        List<String> users = service.getOnlineUsers();
+        result.put("users", users.subList(0, Math.min(limit, users.size())));
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 

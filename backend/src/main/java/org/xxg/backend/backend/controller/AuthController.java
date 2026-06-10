@@ -179,6 +179,9 @@ public class AuthController {
         refreshRequest.setRefreshToken(refreshTokenValue);
         LoginResponse loginResponse = authService.refreshToken(refreshRequest);
         setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
+        // Don't return tokens in response body — they are in httpOnly cookies
+        loginResponse.setToken(null);
+        loginResponse.setRefreshToken(null);
         return ResponseEntity.ok(ApiResponse.ok(loginResponse));
     }
 
