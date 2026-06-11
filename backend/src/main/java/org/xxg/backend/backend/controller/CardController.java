@@ -38,8 +38,22 @@ public class CardController {
             error.put("statusCode", 400);
             return ResponseEntity.badRequest().body(error);
         }
+        if (cardKey.length() > 255) {
+            Map<String, Object> error = new java.util.HashMap<>();
+            error.put("success", false);
+            error.put("message", "卡密长度不能超过255个字符");
+            error.put("statusCode", 400);
+            return ResponseEntity.badRequest().body(error);
+        }
         // client sends "device_id", mapped to machineCode for binding
         String machineCode = body.getOrDefault("device_id", body.getOrDefault("machine_code", "Unknown"));
+        if (machineCode != null && machineCode.length() > 255) {
+            Map<String, Object> error = new java.util.HashMap<>();
+            error.put("success", false);
+            error.put("message", "机器码长度不能超过255个字符");
+            error.put("statusCode", 400);
+            return ResponseEntity.badRequest().body(error);
+        }
         return ResponseEntity.ok(cardService.verifyCard(cardKey, machineCode, null));
     }
 

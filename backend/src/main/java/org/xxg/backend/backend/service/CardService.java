@@ -471,7 +471,7 @@ public class CardService {
                 cardKeys.add(cardKey);
             } catch (Exception e) {
                 log.error("为订单 {} 生成卡密失败: {}", order.getOrderNo(), e.getMessage(), e);
-                throw new BusinessException("卡密生成失败: " + e.getMessage());
+                throw new BusinessException("卡密生成失败，请联系管理员");
             }
         }
 

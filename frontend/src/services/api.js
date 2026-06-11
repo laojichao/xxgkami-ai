@@ -354,6 +354,13 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ username, code })
     });
+  },
+
+  /**
+   * 获取 OAuth state nonce（防止 session fixation）
+   */
+  async getOAuthState() {
+    return await apiRequest('/auth/oauth/state');
   }
 };
 

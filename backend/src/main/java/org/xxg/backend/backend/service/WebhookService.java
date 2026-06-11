@@ -118,6 +118,11 @@ public class WebhookService {
     private boolean isInternalUrl(String url) {
         try {
             URI uri = URI.create(url);
+            // 仅允许 http/https 协议，阻止 file:/gopher:/ftp: 等协议的 SSRF
+            String scheme = uri.getScheme();
+            if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+                return true;
+            }
             String host = uri.getHost();
             if (host == null) return true;
 

@@ -68,11 +68,46 @@ public class SettingsController {
         return false;
     }
 
-    /** 对敏感值进行脱敏：保留首尾各2字符，中间用****替代 */
+    /** 对敏感值进行脱敏：长度<=8时完全隐藏，>8时仅保留首尾各2字符 */
     private String maskValue(String value) {
         if (value == null || value.isEmpty()) return value;
-        if (value.length() <= 4) return "****";
+        if (value.length() <= 8) return "********";
         return value.substring(0, 2) + "****" + value.substring(value.length() - 2);
+    }
+
+    /**
+     * 检查值是否为脱敏格式（防止前端未修改的脱敏值被回写覆盖真实配置）。
+     * <p>匹配模式：全星号 或 XX****XX（首尾各2字符+中间4个星号）</p>
+     */
+    private boolean isMaskedValue(String value) {
+        if (value == null) return false;
+        // 全星号模式：********
+        if (value.matches("^\\*{4,}$")) return true;
+        // 首尾各2字符+****模式：ab****cd
+        if (value.length() == 8 && value.substring(2, 6).equals("****")
+                && !value.substring(0, 2).contains("*") && !value.substring(6).contains("*")) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 过滤掉脱敏值，避免前端未修改的脱敏字段覆盖数据库中的真实配置。
+     * <p>前端获取设置时，敏感字段会被脱敏后返回。如果用户未修改这些字段就点击保存，
+     * 脱敏值（如 "********"）会被回传。此方法识别并跳过这些值。</p>
+     */
+    private Map<String, String> filterMaskedValues(Map<String, String> settings) {
+        Map<String, String> filtered = new java.util.HashMap<>();
+        for (Map.Entry<String, String> entry : settings.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            // 仅对敏感字段检查脱敏值，非敏感字段直接放行
+            if (isSensitiveKey(key) && isMaskedValue(value)) {
+                continue; // 跳过脱敏值，不更新此字段
+            }
+            filtered.put(key, value);
+        }
+        return filtered;
     }
 
     /**
@@ -86,7 +121,8 @@ public class SettingsController {
                 return ResponseEntity.ok(ApiResponse.error("不允许修改敏感配置项: " + key));
             }
         }
-        settingsService.updateSettings(settings);
+        Map<String, String> filtered = filterMaskedValues(settings);
+        settingsService.updateSettings(filtered);
         return ResponseEntity.ok(ApiResponse.ok("设置已更新"));
     }
 
@@ -97,7 +133,8 @@ public class SettingsController {
                 return ResponseEntity.ok(ApiResponse.error("不允许修改敏感配置项: " + key));
             }
         }
-        settingsService.updateSettings(settings);
+        Map<String, String> filtered = filterMaskedValues(settings);
+        settingsService.updateSettings(filtered);
         return ResponseEntity.ok(ApiResponse.ok("设置已保存"));
     }
 

@@ -66,9 +66,13 @@ public class WalletController {
         }
         BigDecimal amount;
         try {
-            amount = new BigDecimal(amountObj.toString());
+            amount = new BigDecimal(amountObj.toString()).setScale(2, java.math.RoundingMode.HALF_UP);
         } catch (NumberFormatException e) {
             throw new org.xxg.backend.backend.exception.BusinessException("金额格式无效");
+        }
+        // 防止超大精度 BigDecimal 导致内存问题
+        if (amount.precision() > 10) {
+            throw new org.xxg.backend.backend.exception.BusinessException("金额精度过高");
         }
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new org.xxg.backend.backend.exception.BusinessException("充值金额必须大于0");

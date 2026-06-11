@@ -546,6 +546,21 @@ const loadSettings = async () => {
   }
 }
 
+/** 检测值是否为脱敏格式（后端返回的掩码），是则应跳过保存 */
+const isMaskedValue = (val) => {
+  if (!val || typeof val !== 'string') return false;
+  // 全星号模式：********
+  if (/^\*{4,}$/.test(val)) return true;
+  // 首尾各2字符+****模式：ab****cd
+  if (val.length === 8 && val.substring(2, 6) === '****' && !val.substring(0, 2).includes('*') && !val.substring(6).includes('*')) {
+    return true;
+  }
+  return false;
+}
+
+/** 敏感字段列表 — 这些字段如果值为脱敏格式则不提交 */
+const SENSITIVE_FIELDS = ['epay_key', 'oauth_appkey', 'smtp_password'];
+
 const saveSettings = async () => {
   try {
     if (!settings.site_url) {
@@ -554,6 +569,12 @@ const saveSettings = async () => {
     }
     // Convert booleans to strings for backend
     const payload = { ...settings }
+    // 过滤脱敏值：如果敏感字段未被用户修改（仍为掩码格式），则不提交给后端
+    SENSITIVE_FIELDS.forEach(field => {
+      if (payload[field] && isMaskedValue(payload[field])) {
+        delete payload[field];
+      }
+    })
     payload.autoBackup = String(payload.autoBackup)
     payload.dataCompression = String(payload.dataCompression)
     payload.qqLogin = String(payload.qqLogin)

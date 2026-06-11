@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -22,8 +23,9 @@ public class ApiKey {
     @Column(name = "key_name", nullable = false, length = 50)
     private String keyName; // 密钥显示名称
 
+    @JsonIgnore
     @Column(name = "api_key", nullable = false, unique = true, length = 32)
-    private String apiKeyValue; // API密钥值(用于接口认证)
+    private String apiKeyValue; // API密钥值(用于接口认证，序列化时隐藏)
 
     private Boolean status = true; // 密钥状态(true=启用, false=禁用)
 
@@ -39,8 +41,9 @@ public class ApiKey {
     @Column(length = 255)
     private String description; // 密钥用途描述
 
+    @JsonIgnore
     @Column(name = "key_value", nullable = false, unique = true, length = 255)
-    private String keyValue; // 密钥完整值(内部存储)
+    private String keyValue; // 密钥完整值(内部存储，序列化时隐藏)
 
     @Column(nullable = false, length = 100)
     private String name = "API Key"; // 密钥别名
@@ -58,6 +61,7 @@ public class ApiKey {
     @Column(name = "require_machine_code")
     private Boolean requireMachineCode = false; // 是否要求绑定机器码
 
+    @JsonIgnore
     @Column(name = "machine_spec_once_config", columnDefinition = "TEXT")
-    private String machineSpecOnceConfig; // 机器码一次性绑定配置(JSON格式)
+    private String machineSpecOnceConfig; // 机器码一次性绑定配置(JSON格式，序列化时隐藏)
 }

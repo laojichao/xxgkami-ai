@@ -8,6 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
 import org.xxg.backend.backend.dto.CreateOrderRequest;
+import org.xxg.backend.backend.dto.UpdateOrderStatusRequest;
 import org.xxg.backend.backend.entity.Order;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.UserRepository;
@@ -103,6 +104,10 @@ public class OrderController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate) {
         size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
+        // 限制搜索参数长度，防止超长字符串导致数据库 LIKE 查询性能问题
+        if (orderNo != null && orderNo.length() > 64) orderNo = orderNo.substring(0, 64);
+        if (username != null && username.length() > 50) username = username.substring(0, 50);
+        if (status != null && status.length() > 20) status = status.substring(0, 20);
         PageRequest pageRequest = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.searchOrders(status, orderNo, username, startDate, endDate, pageRequest)));
@@ -116,18 +121,11 @@ public class OrderController {
      * @return 操作结果
      */
     @PostMapping("/admin/updateStatus")
-    public ResponseEntity<ApiResponse<Void>> updateOrderStatus(@RequestBody Map<String, String> body) {
-        String orderNo = body.get("orderNo");
-        String status = body.get("status");
-        if (orderNo == null || orderNo.isBlank()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("订单号不能为空"));
-        }
-        if ("completed".equals(status)) {
-            orderService.completeOrder(orderNo, null);
-        } else if ("failed".equals(status)) {
-            orderService.failOrder(orderNo);
+    public ResponseEntity<ApiResponse<Void>> updateOrderStatus(@Valid @RequestBody UpdateOrderStatusRequest request) {
+        if ("completed".equals(request.getStatus())) {
+            orderService.completeOrder(request.getOrderNo(), null);
         } else {
-            return ResponseEntity.badRequest().body(ApiResponse.error("无效的状态值，仅支持 completed 或 failed"));
+            orderService.failOrder(request.getOrderNo());
         }
         return ResponseEntity.ok(ApiResponse.ok("订单状态已更新"));
     }

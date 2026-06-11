@@ -31,23 +31,39 @@ public class MaintenanceService {
         // Sanitize HTML fields to remove potentially dangerous content
         settings.setContent(sanitizeHtml(settings.getContent()));
         settings.setEmailTemplate(sanitizeHtml(settings.getEmailTemplate()));
+        // 邮件主题也需净化，防止注入
+        if (settings.getEmailSubject() != null) {
+            settings.setEmailSubject(settings.getEmailSubject().replaceAll("[<>\"']", "").trim());
+        }
         return repository.save(settings);
     }
 
     /**
-     * Simple HTML sanitizer that removes dangerous elements while keeping safe formatting tags.
-     * Removes script/style tags (with content), event handlers, and javascript: URLs.
+     * HTML 净化器：移除危险元素，仅保留安全的格式化标签。
+     * <p>采用黑名单+白名单双重策略：</p>
+     * <ul>
+     *   <li>移除所有危险标签及其内容（script/style/iframe/object/embed/form/base/meta/link）</li>
+     *   <li>移除所有 on* 事件处理器（含无引号、大小写混合变体）</li>
+     *   <li>移除 javascript:/data:/vbscript: 协议 URL</li>
+     *   <li>移除 HTML 注释（可包含 IE 条件表达式）</li>
+     * </ul>
      */
     private String sanitizeHtml(String html) {
         if (html == null) return null;
-        // Remove script/style tags and their content
-        html = html.replaceAll("(?i)<script[^>]*>[\\s\\S]*?</script>", "");
-        html = html.replaceAll("(?i)<style[^>]*>[\\s\\S]*?</style>", "");
-        // Remove on* event handlers
-        html = html.replaceAll("(?i)\\s+on\\w+\\s*=\\s*[\"'][^\"']*[\"']", "");
-        html = html.replaceAll("(?i)\\s+on\\w+\\s*=\\s*\\S+", "");
-        // Remove javascript: URLs
-        html = html.replaceAll("(?i)javascript\\s*:", "");
+        // 1. 移除危险标签及其内容
+        html = html.replaceAll("(?i)<(script|style|iframe|object|embed|applet|form|base|meta|link|svg|math)[^>]*>[\\s\\S]*?</\\1>", "");
+        // 2. 移除自闭合的危险标签
+        html = html.replaceAll("(?i)<(script|style|iframe|object|embed|applet|base|meta|link|svg|math)[^>]*/?>", "");
+        // 3. 移除 on* 事件处理器（支持无引号、单引号、双引号、有无空格等变体）
+        html = html.replaceAll("(?i)\\s*on\\w+\\s*=\\s*(\"[^\"]*\"|'[^']*'|\\S+)", "");
+        // 4. 移除 javascript:/data:/vbscript: 协议（在 href/src/action 等属性中）
+        html = html.replaceAll("(?i)(href|src|action|formaction|data|codebase)\\s*=\\s*\"\\s*(javascript|data|vbscript)[^\"]*\"", "");
+        html = html.replaceAll("(?i)(href|src|action|formaction|data|codebase)\\s*=\\s*'\\s*(javascript|data|vbscript)[^']*'", "");
+        html = html.replaceAll("(?i)(href|src|action|formaction|data|codebase)\\s*=\\s*(javascript|data|vbscript)\\S*", "");
+        // 5. 移除独立的 javascript:/data:/vbscript: URL
+        html = html.replaceAll("(?i)(javascript|data|vbscript)\\s*:", "");
+        // 6. 移除 HTML 注释
+        html = html.replaceAll("<!--[\\s\\S]*?-->", "");
         return html;
     }
 

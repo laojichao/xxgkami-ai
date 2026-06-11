@@ -6,6 +6,7 @@ import org.xxg.backend.backend.entity.ApiKey;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.ApiKeyRepository;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -28,17 +29,34 @@ public class ApiKeyService {
      * @param description 密钥描述
      * @return 创建成功的API密钥实体
      */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     @Transactional
     public ApiKey createApiKey(String name, String description) {
         ApiKey apiKey = new ApiKey();
         apiKey.setKeyName(name);
         apiKey.setName(name);
-        apiKey.setApiKeyValue(UUID.randomUUID().toString().replace("-", ""));
-        apiKey.setKeyValue(UUID.randomUUID().toString());
+        // 使用 256 位 SecureRandom 生成 API Key（64 个十六进制字符），比 UUID 更安全
+        apiKey.setApiKeyValue(generateSecureKey(32));
+        apiKey.setKeyValue(generateSecureKey(32));
         apiKey.setDescription(description);
         apiKey.setStatus(true);
         apiKey.setCreateTime(LocalDateTime.now());
         return apiKeyRepository.save(apiKey);
+    }
+
+    /**
+     * 生成指定字节数的安全随机密钥（十六进制格式）。
+     * @param bytes 字节数（32 字节 = 256 位 = 64 个十六进制字符）
+     */
+    private String generateSecureKey(int bytes) {
+        byte[] keyBytes = new byte[bytes];
+        SECURE_RANDOM.nextBytes(keyBytes);
+        StringBuilder sb = new StringBuilder(bytes * 2);
+        for (byte b : keyBytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     /**

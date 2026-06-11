@@ -87,8 +87,12 @@ public class UserService {
     @Transactional
     public User updateProfile(Integer userId, String nickname, String email, String phone) {
         User user = getUserById(userId);
-        if (nickname != null) user.setNickname(nickname);
+        if (nickname != null) {
+            if (nickname.length() > 50) throw new BusinessException("昵称长度不能超过50个字符");
+            user.setNickname(nickname);
+        }
         if (email != null && !email.equals(user.getEmail())) {
+            if (email.length() > 100) throw new BusinessException("邮箱长度不能超过100个字符");
             // 检查新邮箱是否已被其他用户占用
             if (userRepository.existsByEmail(email)) {
                 throw new BusinessException("该邮箱已被其他用户使用");
@@ -96,6 +100,7 @@ public class UserService {
             user.setEmail(email);
         }
         if (phone != null && !phone.equals(user.getPhone())) {
+            if (phone.length() > 20) throw new BusinessException("手机号长度不能超过20个字符");
             // 检查新手机号是否已被其他用户占用
             if (userRepository.existsByPhone(phone)) {
                 throw new BusinessException("该手机号已被其他用户使用");

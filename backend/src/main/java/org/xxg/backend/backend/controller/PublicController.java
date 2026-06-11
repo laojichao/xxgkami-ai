@@ -65,10 +65,14 @@ public class PublicController {
         if (cardKey == null || cardKey.isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("卡密不能为空"));
         }
+        if (cardKey.length() > 255) {
+            return ResponseEntity.ok(ApiResponse.error("卡密格式不正确"));
+        }
         Card card = cardRepository.findByCardKey(cardKey).orElse(null);
         Map<String, Object> result = new HashMap<>();
-        if (card == null) {
-            return ResponseEntity.ok(ApiResponse.error("卡密不存在"));
+        // 统一错误消息，防止通过不同响应枚举有效卡密
+        if (card == null || card.getStatus() == 2) {
+            return ResponseEntity.ok(ApiResponse.error("卡密无效或已停用"));
         }
         result.put("bound", card.getMachineCode() != null && !card.getMachineCode().isEmpty());
         return ResponseEntity.ok(ApiResponse.ok(result));
@@ -87,20 +91,27 @@ public class PublicController {
         if (cardKey == null || cardKey.isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("卡密不能为空"));
         }
-        Card card = cardRepository.findByCardKey(cardKey).orElse(null);
-        if (card == null) {
-            return ResponseEntity.ok(ApiResponse.error("卡密不存在"));
+        if (cardKey.length() > 255) {
+            return ResponseEntity.ok(ApiResponse.error("卡密格式不正确"));
         }
-        if (!card.getAllowSelfUnbind()) {
-            return ResponseEntity.ok(ApiResponse.error("此卡密不允许自助解绑"));
-        }
-        // Verify machine code matches before unbinding
         String machineCode = body.get("machine_code");
         if (machineCode == null || machineCode.isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("请提供当前机器码"));
         }
+        if (machineCode.length() > 255) {
+            return ResponseEntity.ok(ApiResponse.error("机器码格式不正确"));
+        }
+        Card card = cardRepository.findByCardKey(cardKey).orElse(null);
+        // 统一错误消息，防止通过不同响应枚举有效卡密
+        if (card == null || card.getStatus() == 2) {
+            return ResponseEntity.ok(ApiResponse.error("卡密无效或已停用"));
+        }
+        if (!card.getAllowSelfUnbind()) {
+            return ResponseEntity.ok(ApiResponse.error("此卡密不支持自助解绑"));
+        }
+        // Verify machine code matches before unbinding
         if (card.getMachineCode() == null || !card.getMachineCode().equals(machineCode)) {
-            return ResponseEntity.ok(ApiResponse.error("机器码不匹配"));
+            return ResponseEntity.ok(ApiResponse.error("卡密无效或机器码不匹配"));
         }
         card.setMachineCode(null);
         cardRepository.save(card);

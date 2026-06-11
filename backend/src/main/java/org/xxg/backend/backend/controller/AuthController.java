@@ -19,6 +19,11 @@ import org.xxg.backend.backend.util.JwtUtil;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 认证接口控制器。
@@ -35,6 +40,21 @@ public class AuthController {
     private final TotpService totpService;
     private final JwtUtil jwtUtil;
 
+    /**
+     * OAuth state 存储：key = state nonce, value = 创建时间戳。
+     * <p>用于防止 OAuth session fixation 攻击：前端发起 OAuth 前获取 state，
+     * 回调时必须携带此 state 才能设置 Cookie。</p>
+     */
+    private final ConcurrentHashMap<String, Long> oauthStates = new ConcurrentHashMap<>();
+    private static final long OAUTH_STATE_TTL_MS = 5 * 60 * 1000L; // 5 分钟过期
+
+    /** 定时清理过期的 OAuth state */
+    private final ScheduledExecutorService stateCleanup = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "oauth-state-cleanup");
+        t.setDaemon(true);
+        return t;
+    });
+
     public AuthController(AuthService authService, UserRepository userRepository,
                           AdminRepository adminRepository, TotpService totpService,
                           JwtUtil jwtUtil) {
@@ -43,6 +63,13 @@ public class AuthController {
         this.adminRepository = adminRepository;
         this.totpService = totpService;
         this.jwtUtil = jwtUtil;
+        // 每 2 分钟清理过期 state
+        stateCleanup.scheduleAtFixedRate(this::cleanupExpiredStates, 2, 2, TimeUnit.MINUTES);
+    }
+
+    private void cleanupExpiredStates() {
+        long now = System.currentTimeMillis();
+        oauthStates.entrySet().removeIf(e -> now - e.getValue() > OAUTH_STATE_TTL_MS);
     }
 
     /**
@@ -254,25 +281,18 @@ public class AuthController {
      * 更新管理员信息（如邮箱）。
      *
      * @param auth 当前认证信息
-     * @param body 待更新的字段
+     * @param request 更新请求（含邮箱字段）
      * @return 操作结果
      */
     @PostMapping("/admin/update")
-    public ResponseEntity<ApiResponse<Void>> updateAdmin(Authentication auth, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<ApiResponse<Void>> updateAdmin(Authentication auth,
+                                                          @Valid @RequestBody UpdateAdminRequest request) {
         if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
-        if (body.containsKey("email")) {
-            Object emailObj = body.get("email");
-            if (emailObj != null && !(emailObj instanceof String)) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("邮箱字段类型错误"));
-            }
-            String email = (String) emailObj;
-            if (email != null && !email.isBlank() && !email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("邮箱格式不正确"));
-            }
-            admin.setEmail(email);
+        if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            admin.setEmail(request.getEmail());
         }
         adminRepository.save(admin);
         return ResponseEntity.ok(ApiResponse.ok("更新成功"));
@@ -330,11 +350,12 @@ public class AuthController {
      * 启用 TOTP 两步验证（需提供正确的验证码）。
      *
      * @param auth 当前认证信息
-     * @param body 包含 TOTP 验证码的请求体
+     * @param request 包含 TOTP 验证码的请求
      * @return 操作结果
      */
     @PostMapping("/totp/enable")
-    public ResponseEntity<ApiResponse<Void>> enableTotp(Authentication auth, @RequestBody Map<String, String> body) {
+    public ResponseEntity<ApiResponse<Void>> enableTotp(Authentication auth,
+                                                         @Valid @RequestBody TotpCodeRequest request) {
         if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
@@ -342,9 +363,8 @@ public class AuthController {
         if (admin.getTotpSecret() == null) {
             throw new BusinessException("请先设置 TOTP");
         }
-        String code = body.get("code");
         String decryptedSecret = totpService.decryptSecret(admin.getTotpSecret());
-        if (!totpService.verifyCode(decryptedSecret, code)) {
+        if (!totpService.verifyCode(decryptedSecret, request.getCode())) {
             throw new BusinessException("验证码错误");
         }
         admin.setTotpEnabled(true);
@@ -356,18 +376,21 @@ public class AuthController {
      * 禁用 TOTP 两步验证（需提供正确的验证码）。
      *
      * @param auth 当前认证信息
-     * @param body 包含 TOTP 验证码的请求体
+     * @param request 包含 TOTP 验证码的请求
      * @return 操作结果
      */
     @PostMapping("/totp/disable")
-    public ResponseEntity<ApiResponse<Void>> disableTotp(Authentication auth, @RequestBody Map<String, String> body) {
+    public ResponseEntity<ApiResponse<Void>> disableTotp(Authentication auth,
+                                                          @Valid @RequestBody TotpCodeRequest request) {
         if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
-        String code = body.get("code");
+        if (admin.getTotpSecret() == null) {
+            throw new BusinessException("TOTP 未启用");
+        }
         String decryptedSecret = totpService.decryptSecret(admin.getTotpSecret());
-        if (code == null || !totpService.verifyCode(decryptedSecret, code)) {
+        if (!totpService.verifyCode(decryptedSecret, request.getCode())) {
             throw new BusinessException("验证码错误");
         }
         admin.setTotpEnabled(false);
@@ -393,18 +416,48 @@ public class AuthController {
     }
 
     /**
+     * 生成 OAuth state nonce（前端发起 OAuth 前调用）。
+     * <p>返回一个一次性的 state 参数，前端必须在 OAuth 回调时
+     * 将此 state 传递给 /auth/oauth/set-cookies 接口。</p>
+     * <p>有效期 5 分钟，使用后自动失效。</p>
+     */
+    @GetMapping("/oauth/state")
+    public ResponseEntity<ApiResponse<Map<String, String>>> generateOAuthState() {
+        String state = UUID.randomUUID().toString();
+        oauthStates.put(state, System.currentTimeMillis());
+        Map<String, String> result = new HashMap<>();
+        result.put("state", state);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    /**
      * OAuth 回调后将 URL 参数中的 Token 设置为 httpOnly Cookie。
      * <p>OAuth 第三方登录成功后，Token 通过 URL 参数传递到前端，
      * 前端调用此接口将 Token 安全地写入 httpOnly Cookie，
      * 避免 Token 暴露在浏览器历史记录和 JavaScript 中。</p>
+     * <p>安全要求：必须携带有效的 state 参数（从 /auth/oauth/state 获取），
+     * 防止攻击者利用任意有效 JWT 进行 session fixation 攻击。</p>
      *
-     * @param body     包含 token 和 refreshToken 的请求体
+     * @param body     包含 token、refreshToken 和 state 的请求体
      * @param response HTTP 响应（用于设置 Cookie）
      * @return 操作结果
      */
     @PostMapping("/oauth/set-cookies")
     public ResponseEntity<ApiResponse<Void>> setOAuthCookies(@RequestBody Map<String, String> body,
                                                               HttpServletResponse response) {
+        // 验证 state 参数（防止 session fixation）
+        String state = body.get("state");
+        if (state == null || state.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("缺少 state 参数"));
+        }
+        Long stateTimestamp = oauthStates.remove(state);
+        if (stateTimestamp == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("无效或已过期的 state 参数"));
+        }
+        if (System.currentTimeMillis() - stateTimestamp > OAUTH_STATE_TTL_MS) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("state 参数已过期"));
+        }
+
         String accessToken = body.get("token");
         String refreshTokenValue = body.get("refreshToken");
         if (accessToken == null || refreshTokenValue == null) {

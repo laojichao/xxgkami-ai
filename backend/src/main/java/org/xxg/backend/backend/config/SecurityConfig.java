@@ -91,7 +91,7 @@ public class SecurityConfig {
                     "/auth/user/login", "/auth/admin/login",
                     "/auth/email-code", "/auth/reset-code", "/auth/reset-password",
                     "/auth/bind/validate", "/auth/refresh",
-                    "/auth/oauth/set-cookies",
+                    "/auth/oauth/state", "/auth/oauth/set-cookies",
                     "/public/**",
                     "/payment/notify", "/payment/return",
                     "/system/health", "/error",
@@ -101,7 +101,8 @@ public class SecurityConfig {
                 // === Pricing：GET 公开，写操作仅管理员 ===
                 .requestMatchers(HttpMethod.GET, "/pricing", "/pricing/**").permitAll()
                 .requestMatchers("/pricing", "/pricing/**").hasRole("ADMIN")
-                // === 卡密管理：DELETE/PUT 写操作仅管理员 ===
+                // === 卡密管理：查询/删除/启停用/解绑 仅管理员 ===
+                .requestMatchers("/cards/query", "/cards/user/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/cards/*").hasRole("ADMIN")
                 .requestMatchers("/cards/*/disable", "/cards/*/enable", "/cards/*/unbind").hasRole("ADMIN")
                 // === 管理员专属接口 ===
@@ -112,7 +113,7 @@ public class SecurityConfig {
                         "/online-users/**", "/online/list", "/online/check/**", "/card-pricing/admin/**",
                         "/system/**", "/orders/admin/**",
                         "/user/admin/**", "/user/stats",
-                        "/actuator/**").hasRole("ADMIN")
+                        "/actuator/**", "/webhook-test").hasRole("ADMIN")
                 // === 在线用户接口：需认证（防止未登录用户伪造上线状态） ===
                 .requestMatchers("/online/login", "/online/logout", "/online/heartbeat").authenticated()
                 // === 用户接口 ===

@@ -199,12 +199,14 @@ const handleOAuthCallback = async () => {
 
     try {
       // OAuth 回调：Token 通过 URL 参数传递，需要通过后端接口设置 httpOnly Cookie
-      // 调用后端接口将 URL 中的 Token 设置为 httpOnly Cookie
+      // 携带 state 参数防止 session fixation 攻击
+      const oauthState = sessionStorage.getItem('oauth_state');
+      sessionStorage.removeItem('oauth_state');
       const setCookieRes = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/oauth/set-cookies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ token, refreshToken })
+        body: JSON.stringify({ token, refreshToken, state: oauthState })
       });
 
       // 如果后端没有实现 OAuth set-cookies 接口，回退到直接使用 getUserInfo

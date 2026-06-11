@@ -1,16 +1,17 @@
 package org.xxg.backend.backend.controller;
 
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
+import org.xxg.backend.backend.dto.BlockIpRequest;
 import org.xxg.backend.backend.entity.AccessLog;
 import org.xxg.backend.backend.entity.IpBlacklist;
 import org.xxg.backend.backend.service.SecurityService;
 
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -46,23 +47,13 @@ public class SecurityController {
      * 封禁指定IP
      * <p>POST /security/blacklist</p>
      * <p>权限：管理员</p>
-     * @param body 请求体，包含 ip（IP地址，必填）、reason（封禁原因）、hours（封禁时长，小时，可选，为空则永久封禁）
-     * @return 新创建的黑名单记录，IP为空时返回错误信息
+     * @param request 封禁请求（含IP、原因、时长）
+     * @return 新创建的黑名单记录
      */
     @PostMapping("/blacklist")
-    public ResponseEntity<ApiResponse<IpBlacklist>> blockIp(@RequestBody Map<String, Object> body) {
-        Object ipObj = body.get("ip");
-        String ip = ipObj != null ? ipObj.toString() : null;
-        if (ip == null || ip.isBlank()) {
-            return ResponseEntity.ok(ApiResponse.error("IP 地址不能为空"));
-        }
-        if (!IPV4_PATTERN.matcher(ip).matches() && !IPV6_PATTERN.matcher(ip).matches()) {
-            return ResponseEntity.ok(ApiResponse.error("IP 地址格式无效"));
-        }
-        String reason = (String) body.get("reason");
-        Number hoursNum = (Number) body.get("hours");
-        Integer hours = hoursNum != null ? hoursNum.intValue() : null;
-        return ResponseEntity.ok(ApiResponse.ok(securityService.blockIp(ip, reason, hours)));
+    public ResponseEntity<ApiResponse<IpBlacklist>> blockIp(@Valid @RequestBody BlockIpRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                securityService.blockIp(request.getIp(), request.getReason(), request.getHours())));
     }
 
     /**
@@ -74,6 +65,9 @@ public class SecurityController {
      */
     @DeleteMapping("/blacklist/{ip}")
     public ResponseEntity<ApiResponse<Void>> unblockIp(@PathVariable String ip) {
+        if (!IPV4_PATTERN.matcher(ip).matches() && !IPV6_PATTERN.matcher(ip).matches()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("IP 地址格式无效"));
+        }
         securityService.unblockIp(ip);
         return ResponseEntity.ok(ApiResponse.ok("已解除封禁"));
     }

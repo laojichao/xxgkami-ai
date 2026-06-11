@@ -97,7 +97,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException e) {
-        log.warn("Data integrity violation: {}", e.getMessage());
+        // 仅记录异常类型，不记录完整消息（可能包含 SQL 语句和表结构）
+        log.warn("Data integrity violation: {}", e.getClass().getSimpleName());
         return ResponseEntity.status(409).body(ApiResponse.error("数据冲突，请检查输入后重试"));
     }
 

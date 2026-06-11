@@ -173,6 +173,16 @@ const emailTemplates = reactive({
 const testEmail = ref('')
 const loading = ref(false)
 
+/** 检测值是否为脱敏格式（后端返回的掩码） */
+const isMaskedValue = (val) => {
+  if (!val || typeof val !== 'string') return false;
+  if (/^\*{4,}$/.test(val)) return true;
+  if (val.length === 8 && val.substring(2, 6) === '****' && !val.substring(0, 2).includes('*') && !val.substring(6).includes('*')) {
+    return true;
+  }
+  return false;
+}
+
 // 显示提示消息
 const showToast = (message, type = 'info') => {
   const methodMap = { success: 'success', error: 'error', warning: 'warning', info: 'info' }
@@ -225,7 +235,8 @@ const saveSettings = async () => {
       smtp_server: emailSettings.smtpServer,
       smtp_port: emailSettings.smtpPort.toString(),
       smtp_email: emailSettings.senderEmail,
-      smtp_password: emailSettings.senderPassword,
+      // 跳过脱敏密码：如果用户未修改密码字段（仍为掩码），不提交给后端
+      ...(isMaskedValue(emailSettings.senderPassword) ? {} : { smtp_password: emailSettings.senderPassword }),
       smtp_ssl: emailSettings.enableSSL.toString(),
       sender_name: emailSettings.senderName,
       

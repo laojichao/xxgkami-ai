@@ -884,10 +884,21 @@ const isBound = (type) => {
    return socialBindings.value.some(b => b.socialType === type)
 }
 
-const handleBindSocial = (type) => {
-   sessionStorage.setItem('binding_mode', 'true');
-   const apiUrl = import.meta.env.VITE_API_BASE_URL || '/api';
-   window.location.href = `${apiUrl}/oauth/login/${type}`;
+const handleBindSocial = async (type) => {
+   try {
+       sessionStorage.setItem('binding_mode', 'true');
+       const apiUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+       const cleanBase = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+       // 获取 OAuth state nonce
+       const stateRes = await fetch(`${cleanBase}/auth/oauth/state`, { credentials: 'include' });
+       const stateData = await stateRes.json();
+       if (stateData.success && stateData.data?.state) {
+           sessionStorage.setItem('oauth_state', stateData.data.state);
+       }
+       window.location.href = `${cleanBase}/oauth/login/${type}`;
+   } catch (e) {
+       ElMessage.error('初始化绑定失败，请重试');
+   }
 }
 
 const handleUnbindSocial = async (type) => {

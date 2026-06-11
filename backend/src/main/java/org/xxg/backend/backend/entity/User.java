@@ -46,12 +46,14 @@ public class User {
     @Column(name = "last_login_time")
     private LocalDateTime lastLoginTime; // 最后登录时间
 
+    @JsonIgnore
     @Column(name = "last_login_ip", length = 50)
     private String lastLoginIp; // 最后登录IP地址
 
     @Column(name = "login_count")
     private Integer loginCount = 0; // 累计登录次数
 
+    @JsonIgnore
     @Column(name = "register_ip", length = 50)
     private String registerIp; // 注册时的IP地址
 
@@ -61,9 +63,11 @@ public class User {
     @Column(name = "update_time")
     private LocalDateTime updateTime = LocalDateTime.now();
 
+    @JsonIgnore
     @Column(name = "failed_login_attempts")
     private Integer failedLoginAttempts = 0;
 
+    @JsonIgnore
     @Column(name = "lock_time")
     private LocalDateTime lockTime;
 

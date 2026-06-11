@@ -6,11 +6,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.xxg.backend.backend.service.SecurityService;
 
 import java.io.IOException;
+import java.util.Set;
 
 /**
  * 请求监控过滤器。
@@ -22,6 +24,9 @@ public class RequestMonitorFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RequestMonitorFilter.class);
     private final SecurityService securityService;
+
+    @Value("${rate-limit.trusted-proxies:127.0.0.1,0:0:0:0:0:0:0:1}")
+    private Set<String> trustedProxies;
 
     public RequestMonitorFilter(SecurityService securityService) {
         this.securityService = securityService;
@@ -69,16 +74,27 @@ public class RequestMonitorFilter extends OncePerRequestFilter {
 
     /**
      * 获取客户端真实 IP 地址。
-     * <p>优先从 X-Forwarded-For 头部获取，其次 X-Real-IP，最后使用远程地址。
-     * 若存在多个代理 IP，取第一个（即客户端真实 IP）。</p>
+     * <p>当请求来自可信代理时，从 X-Forwarded-For 头部提取真实客户端 IP；
+     * 否则使用 remoteAddr，防止攻击者通过伪造头部绕过 IP 黑名单。</p>
      *
      * @param request HTTP 请求
      * @return 客户端 IP 地址
      */
     private String getClientIp(HttpServletRequest request) {
-        // 安全策略：优先使用 remoteAddr（TCP 连接的直接来源）。
-        // X-Forwarded-For / X-Real-IP 仅在配置了可信反向代理时才应使用，
-        // 否则攻击者可通过伪造头部绕过限流和 IP 黑名单。
-        return request.getRemoteAddr();
+        String remoteAddr = request.getRemoteAddr();
+        if (trustedProxies.contains(remoteAddr)) {
+            String xff = request.getHeader("X-Forwarded-For");
+            if (xff != null && !xff.isEmpty()) {
+                String clientIp = xff.split(",")[0].trim();
+                if (!clientIp.isEmpty()) {
+                    return clientIp;
+                }
+            }
+            String xRealIp = request.getHeader("X-Real-IP");
+            if (xRealIp != null && !xRealIp.isEmpty()) {
+                return xRealIp.trim();
+            }
+        }
+        return remoteAddr;
     }
 }

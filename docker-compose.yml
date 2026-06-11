@@ -57,6 +57,7 @@ services:
       MAIL_SSL_ENABLE: ${MAIL_SSL_ENABLE:-true}
       MAIL_STARTTLS_ENABLE: ${MAIL_STARTTLS_ENABLE:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+      RATE_LIMIT_TRUSTED_PROXIES: ${RATE_LIMIT_TRUSTED_PROXIES:-172.20.0.3,127.0.0.1}
       APP_VERSION: ${APP_VERSION:-1.0.2}
       APP_REPO_URL: ${APP_REPO_URL:-https://github.com/laojichao/xxgkami-ai}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

@@ -551,11 +551,21 @@ onUnmounted(() => {
   autoDismissCleanups.forEach(cleanup => cleanup())
 })
 
-/** 跳转到第三方OAuth登录页面 */
-const handleOAuthLogin = (type) => {
-    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
-    const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-    window.location.href = `${cleanBase}/oauth/login/${type}`;
+/** 跳转到第三方OAuth登录页面（先获取 state 防止 session fixation） */
+const handleOAuthLogin = async (type) => {
+    try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+        const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+        // 获取 OAuth state nonce
+        const stateRes = await fetch(`${cleanBase}/auth/oauth/state`, { credentials: 'include' });
+        const stateData = await stateRes.json();
+        if (stateData.success && stateData.data?.state) {
+            sessionStorage.setItem('oauth_state', stateData.data.state);
+        }
+        window.location.href = `${cleanBase}/oauth/login/${type}`;
+    } catch (e) {
+        ElMessage.error('初始化 OAuth 登录失败，请重试');
+    }
 }
 
 /* ========== 用户注册相关 ========== */

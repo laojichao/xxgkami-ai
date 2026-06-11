@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
+    <!-- CSP: 限制脚本、样式、连接等资源来源，防止 XSS 和数据注入 -->
+    <!-- 注意: Nginx 反向代理也应配置 CSP 响应头（优先级更高） -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
     <title>XXG-KAMI-PRO 2.0</title>
   </head>
   <body>

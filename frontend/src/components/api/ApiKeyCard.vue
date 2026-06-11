@@ -9,7 +9,11 @@
         </span>
       </div>
       <div class="api-key-value-container">
-        <code class="api-key-value">{{ apiKey.key }}</code>
+        <code class="api-key-value" v-if="showKey">{{ apiKey.key }}</code>
+        <code class="api-key-value key-masked" v-else>{{ maskKey(apiKey.key) }}</code>
+        <button class="copy-btn" @click.stop="showKey = !showKey" :title="showKey ? '隐藏密钥' : '显示密钥'">
+          <span>{{ showKey ? '🙈' : '👁' }}</span>
+        </button>
         <button class="copy-btn" @click="$emit('copy-key', apiKey.key)" title="复制API密钥">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
           复制
@@ -69,11 +73,22 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 /**
  * ApiKeyCard 组件
  * 展示单个API密钥的完整信息，包括名称、密钥值、创建时间、使用统计等
  * 提供卡密管理、接口设置、用户管理、编辑、启用/禁用、删除等操作按钮
  */
+
+const showKey = ref(false)
+
+/** 将 API Key 脱敏显示 */
+const maskKey = (key) => {
+  if (!key || key.length <= 8) return '****************************'
+  return key.substring(0, 6) + '****' + key.substring(key.length - 4)
+}
+
 defineProps({
   /** API密钥对象，包含 id, name, key, isActive, createdAt, lastUsed, requestCount, cardCodes, assignedUsers 等字段 */
   apiKey: {
@@ -167,6 +182,11 @@ const formatDate = (date) => {
   flex: 1;
   border: 1px solid #e9ecef;
   word-break: break-all;
+}
+
+.key-masked {
+  color: #94a3b8;
+  letter-spacing: 0.05em;
 }
 
 .copy-btn {

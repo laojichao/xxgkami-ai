@@ -26,15 +26,45 @@ public class UserController {
     // --- User profile endpoints ---
 
     @GetMapping("/user/profile")
-    public ResponseEntity<ApiResponse<User>> getProfile(Authentication auth) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getProfile(Authentication auth) {
         User user = userService.getUserByUsername(auth.getName());
-        return ResponseEntity.ok(ApiResponse.ok(user));
+        // 仅返回安全的用户字段，避免泄露 IP、登录失败次数等内部信息
+        Map<String, Object> profile = new java.util.HashMap<>();
+        profile.put("id", user.getId());
+        profile.put("username", user.getUsername());
+        profile.put("email", user.getEmail());
+        profile.put("nickname", user.getNickname());
+        profile.put("avatar", user.getAvatar());
+        profile.put("phone", user.getPhone());
+        profile.put("status", user.getStatus());
+        profile.put("emailVerified", user.getEmailVerified());
+        profile.put("lastLoginTime", user.getLastLoginTime());
+        profile.put("loginCount", user.getLoginCount());
+        profile.put("createTime", user.getCreateTime());
+        profile.put("updateTime", user.getUpdateTime());
+        return ResponseEntity.ok(ApiResponse.ok(profile));
     }
 
     @PutMapping("/user/profile")
     public ResponseEntity<ApiResponse<Void>> updateProfile(Authentication auth, @RequestBody Map<String, String> body) {
+        String nickname = body.get("nickname");
+        String email = body.get("email");
+        String phone = body.get("phone");
+        // 输入长度校验
+        if (nickname != null && nickname.length() > 50) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("昵称长度不能超过50个字符"));
+        }
+        if (email != null && !email.isBlank() && !email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("邮箱格式不正确"));
+        }
+        if (email != null && email.length() > 100) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("邮箱长度不能超过100个字符"));
+        }
+        if (phone != null && !phone.isBlank() && !phone.matches("^1[3-9]\\d{9}$")) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("手机号格式不正确"));
+        }
         User user = userService.getUserByUsername(auth.getName());
-        userService.updateProfile(user.getId(), body.get("nickname"), body.get("email"), body.get("phone"));
+        userService.updateProfile(user.getId(), nickname, email, phone);
         return ResponseEntity.ok(ApiResponse.ok("个人信息更新成功"));
     }
 

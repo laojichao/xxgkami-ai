@@ -14,8 +14,8 @@ public class ChangePasswordRequest {
     @NotBlank(message = "原密码不能为空")
     private String oldPassword;
 
-    /** 新密码，长度6-50位 */
+    /** 新密码，长度8-50位 */
     @NotBlank(message = "新密码不能为空")
-    @Size(min = 6, max = 50, message = "密码长度必须在6-50之间")
+    @Size(min = 8, max = 50, message = "密码长度必须在8-50之间")
     private String newPassword;
 }

@@ -2,8 +2,12 @@
 <template>
   <tr>
     <td>{{ keyData.id }}</td>
-    <td class="key-code" @click="$emit('copy', keyData.card_key)" title="点击复制">
-      {{ keyData.card_key }}
+    <td class="key-code" @click="$emit('copy', keyData.card_key)" :title="showKey ? '点击复制' : '点击复制（当前已隐藏）'">
+      <span v-if="showKey">{{ keyData.card_key }}</span>
+      <span v-else class="key-masked">{{ maskKey(keyData.card_key) }}</span>
+      <button class="key-toggle-btn" @click.stop="showKey = !showKey" :title="showKey ? '隐藏' : '显示'">
+        {{ showKey ? '🙈' : '👁' }}
+      </button>
     </td>
     <td>
       <span class="card-type" :class="keyData.card_type">
@@ -68,12 +72,22 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 const props = defineProps({
   keyData: { type: Object, required: true },
   nowMs: { type: Number, default: () => Date.now() }
 })
 
 defineEmits(['copy', 'edit', 'toggle-status', 'delete'])
+
+const showKey = ref(false)
+
+/** 将卡密脱敏显示，保留首尾各4字符 */
+const maskKey = (key) => {
+  if (!key || key.length <= 8) return '****-****'
+  return key.substring(0, 4) + '****' + key.substring(key.length - 4)
+}
 
 const pad2 = (n) => String(n).padStart(2, '0')
 
@@ -147,6 +161,26 @@ const getStatusClass = (status) => {
 .key-code:hover {
   background: #e2e8f0;
   color: #2563eb;
+}
+
+.key-masked {
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+}
+
+.key-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  vertical-align: middle;
+}
+
+.key-toggle-btn:hover {
+  opacity: 1;
 }
 
 .machine-code-cell {

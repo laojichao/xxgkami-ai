@@ -4,10 +4,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.xxg.backend.backend.exception.BusinessException;
 import java.io.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Set;
 
 /**
  * 数据库备份服务
@@ -51,13 +55,25 @@ public class BackupService {
         ProcessBuilder pb = new ProcessBuilder(
             "mysqldump", "--user=" + dbUser, dbName);
         if (!dbPass.isEmpty()) pb.environment().put("MYSQL_PWD", dbPass);
-        pb.redirectOutput(new File(backupDir + "/" + filename));
+        File backupFile = new File(backupDir + "/" + filename);
+        pb.redirectOutput(backupFile);
         // 错误输出重定向到单独文件，避免与备份数据混合导致 SQL 文件损坏
         pb.redirectError(new File(backupDir + "/" + filename + ".err"));
         Process process = pb.start();
         int exitCode = process.waitFor();
         if (exitCode != 0) throw new Exception("Backup failed with exit code: " + exitCode);
-        return backupDir + "/" + filename;
+        // 设置备份文件权限为仅所有者可读写（0600），防止其他用户读取敏感数据
+        try {
+            Path backupPath2 = backupFile.toPath();
+            if (backupPath2.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rw-------");
+                Files.setPosixFilePermissions(backupPath2, perms);
+            }
+        } catch (Exception e) {
+            // Windows 等不支持 POSIX 权限的系统忽略此错误
+        }
+        // 仅返回文件名，不暴露服务器完整路径
+        return filename;
     }
 
     private String extractDbName(String url) {
