@@ -7,9 +7,9 @@ import org.xxg.backend.backend.entity.Feature;
 import org.xxg.backend.backend.entity.Slide;
 import org.xxg.backend.backend.mapper.FeatureRepository;
 import org.xxg.backend.backend.mapper.SlideRepository;
-import org.xxg.backend.backend.service.CardService;
 import org.xxg.backend.backend.entity.Card;
 import org.xxg.backend.backend.mapper.CardRepository;
+import org.xxg.backend.backend.service.CardService;
 
 import java.util.*;
 
@@ -25,12 +25,14 @@ public class PublicController {
     private final FeatureRepository featureRepository;
     private final SlideRepository slideRepository;
     private final CardRepository cardRepository;
+    private final CardService cardService;
 
     public PublicController(FeatureRepository featureRepository, SlideRepository slideRepository,
-                            CardRepository cardRepository) {
+                            CardRepository cardRepository, CardService cardService) {
         this.featureRepository = featureRepository;
         this.slideRepository = slideRepository;
         this.cardRepository = cardRepository;
+        this.cardService = cardService;
     }
 
     /**
@@ -101,20 +103,7 @@ public class PublicController {
         if (machineCode.length() > 255) {
             return ResponseEntity.ok(ApiResponse.error("机器码格式不正确"));
         }
-        Card card = cardRepository.findByCardKey(cardKey).orElse(null);
-        // 统一错误消息，防止通过不同响应枚举有效卡密
-        if (card == null || card.getStatus() == 2) {
-            return ResponseEntity.ok(ApiResponse.error("卡密无效或已停用"));
-        }
-        if (!card.getAllowSelfUnbind()) {
-            return ResponseEntity.ok(ApiResponse.error("此卡密不支持自助解绑"));
-        }
-        // Verify machine code matches before unbinding
-        if (card.getMachineCode() == null || !card.getMachineCode().equals(machineCode)) {
-            return ResponseEntity.ok(ApiResponse.error("卡密无效或机器码不匹配"));
-        }
-        card.setMachineCode(null);
-        cardRepository.save(card);
+        cardService.selfUnbindMachineCode(cardKey, machineCode);
         return ResponseEntity.ok(ApiResponse.ok("解绑成功"));
     }
 }

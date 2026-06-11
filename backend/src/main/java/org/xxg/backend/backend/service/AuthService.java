@@ -228,10 +228,8 @@ public class AuthService {
         // 删除已使用的验证码，防止重复使用
         verificationCodeRepository.delete(vCode);
 
-        // 密码强度校验：至少8位
-        if (request.getPassword() == null || request.getPassword().length() < 8) {
-            throw new BusinessException("密码长度不能少于8位");
-        }
+        // 密码强度校验
+        validatePasswordStrength(request.getPassword());
 
         User user = new User();
         user.setUsername(request.getUsername());
@@ -413,10 +411,8 @@ public class AuthService {
         // 删除已使用的验证码，防止重复使用
         verificationCodeRepository.delete(vCode);
 
-        // 密码强度校验：至少8位
-        if (request.getNewPassword() == null || request.getNewPassword().length() < 8) {
-            throw new BusinessException("新密码长度不能少于8位");
-        }
+        // 密码强度校验
+        validatePasswordStrength(request.getNewPassword());
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("用户不存在"));
@@ -424,6 +420,30 @@ public class AuthService {
         user.setPassword(passwordUtil.encode(request.getNewPassword()));
         user.setUpdateTime(LocalDateTime.now());
         userRepository.save(user);
+    }
+
+    /**
+     * 密码强度校验：至少8位，且必须包含大写字母、小写字母和数字。
+     *
+     * @param password 待校验的密码
+     * @throws BusinessException 密码不符合要求时抛出
+     */
+    private void validatePasswordStrength(String password) {
+        if (password == null || password.length() < 8) {
+            throw new BusinessException("密码长度不能少于8位");
+        }
+        if (password.length() > 50) {
+            throw new BusinessException("密码长度不能超过50位");
+        }
+        if (!password.matches(".*[A-Z].*")) {
+            throw new BusinessException("密码必须包含至少一个大写字母");
+        }
+        if (!password.matches(".*[a-z].*")) {
+            throw new BusinessException("密码必须包含至少一个小写字母");
+        }
+        if (!password.matches(".*\\d.*")) {
+            throw new BusinessException("密码必须包含至少一个数字");
+        }
     }
 
     /**

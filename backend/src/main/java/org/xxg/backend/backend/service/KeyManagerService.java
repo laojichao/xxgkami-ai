@@ -128,7 +128,7 @@ public class KeyManagerService {
                     log.warn("============================================================");
                     log.warn("未配置环境变量 KEY_ENCRYPTION_KEY，已生成随机加密密钥");
                     log.warn("该密钥仅在本次运行期间有效，重启后将丢失，届时将无法解密私钥");
-                    log.warn("请在启动前设置环境变量: KEY_ENCRYPTION_KEY={}", fallbackEncryptionKey);
+                    log.warn("请在启动前设置环境变量: KEY_ENCRYPTION_KEY=<Base64编码的256位密钥>");
                     log.warn("============================================================");
                 }
             }

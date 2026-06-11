@@ -28,7 +28,7 @@ public class WebhookTestController {
      */
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> testWebhook(@RequestBody java.util.Map<String, Object> body) {
-        String bodyStr = body.toString();
+        String bodyStr = body.toString().replaceAll("[\\r\\n\\x00-\\x1f]", " ");
         if (bodyStr.length() > 1000) {
             bodyStr = bodyStr.substring(0, 1000) + "... (truncated)";
         }

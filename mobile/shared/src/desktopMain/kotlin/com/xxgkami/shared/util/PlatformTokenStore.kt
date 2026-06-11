@@ -136,6 +136,26 @@ actual class PlatformTokenStore actual constructor() {
             val path = keyFile.toPath()
             if (File.separator != "\\") { // POSIX (Linux/Mac)
                 Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-------"))
+            } else { // Windows - restrict ACL to current user only
+                try {
+                    val aclView = Files.getFileAttributeView(path, java.nio.file.attribute.AclFileAttributeView::class.java)
+                    if (aclView != null) {
+                        val currentPrincipal = aclView.owner
+                        val userEntry = java.nio.file.attribute.AclEntry.newBuilder()
+                            .setType(java.nio.file.attribute.AclEntryType.ALLOW)
+                            .setPrincipal(currentPrincipal)
+                            .setPermissions(
+                                java.nio.file.attribute.AclEntryPermission.READ_DATA,
+                                java.nio.file.attribute.AclEntryPermission.WRITE_DATA,
+                                java.nio.file.attribute.AclEntryPermission.READ_ATTRIBUTES,
+                                java.nio.file.attribute.AclEntryPermission.READ_ACL
+                            )
+                            .build()
+                        aclView.acl = listOf(userEntry)
+                    }
+                } catch (e: Exception) {
+                    println("[PlatformTokenStore] Warning: Could not set Windows file permissions: ${e.message}")
+                }
             }
         } catch (e: Exception) {
             println("[PlatformTokenStore] Warning: Could not set key file permissions: ${e.message}")

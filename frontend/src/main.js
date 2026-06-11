@@ -20,3 +20,5 @@ app.use(ElementPlus)
 registerIcons(app)
 
 app.mount('#app')
+
+document.documentElement.lang = 'zh-CN'

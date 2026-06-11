@@ -139,8 +139,8 @@
     />
 
     <!-- 编辑卡密模态框 -->
-    <div v-if="showEditKeyModal" class="modal-overlay" @click="showEditKeyModal = false">
-      <div class="modal-content" @click.stop>
+    <div v-if="showEditKeyModal" class="modal-overlay" @click="showEditKeyModal = false" @keydown.escape="showEditKeyModal = false">
+      <div class="modal-content" @click.stop role="dialog" aria-modal="true" aria-label="编辑卡密" @keydown="trapFocus($event, 'edit')">
         <div class="modal-header">
           <h3>编辑卡密</h3>
           <button class="close-btn" @click="showEditKeyModal = false">
@@ -249,8 +249,8 @@
     </div>
 
     <!-- 生成卡密模态框 -->
-    <div v-if="showCreateKeyModal" class="modal-overlay" @click="showCreateKeyModal = false">
-      <div class="modal-content" @click.stop>
+    <div v-if="showCreateKeyModal" class="modal-overlay" @click="showCreateKeyModal = false" @keydown.escape="showCreateKeyModal = false">
+      <div class="modal-content" @click.stop role="dialog" aria-modal="true" aria-label="生成卡密" @keydown="trapFocus($event, 'create')">
         <div class="modal-header">
           <h3>生成卡密</h3>
           <button class="close-btn" @click="showCreateKeyModal = false">
@@ -745,6 +745,27 @@ const deleteKey = async (keyId) => {
     await ElMessageBox.confirm('确定要删除这个卡密吗？此操作不可恢复！', '确认删除', { type: 'warning' })
   } catch { return }
   emit('delete-key', keyId)
+}
+
+/** 焦点陷阱：阻止 Tab 键将焦点移出模态框 */
+const trapFocus = (event, modalType) => {
+  if (event.key !== 'Tab') return
+  const modal = event.currentTarget
+  const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey) {
+    if (document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    }
+  } else {
+    if (document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 }
 
 const copyKey = async (cardKey) => {

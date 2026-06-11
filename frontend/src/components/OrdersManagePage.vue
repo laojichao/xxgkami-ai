@@ -287,8 +287,8 @@
     </div>
 
     <!-- 订单详情模态框 -->
-    <div v-if="detailDialogVisible" class="modal-overlay" @click="detailDialogVisible = false">
-      <div class="modal-content" @click.stop>
+    <div v-if="detailDialogVisible" class="modal-overlay" @click="detailDialogVisible = false" @keydown.escape="detailDialogVisible = false">
+      <div class="modal-content" @click.stop role="dialog" aria-modal="true" aria-label="订单详情" @keydown="trapFocus($event)">
         <div class="modal-header">
           <h3>订单详情</h3>
           <button class="close-btn" @click="detailDialogVisible = false">
@@ -386,8 +386,8 @@
     </div>
 
     <!-- 状态更新模态框 -->
-    <div v-if="statusUpdateDialogVisible" class="modal-overlay" @click="statusUpdateDialogVisible = false">
-      <div class="modal-content" @click.stop>
+    <div v-if="statusUpdateDialogVisible" class="modal-overlay" @click="statusUpdateDialogVisible = false" @keydown.escape="statusUpdateDialogVisible = false">
+      <div class="modal-content" @click.stop role="dialog" aria-modal="true" aria-label="更新订单状态" @keydown="trapFocus($event)">
         <div class="modal-header">
           <h3>更新订单状态</h3>
           <button class="close-btn" @click="statusUpdateDialogVisible = false">
@@ -690,6 +690,28 @@ const showToast = (message, type = 'info') => {
 }
 
 // 组件挂载时获取数据
+
+/** 焦点陷阱：阻止 Tab 键将焦点移出模态框 */
+const trapFocus = (event) => {
+  if (event.key !== 'Tab') return
+  const modal = event.currentTarget
+  const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey) {
+    if (document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    }
+  } else {
+    if (document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+}
+
 onMounted(() => {
   getOrders()
   loadStats()
@@ -1039,22 +1061,22 @@ onMounted(() => {
 
 .status-completed {
   background: #dcfce7;
-  color: #166534;
+  color: #14532d;
 }
 
 .status-pending {
   background: #ffedd5;
-  color: #9a3412;
+  color: #7c2d12;
 }
 
 .status-failed {
   background: #fee2e2;
-  color: #991b1b;
+  color: #7f1d1d;
 }
 
 .status-refunded {
   background: #e0f2fe;
-  color: #075985;
+  color: #0c4a6e;
 }
 
 .order-info {

@@ -16,6 +16,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.xxgkami.android.data.TokenStore
 import com.xxgkami.android.ui.screens.*
+import com.xxgkami.android.viewmodel.AuthViewModel
+import com.xxgkami.android.viewmodel.CardViewModel
+import com.xxgkami.android.viewmodel.OrderViewModel
+import com.xxgkami.android.viewmodel.WalletViewModel
 
 /**
  * 底部导航栏页面定义
@@ -45,6 +49,12 @@ fun MainScreen(onLogout: () -> Unit) {
     // 底部导航栏的四个Tab页面
     val bottomNavItems = listOf(Screen.Cards, Screen.Orders, Screen.Wallet, Screen.Profile)
 
+    // 在 MainScreen 级别创建并共享 ViewModel，避免各 Tab 独立创建实例导致状态不一致
+    val authViewModel: AuthViewModel = viewModel()
+    val cardViewModel: CardViewModel = viewModel()
+    val orderViewModel: OrderViewModel = viewModel()
+    val walletViewModel: WalletViewModel = viewModel()
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -69,10 +79,10 @@ fun MainScreen(onLogout: () -> Unit) {
         }
     ) { innerPadding ->
         NavHost(navController, startDestination = Screen.Cards.route, Modifier.padding(innerPadding)) {
-            composable(Screen.Cards.route) { MyCardsScreen(navController) }
-            composable(Screen.Orders.route) { OrdersScreen(navController) }
-            composable(Screen.Wallet.route) { WalletScreen(navController) }
-            composable(Screen.Profile.route) { ProfileScreen(navController, onLogout = onLogout) }
+            composable(Screen.Cards.route) { MyCardsScreen(navController, viewModel = cardViewModel, authViewModel = authViewModel) }
+            composable(Screen.Orders.route) { OrdersScreen(navController, orderViewModel = orderViewModel) }
+            composable(Screen.Wallet.route) { WalletScreen(navController, walletViewModel = walletViewModel) }
+            composable(Screen.Profile.route) { ProfileScreen(navController, authViewModel = authViewModel, onLogout = onLogout) }
         }
     }
 }

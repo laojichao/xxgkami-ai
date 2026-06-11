@@ -190,7 +190,10 @@ import { monitorApi, statsApi } from '../services/api.js'
 import logger from '../utils/logger'
 
 const props = defineProps({
-  stats: Object
+  stats: {
+    type: Object,
+    default: () => ({ totalKeys: 0, usedKeys: 0, activeKeys: 0, totalUsers: 0 })
+  }
 })
 
 // 图表相关数据

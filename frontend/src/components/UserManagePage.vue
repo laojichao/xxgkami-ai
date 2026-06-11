@@ -133,8 +133,8 @@
 
     <!-- 创建/编辑用户弹窗表单 -->
     <!-- 创建/编辑用户模态框 -->
-    <div class="modal-overlay" v-if="showModal" @click.self="closeModal">
-      <div class="modal-content">
+    <div class="modal-overlay" v-if="showModal" @click.self="closeModal" @keydown.escape="closeModal">
+      <div class="modal-content" role="dialog" aria-modal="true" :aria-label="isEditing ? '编辑用户' : '新建用户'">
         <div class="modal-header">
           <h3>{{ isEditing ? '编辑用户' : '新建用户' }}</h3>
           <button class="close-btn" @click="closeModal">&times;</button>
@@ -303,6 +303,29 @@ const closeModal = () => {
 
 /** 提交用户表单（新建或编辑） */
 const submitForm = async () => {
+  // 客户端输入校验
+  if (!isEditing.value && !form.username.trim()) {
+    ElMessage.warning('请输入用户名')
+    return
+  }
+  if (!isEditing.value && !form.password) {
+    ElMessage.warning('请输入密码')
+    return
+  }
+  if (!form.email.trim()) {
+    ElMessage.warning('请输入邮箱')
+    return
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(form.email.trim())) {
+    ElMessage.warning('请输入有效的邮箱地址')
+    return
+  }
+  if (form.phone && !/^1[3-9]\d{9}$/.test(form.phone.trim())) {
+    ElMessage.warning('请输入有效的手机号')
+    return
+  }
+
   try {
     loading.value = true
     if (isEditing.value) {
@@ -463,12 +486,12 @@ const handleDeleteUser = async (id) => {
 
 .user-status.active {
   background: #dcfce7;
-  color: #166534;
+  color: #14532d;
 }
 
 .user-status.inactive {
   background: #fee2e2;
-  color: #991b1b;
+  color: #7f1d1d;
 }
 
 .user-meta {

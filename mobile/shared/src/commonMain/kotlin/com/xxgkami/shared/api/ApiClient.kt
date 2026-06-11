@@ -1,6 +1,7 @@
 package com.xxgkami.shared.api
 
 import io.ktor.client.*
+import io.ktor.client.engine.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
@@ -30,13 +31,21 @@ import kotlinx.serialization.json.jsonPrimitive
  * @property onTokenRefreshed Token 刷新成功后的回调，用于同步持久化存储
  * @property onLogout Token 刷新失败后的登出回调，用于清理本地状态
  */
-class ApiClient(var baseUrl: String = "") {
+class ApiClient(baseUrl: String = "") {
+    var baseUrl: String = baseUrl
+        private set
     @Volatile var token: String? = null
         private set
     @Volatile var refreshToken: String? = null
         private set
     var onTokenRefreshed: ((newToken: String, newRefreshToken: String) -> Unit)? = null
     var onLogout: (() -> Unit)? = null
+
+    /**
+     * 可选的自定义 HTTP 引擎（如带证书锁定的 OkHttp 引擎）。
+     * 必须在首次 HTTP 请求之前设置。
+     */
+    var engine: HttpClientEngine? = null
 
     private fun requireBaseUrl(): String {
         return baseUrl.ifBlank { throw IllegalStateException("API base URL not configured. Call ApiProvider.updateBaseUrl() first.") }
@@ -48,17 +57,23 @@ class ApiClient(var baseUrl: String = "") {
     /** JSON 序列化配置：忽略未知字段、宽松模式 */
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    /** Ktor HTTP 客户端实例，配置了 JSON 内容协商和请求超时。private 防止外部绕过 Token 注入逻辑 */
-    private val httpClient = HttpClient {
-        // 安装 JSON 内容协商插件，自动处理请求/响应的 JSON 序列化
-        install(ContentNegotiation) {
-            json(json)
-        }
-        // 安装超时插件：请求超时 15 秒，连接超时 10 秒，Socket 超时 10 秒
-        install(HttpTimeout) {
-            requestTimeoutMillis = 15000
-            connectTimeoutMillis = 10000
-            socketTimeoutMillis = 10000
+    /** HTTP 客户端懒加载：首次使用时根据 [engine] 是否已设置来决定引擎配置 */
+    private val httpClient: HttpClient by lazy {
+        val e = engine
+        if (e != null) HttpClient(e) {
+            install(ContentNegotiation) { json(json) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+                socketTimeoutMillis = 10000
+            }
+        } else HttpClient {
+            install(ContentNegotiation) { json(json) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+                socketTimeoutMillis = 10000
+            }
         }
     }
 
@@ -79,6 +94,13 @@ class ApiClient(var baseUrl: String = "") {
     fun clearTokens() {
         token = null
         refreshToken = null
+    }
+
+    /**
+     * Update the base URL. Only callable from within the module via ApiProvider.
+     */
+    fun updateBaseUrl(newBaseUrl: String) {
+        baseUrl = newBaseUrl
     }
 
     /**
@@ -169,6 +191,15 @@ class ApiClient(var baseUrl: String = "") {
     }
 
     /**
+     * Check HTTP response status and throw ClientRequestException if not successful.
+     */
+    private suspend fun checkResponseStatus(response: HttpResponse) {
+        if (!response.status.isSuccess()) {
+            throw ClientRequestException(response, response.bodyAsText())
+        }
+    }
+
+    /**
      * 发送 GET 请求。
      *
      * @param path 请求路径（不含 baseUrl），例如 "/user/info"
@@ -176,9 +207,11 @@ class ApiClient(var baseUrl: String = "") {
      */
     suspend fun get(path: String): String {
         return executeWithRefresh {
-            httpClient.get("${requireBaseUrl()}$path") {
+            val response = httpClient.get("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
-            }.bodyAsText()
+            }
+            checkResponseStatus(response)
+            response.bodyAsText()
         }
     }
 
@@ -191,11 +224,13 @@ class ApiClient(var baseUrl: String = "") {
      */
     suspend fun post(path: String, body: String): String {
         return executeWithRefresh {
-            httpClient.post("${requireBaseUrl()}$path") {
+            val response = httpClient.post("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
                 contentType(ContentType.Application.Json)
                 setBody(body)
-            }.bodyAsText()
+            }
+            checkResponseStatus(response)
+            response.bodyAsText()
         }
     }
 
@@ -208,11 +243,13 @@ class ApiClient(var baseUrl: String = "") {
      */
     suspend fun put(path: String, body: String): String {
         return executeWithRefresh {
-            httpClient.put("${requireBaseUrl()}$path") {
+            val response = httpClient.put("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
                 contentType(ContentType.Application.Json)
                 setBody(body)
-            }.bodyAsText()
+            }
+            checkResponseStatus(response)
+            response.bodyAsText()
         }
     }
 
@@ -224,9 +261,11 @@ class ApiClient(var baseUrl: String = "") {
      */
     suspend fun delete(path: String): String {
         return executeWithRefresh {
-            httpClient.delete("${requireBaseUrl()}$path") {
+            val response = httpClient.delete("${requireBaseUrl()}$path") {
                 token?.let { header("Authorization", "Bearer $it") }
-            }.bodyAsText()
+            }
+            checkResponseStatus(response)
+            response.bodyAsText()
         }
     }
 }

@@ -155,11 +155,11 @@
     </div>
 
     <!-- 用户注册弹窗（用户名/昵称/密码/手机号/邮箱/验证码） -->
-    <div v-if="showRegister" class="modal-overlay">
-      <div class="modal-content">
+    <div v-if="showRegister" class="modal-overlay" @keydown.escape="showRegister = false">
+      <div class="modal-content" role="dialog" aria-modal="true" aria-label="用户注册">
         <div class="modal-header">
           <h3>用户注册</h3>
-          <button class="close-button" @click="showRegister = false">
+          <button class="close-button" @click="showRegister = false" aria-label="关闭">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
@@ -217,11 +217,11 @@
     </div>
 
     <!-- 找回密码弹窗（用户名/邮箱/验证码/新密码） -->
-    <div v-if="showForgotPassword" class="modal-overlay">
-      <div class="modal-content">
+    <div v-if="showForgotPassword" class="modal-overlay" @keydown.escape="showForgotPassword = false">
+      <div class="modal-content" role="dialog" aria-modal="true" aria-label="找回密码">
         <div class="modal-header">
           <h3>找回密码</h3>
-          <button class="close-button" @click="showForgotPassword = false">
+          <button class="close-button" @click="showForgotPassword = false" aria-label="关闭">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
@@ -271,11 +271,11 @@
     </div>
 
     <!-- TOTP双重验证弹窗（6位验证码输入） -->
-    <div v-if="showTotpInput" class="modal-overlay">
-      <div class="modal-content" style="max-width: 400px;">
+    <div v-if="showTotpInput" class="modal-overlay" @keydown.escape="showTotpInput = false">
+      <div class="modal-content" style="max-width: 400px;" role="dialog" aria-modal="true" aria-label="双重验证">
         <div class="modal-header">
           <h3>双重验证 (2FA)</h3>
-          <button class="close-button" @click="showTotpInput = false">
+          <button class="close-button" @click="showTotpInput = false" aria-label="关闭">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
@@ -317,11 +317,11 @@
     
     <!-- TOTP恢复弹窗（通过邮箱验证码关闭双重验证） -->
     <!-- TOTP 恢复弹窗 -->
-    <div v-if="showRecoveryModal" class="modal-overlay">
-      <div class="modal-content" style="max-width: 400px;">
+    <div v-if="showRecoveryModal" class="modal-overlay" @keydown.escape="showRecoveryModal = false">
+      <div class="modal-content" style="max-width: 400px;" role="dialog" aria-modal="true" aria-label="重置双重验证">
         <div class="modal-header">
           <h3>重置双重验证</h3>
-          <button class="close-button" @click="showRecoveryModal = false">
+          <button class="close-button" @click="showRecoveryModal = false" aria-label="关闭">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
@@ -360,6 +360,7 @@
 <script setup>
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { authApi, settingsApi } from '../services/api.js'
+import { ElMessage } from 'element-plus'
 import logger from '../utils/logger'
 
 /** 父组件传入的初始用户类型（user/admin） */
@@ -861,6 +862,9 @@ const handleOAuthRegister = async () => {
      if (res.success) {
          // Login success - Token 已通过 httpOnly Cookie 设置，无需存储到 localStorage
          localStorage.setItem('isLoggedIn', 'true');
+         // 注册成功后清理临时 OAuth 注册令牌
+         sessionStorage.removeItem('oauth_register_token');
+         sessionStorage.removeItem('oauth_nickname');
 
          // Get User Info
          const userRes = await authApi.getUserInfo();

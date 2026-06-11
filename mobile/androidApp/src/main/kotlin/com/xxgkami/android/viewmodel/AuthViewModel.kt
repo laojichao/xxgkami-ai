@@ -24,6 +24,16 @@ class AuthViewModel : ViewModel() {
     private val apiClient = ApiProvider.apiClient
     private val authApi = AuthApi(apiClient)
 
+    /** 客户端登录限流：最大失败尝试次数 */
+    private companion object {
+        const val MAX_LOGIN_ATTEMPTS = 5
+        const val COOLDOWN_MILLIS = 60_000L // 60 秒冷却期
+    }
+
+    /** 登录失败尝试记录 */
+    private var failedLoginAttempts = 0
+    private var lastFailedTimestamp = 0L
+
     /** 登录响应状态，包含成功/失败信息及登录数据 */
     private val _loginState = MutableStateFlow<ApiResponse<LoginResponse>?>(null)
     val loginState: StateFlow<ApiResponse<LoginResponse>?> = _loginState
@@ -60,17 +70,36 @@ class AuthViewModel : ViewModel() {
      * @param password 密码
      */
     fun login(username: String, password: String) {
+        // 客户端限流：检查冷却期
+        if (failedLoginAttempts >= MAX_LOGIN_ATTEMPTS) {
+            val elapsed = System.currentTimeMillis() - lastFailedTimestamp
+            if (elapsed < COOLDOWN_MILLIS) {
+                val remainingSeconds = ((COOLDOWN_MILLIS - elapsed) / 1000).toInt()
+                _loginState.value = ApiResponse(false, "登录尝试过于频繁，请${remainingSeconds}秒后重试")
+                return
+            }
+            // 冷却期已过，重置计数
+            failedLoginAttempts = 0
+        }
+
         viewModelScope.launch {
             _loginState.value = null
             _error.value = null
             _isLoading.value = true
             try {
                 _loginState.value = authApi.userLogin(LoginRequest(username, password))
-                handleLoginSuccess(_loginState.value)
+                val success = _loginState.value?.success == true
+                if (success) {
+                    failedLoginAttempts = 0 // 登录成功，重置计数
+                    handleLoginSuccess(_loginState.value)
+                } else {
+                    recordLoginFailure()
+                }
             } catch (e: CancellationException) {
                 throw e // 协程取消异常必须向上传播，不能吞掉
             } catch (e: Exception) {
                 _loginState.value = ApiResponse(false, ErrorMapper.mapError(e))
+                recordLoginFailure()
             } finally {
                 _isLoading.value = false
             }
@@ -86,19 +115,43 @@ class AuthViewModel : ViewModel() {
      * @param password 管理员密码
      */
     fun adminLogin(username: String, password: String) {
+        // 客户端限流：检查冷却期
+        if (failedLoginAttempts >= MAX_LOGIN_ATTEMPTS) {
+            val elapsed = System.currentTimeMillis() - lastFailedTimestamp
+            if (elapsed < COOLDOWN_MILLIS) {
+                val remainingSeconds = ((COOLDOWN_MILLIS - elapsed) / 1000).toInt()
+                _loginState.value = ApiResponse(false, "登录尝试过于频繁，请${remainingSeconds}秒后重试")
+                return
+            }
+            failedLoginAttempts = 0
+        }
+
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 _loginState.value = authApi.adminLogin(LoginRequest(username, password))
-                handleLoginSuccess(_loginState.value)
+                val success = _loginState.value?.success == true
+                if (success) {
+                    failedLoginAttempts = 0
+                    handleLoginSuccess(_loginState.value)
+                } else {
+                    recordLoginFailure()
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _loginState.value = ApiResponse(false, ErrorMapper.mapError(e))
+                recordLoginFailure()
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    /** 记录一次登录失败，更新计数器和时间戳 */
+    private fun recordLoginFailure() {
+        failedLoginAttempts++
+        lastFailedTimestamp = System.currentTimeMillis()
     }
 
     private fun handleLoginSuccess(response: ApiResponse<LoginResponse>?) {
@@ -199,14 +252,16 @@ class AuthViewModel : ViewModel() {
      * @param role 用户角色（"user" 或 "admin"）
      */
     fun logout(userId: Int, role: String) {
+        // 先同步清除本地 Token 和状态，确保导航时已无残留凭证
+        TokenStore.clearTokens()
+        _loginState.value = null
+        _userInfo.value = null
+        _registerSuccess.value = false
+        _error.value = null
+        userInfoLoaded = false
+        // 异步通知服务端登出（失败不影响本地状态）
         viewModelScope.launch {
             try { authApi.logout(userId, role) } catch (_: Exception) {}
-            TokenStore.clearTokens()
-            _loginState.value = null
-            _userInfo.value = null
-            _registerSuccess.value = false
-            _error.value = null
-            userInfoLoaded = false
         }
     }
 

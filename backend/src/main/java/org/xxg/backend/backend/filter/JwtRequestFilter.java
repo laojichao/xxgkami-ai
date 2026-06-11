@@ -134,18 +134,38 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     /**
      * 查询数据库验证账号有效性。
+     * <p>检查条件：账号存在、未被锁定、有活跃的 access token（未注销）。</p>
      */
     private boolean checkAccountInDb(String username, String role) {
         if ("admin".equals(role)) {
             return adminRepository.findByUsername(username)
-                    .map(admin -> admin.getFailedLoginAttempts() == null
-                            || admin.getFailedLoginAttempts() < 5
-                            || admin.getLockTime() == null
-                            || admin.getLockTime().plusMinutes(15).isBefore(LocalDateTime.now()))
+                    .map(admin -> {
+                        // Account must have an active session (not logged out)
+                        if (admin.getAccessToken() == null) return false;
+                        // Account must not be locked out
+                        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= 5
+                                && admin.getLockTime() != null
+                                && admin.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
+                            return false;
+                        }
+                        return true;
+                    })
                     .orElse(false);
         } else if ("user".equals(role)) {
             return userRepository.findByUsername(username)
-                    .map(User::getStatus)
+                    .map(user -> {
+                        // Account must be enabled
+                        if (!user.getStatus()) return false;
+                        // Account must have an active session (not logged out)
+                        if (user.getAccessToken() == null) return false;
+                        // Account must not be locked out
+                        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= 5
+                                && user.getLockTime() != null
+                                && user.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
+                            return false;
+                        }
+                        return true;
+                    })
                     .orElse(false);
         }
         return false;

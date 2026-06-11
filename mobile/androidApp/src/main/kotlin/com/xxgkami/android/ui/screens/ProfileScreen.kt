@@ -29,8 +29,18 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
     val isLoading by authViewModel.isLoading.collectAsState()
     val error by authViewModel.error.collectAsState()
 
+    // 追踪是否已发起登出请求
+    var logoutInitiated by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         authViewModel.getUserInfo()
+    }
+
+    // 当登出已发起且 userInfo 被清除为 null 时，安全地触发导航回调
+    LaunchedEffect(logoutInitiated, userInfo) {
+        if (logoutInitiated && userInfo == null) {
+            onLogout()
+        }
     }
 
     Scaffold(topBar = {
@@ -80,9 +90,9 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 onClick = {
                     val userId = userInfo?.id ?: 0
                     val role = userInfo?.role ?: "user"
-                    // 先发起服务端登出请求（确保 viewModelScope 中的协程启动），再导航
+                    logoutInitiated = true
+                    // logout 同步清除本地 Token 和 userInfo，LaunchedEffect 会监听到并触发 onLogout
                     authViewModel.logout(userId, role)
-                    onLogout()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)

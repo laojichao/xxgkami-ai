@@ -52,6 +52,14 @@ public class SecurityConfig {
         String[] origins = Arrays.stream(corsOrigins.split(","))
                 .map(String::trim)
                 .toArray(String[]::new);
+        // Safety check: allowCredentials cannot be used with wildcard origins
+        for (String origin : origins) {
+            if ("*".equals(origin)) {
+                throw new IllegalStateException(
+                    "CORS 配置错误: allowCredentials=true 时不允许使用通配符 '*' 作为 allowedOrigins。" +
+                    "请在 CORS_ALLOWED_ORIGINS 环境变量中配置具体的域名。");
+            }
+        }
         config.setAllowedOrigins(Arrays.asList(origins));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin"));
@@ -82,6 +90,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
+            .headers(headers -> headers.frameOptions(frame -> frame.deny()))
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth

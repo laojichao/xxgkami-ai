@@ -351,7 +351,7 @@ const props = defineProps({
   userInfo: Object
 })
 
-const emit = defineEmits(['save-settings', 'clear-cache', 'clear-logs', 'create-backup'])
+const emit = defineEmits(['save-settings', 'clear-cache', 'clear-logs', 'create-backup', 'update:totp-enabled'])
 
 const SITE_URL_PAYMENT_TIP_KEY = 'xxgkami_settings_site_url_payment_tip_dismissed'
 
@@ -423,8 +423,8 @@ const enableTotp = async () => {
         if (res.success) {
             showToast('Authenticator 已启用', 'success');
             totpStep.value = 'manage';
-            // Update local user info
-            if (props.userInfo) props.userInfo.totpEnabled = true;
+            // Notify parent to update totp state
+            emit('update:totp-enabled', true);
         } else {
             showToast(res.message || '启用失败', 'error');
         }
@@ -444,8 +444,8 @@ const disableTotp = async () => {
         const res = await authApi.disableTotp(props.userInfo.id);
         if (res.success) {
             showToast('Authenticator 已禁用', 'success');
-            // Update local user info
-            if (props.userInfo) props.userInfo.totpEnabled = false;
+            // Notify parent to update totp state
+            emit('update:totp-enabled', false);
             // Switch to setup mode
              await fetchTotpSetup();
         } else {

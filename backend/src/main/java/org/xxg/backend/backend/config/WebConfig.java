@@ -8,9 +8,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import java.util.Arrays;
 
 /**
- * Web MVC 配置
- * <p>配置CORS跨域资源共享策略，支持通过环境变量 CORS_ALLOWED_ORIGINS 配置允许的源。</p>
- * <p>默认允许 localhost:3000 和 localhost:5173，启用凭据传递，最大缓存1小时。</p>
+ * Web MVC 配置。
+ * <p>CORS 策略由 SecurityConfig 中的 CorsConfigurationSource bean 统一管理，
+ * 此处不再重复配置，避免两处 CORS 规则不一致导致难以排查的问题。</p>
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
@@ -20,24 +20,8 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        String[] origins = Arrays.stream(allowedOrigins.split(","))
-                .map(String::trim)
-                .toArray(String[]::new);
-
-        // Safety check: allowCredentials cannot be used with wildcard origins
-        for (String origin : origins) {
-            if ("*".equals(origin)) {
-                throw new IllegalStateException(
-                    "CORS 配置错误: allowCredentials=true 时不允许使用通配符 '*' 作为 allowedOrigins。" +
-                    "请在 CORS_ALLOWED_ORIGINS 环境变量中配置具体的域名。");
-            }
-        }
-
-        registry.addMapping("/**")
-                .allowedOriginPatterns(origins)
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(true)
-                .maxAge(3600);
+        // CORS is handled by SecurityConfig.corsConfigurationSource()
+        // Intentionally left empty to avoid duplicate/conflicting CORS rules.
+        // The wildcard safety check is still performed at startup via SecurityConfig.
     }
 }

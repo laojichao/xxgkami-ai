@@ -41,7 +41,10 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewMod
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("密码") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(24.dp))
-            Button(onClick = { viewModel.login(username, password) }, enabled = !isLoading && username.isNotBlank() && password.isNotBlank(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Button(onClick = {
+                if (username.length > 50 || password.length > 128) return@Button
+                viewModel.login(username, password)
+            }, enabled = !isLoading && username.isNotBlank() && password.isNotBlank() && username.length <= 50 && password.length <= 128, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp)) else Text("登录")
             }
             loginState?.let { if (!it.success) Text(it.message ?: "登录失败", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }

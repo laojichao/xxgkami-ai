@@ -43,6 +43,8 @@ public class WebhookService {
      * 异步触发 Webhook 回调。
      * <p>根据 API Key 中配置的 Webhook URL 和请求方法，发送事件通知。
      * 包含 SSRF 防护，拒绝向内网地址发送请求。</p>
+     * <p>安全校验：apiKeyId 必须与卡密的 creatorId 匹配，防止攻击者利用
+     * 任意 apiKeyId 触发其他用户的 Webhook。</p>
      *
      * @param apiKeyId API Key ID
      * @param card     触发事件的卡密
@@ -54,6 +56,14 @@ public class WebhookService {
         try {
             ApiKey apiKey = apiKeyRepository.findById(apiKeyId).orElse(null);
             if (apiKey == null || apiKey.getWebhookConfig() == null || apiKey.getWebhookConfig().isEmpty()) {
+                return;
+            }
+
+            // Security: verify the API key is the one associated with this card,
+            // preventing attackers from triggering webhooks for other users' API keys
+            if (card.getApiKeyId() != null && !card.getApiKeyId().equals(apiKeyId)) {
+                log.warn("[WEBHOOK] Blocked cross-user webhook: card.apiKeyId={} but request apiKeyId={}",
+                        card.getApiKeyId(), apiKeyId);
                 return;
             }
 

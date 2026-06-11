@@ -37,12 +37,9 @@ fun RegisterScreen(navController: NavController, viewModel: AuthViewModel = view
         }
     }
 
-    // 输入校验：邮箱必须包含 @ 且 @ 在 . 之前，且前后都有内容
-    val isEmailValid = email.let { e ->
-        val atIdx = e.indexOf('@')
-        val dotIdx = e.lastIndexOf('.')
-        atIdx > 0 && dotIdx > atIdx + 1 && dotIdx < e.length - 1
-    }
+    // 输入校验：邮箱格式验证（RFC 5322 简化版）
+    val emailRegex = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+    val isEmailValid = email.matches(emailRegex)
     val isFormValid = username.isNotBlank() && isEmailValid && code.isNotBlank() && password.length >= 6
 
     Scaffold(topBar = { TopAppBar(title = { Text("注册") }) }) { padding ->

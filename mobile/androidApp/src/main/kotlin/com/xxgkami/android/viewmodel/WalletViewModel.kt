@@ -76,8 +76,18 @@ class WalletViewModel : ViewModel() {
     fun recharge(amount: String) {
         // 客户端校验充值金额
         val parsedAmount = amount.toDoubleOrNull()
-        if (parsedAmount == null || parsedAmount <= 0) {
+        if (parsedAmount == null || parsedAmount <= 0 || parsedAmount.isNaN() || parsedAmount.isInfinite()) {
             _error.value = "请输入有效的充值金额"
+            return
+        }
+        if (parsedAmount > 100000) {
+            _error.value = "单次充值金额不能超过100,000元"
+            return
+        }
+        // 校验小数位数不超过2位
+        val decimalPart = amount.substringAfter(".", "")
+        if (decimalPart.length > 2) {
+            _error.value = "充值金额最多支持2位小数"
             return
         }
         viewModelScope.launch {

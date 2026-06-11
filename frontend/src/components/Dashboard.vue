@@ -91,6 +91,7 @@
         @optimize-database="handleOptimizeDatabase"
         @clear-logs="handleClearLogs"
         @create-backup="handleCreateBackup"
+        @update:totp-enabled="handleTotpEnabledChange"
       />
 
       <!-- 系统维护页面 -->
@@ -197,6 +198,7 @@ const createProgress = reactive({
   done: false,
   percent: 0
 })
+const createProgressTimer = ref(null)
 
 
 // 方法
@@ -270,7 +272,7 @@ const handleCreateKeys = async (keyData) => {
   await loadKeys()
 
   // 5 秒后自动关闭进度条
-  setTimeout(() => {
+  createProgressTimer.value = setTimeout(() => {
     if (createProgress.done) {
       createProgress.visible = false
     }
@@ -443,6 +445,13 @@ const handleCreateBackup = async () => {
   }
 }
 
+/** TOTP 状态变更后同步更新 userInfo */
+const handleTotpEnabledChange = (enabled) => {
+  if (props.userInfo) {
+    props.userInfo.totpEnabled = enabled
+  }
+}
+
 
 // 初始化数据
 onMounted(async () => {
@@ -460,6 +469,12 @@ onMounted(async () => {
 
   // 异步加载卡密数据
   await loadKeys()
+})
+
+onUnmounted(() => {
+  if (createProgressTimer.value) {
+    clearTimeout(createProgressTimer.value)
+  }
 })
 </script>
 

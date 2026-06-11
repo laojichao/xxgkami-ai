@@ -16,6 +16,7 @@ import org.xxg.backend.backend.mapper.UserRepository;
 import org.xxg.backend.backend.service.AuthService;
 import org.xxg.backend.backend.service.TotpService;
 import org.xxg.backend.backend.util.JwtUtil;
+import org.xxg.backend.backend.filter.JwtRequestFilter;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -39,6 +40,7 @@ public class AuthController {
     private final AdminRepository adminRepository;
     private final TotpService totpService;
     private final JwtUtil jwtUtil;
+    private final JwtRequestFilter jwtRequestFilter;
 
     /**
      * OAuth state 存储：key = state nonce, value = 创建时间戳。
@@ -57,12 +59,13 @@ public class AuthController {
 
     public AuthController(AuthService authService, UserRepository userRepository,
                           AdminRepository adminRepository, TotpService totpService,
-                          JwtUtil jwtUtil) {
+                          JwtUtil jwtUtil, JwtRequestFilter jwtRequestFilter) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
         this.totpService = totpService;
         this.jwtUtil = jwtUtil;
+        this.jwtRequestFilter = jwtRequestFilter;
         // 每 2 分钟清理过期 state
         stateCleanup.scheduleAtFixedRate(this::cleanupExpiredStates, 2, 2, TimeUnit.MINUTES);
     }
@@ -235,6 +238,13 @@ public class AuthController {
                 admin.setRefreshToken(null);
                 adminRepository.save(admin);
             });
+            // Invalidate the JWT filter cache so the next request checks the DB immediately
+            // instead of waiting for the 30-second cache TTL
+            String role = auth.getAuthorities().stream()
+                    .findFirst()
+                    .map(a -> a.getAuthority().replace("ROLE_", "").toLowerCase())
+                    .orElse("user");
+            jwtRequestFilter.invalidateAccountCache(username, role);
         }
         // 清除客户端 httpOnly Cookie
         clearTokenCookies(response);

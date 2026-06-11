@@ -26,7 +26,7 @@ object ErrorMapper {
             is SerializationException -> "数据解析错误，请稍后重试"
             is java.io.IOException -> "网络异常，请检查网络连接"
             else -> {
-                Log.e("ErrorMapper", "Unhandled exception: ${e.javaClass.simpleName}: ${e.message}", e)
+                Log.e("ErrorMapper", "Unhandled exception: ${e.javaClass.simpleName}: ${e.message}")
                 "操作失败，请稍后重试"
             }
         }

@@ -123,10 +123,8 @@ public class UserService {
         if (!passwordUtil.matches(oldPassword, user.getPassword())) {
             throw new BusinessException("原密码错误");
         }
-        // 密码强度校验：至少8位
-        if (newPassword == null || newPassword.length() < 8) {
-            throw new BusinessException("新密码长度不能少于8位");
-        }
+        // 密码强度校验
+        validatePasswordStrength(newPassword);
         user.setPassword(passwordUtil.encode(newPassword));
         user.setUpdateTime(LocalDateTime.now());
         userRepository.save(user);
@@ -161,6 +159,30 @@ public class UserService {
         // Note: cards are kept for audit trail
 
         userRepository.delete(user);
+    }
+
+    /**
+     * 密码强度校验：至少8位，且必须包含大写字母、小写字母和数字。
+     *
+     * @param password 待校验的密码
+     * @throws BusinessException 密码不符合要求时抛出
+     */
+    private void validatePasswordStrength(String password) {
+        if (password == null || password.length() < 8) {
+            throw new BusinessException("密码长度不能少于8位");
+        }
+        if (password.length() > 50) {
+            throw new BusinessException("密码长度不能超过50位");
+        }
+        if (!password.matches(".*[A-Z].*")) {
+            throw new BusinessException("密码必须包含至少一个大写字母");
+        }
+        if (!password.matches(".*[a-z].*")) {
+            throw new BusinessException("密码必须包含至少一个小写字母");
+        }
+        if (!password.matches(".*\\d.*")) {
+            throw new BusinessException("密码必须包含至少一个数字");
+        }
     }
 
     /**

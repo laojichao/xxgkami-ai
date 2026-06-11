@@ -153,18 +153,19 @@ public class CardService {
 
         // Use pessimistic lock on Card to prevent concurrent modifications
         Card card = cardRepository.findByCardKeyForUpdate(cardKey).orElse(null);
+        // Unified error message to prevent card key enumeration via different responses
         if (card == null) {
             result.put("success", false);
-            result.put("message", "卡密不存在");
-            result.put("statusCode", 404);
+            result.put("message", "卡密无效");
+            result.put("statusCode", 400);
             return result;
         }
 
         // Check if disabled
         if (card.getStatus() == 2) {
             result.put("success", false);
-            result.put("message", "卡密已停用");
-            result.put("statusCode", 402);
+            result.put("message", "卡密无效");
+            result.put("statusCode", 400);
             return result;
         }
 
@@ -172,8 +173,8 @@ public class CardService {
         CardStatus cardStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
         if (cardStatus != null && !Boolean.TRUE.equals(cardStatus.getIsValid())) {
             result.put("success", false);
-            result.put("message", "该卡密已失效");
-            result.put("statusCode", 403);
+            result.put("message", "卡密无效");
+            result.put("statusCode", 400);
             return result;
         }
 
@@ -181,8 +182,8 @@ public class CardService {
         if (card.getMachineCode() != null && !card.getMachineCode().isEmpty()) {
             if (machineCode == null || !card.getMachineCode().equals(machineCode)) {
                 result.put("success", false);
-                result.put("message", "机器码不匹配");
-                result.put("statusCode", 403);
+                result.put("message", "卡密无效或机器码不匹配");
+                result.put("statusCode", 400);
                 return result;
             }
         } else if (machineCode != null && !machineCode.isEmpty()) {
@@ -196,8 +197,8 @@ public class CardService {
             if (cardStatus != null && cardStatus.getExpireTime() != null
                     && cardStatus.getExpireTime().isBefore(LocalDateTime.now())) {
                 result.put("success", false);
-                result.put("message", "卡密已过期");
-                result.put("statusCode", 401);
+                result.put("message", "卡密无效");
+                result.put("statusCode", 400);
                 return result;
             }
             // Calculate remaining time
@@ -365,6 +366,32 @@ public class CardService {
                 .orElseThrow(() -> new BusinessException("卡密不存在"));
         if (card.getStatus() == 2) {
             throw new BusinessException("已停用的卡密不能解绑机器码");
+        }
+        card.setMachineCode(null);
+        cardRepository.save(card);
+    }
+
+    /**
+     * 自助解绑卡密的机器码（公开接口调用）。
+     * <p>需要卡密允许自助解绑，且必须提供当前绑定的机器码进行验证。
+     * 使用悲观锁保证读-改-写的原子性。</p>
+     *
+     * @param cardKey     卡密明文
+     * @param machineCode 当前绑定的机器码
+     */
+    @Transactional
+    public void selfUnbindMachineCode(String cardKey, String machineCode) {
+        Card card = cardRepository.findByCardKey(cardKey).orElse(null);
+        // 统一错误消息，防止通过不同响应枚举有效卡密
+        if (card == null || card.getStatus() == 2) {
+            throw new BusinessException("卡密无效或已停用");
+        }
+        if (!card.getAllowSelfUnbind()) {
+            throw new BusinessException("此卡密不支持自助解绑");
+        }
+        // Verify machine code matches before unbinding
+        if (card.getMachineCode() == null || !card.getMachineCode().equals(machineCode)) {
+            throw new BusinessException("卡密无效或机器码不匹配");
         }
         card.setMachineCode(null);
         cardRepository.save(card);
