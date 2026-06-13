@@ -1,27 +1,33 @@
 package org.xxg.backend.backend.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.*;
 import org.xxg.backend.backend.entity.Admin;
+import org.xxg.backend.backend.entity.OAuthState;
 import org.xxg.backend.backend.entity.User;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.AdminRepository;
+import org.xxg.backend.backend.mapper.OAuthStateRepository;
 import org.xxg.backend.backend.mapper.UserRepository;
 import org.xxg.backend.backend.service.AuthService;
 import org.xxg.backend.backend.service.TotpService;
 import org.xxg.backend.backend.util.JwtUtil;
 import org.xxg.backend.backend.filter.JwtRequestFilter;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +40,7 @@ import java.util.concurrent.TimeUnit;
  */
 @RestController
 @RequestMapping("/auth")
+@Tag(name = "认证接口", description = "登录、注册、Token 刷新、TOTP、OAuth")
 public class AuthController {
     private final AuthService authService;
     private final UserRepository userRepository;
@@ -41,14 +48,10 @@ public class AuthController {
     private final TotpService totpService;
     private final JwtUtil jwtUtil;
     private final JwtRequestFilter jwtRequestFilter;
+    private final OAuthStateRepository oauthStateRepository;
 
-    /**
-     * OAuth state 存储：key = state nonce, value = 创建时间戳。
-     * <p>用于防止 OAuth session fixation 攻击：前端发起 OAuth 前获取 state，
-     * 回调时必须携带此 state 才能设置 Cookie。</p>
-     */
-    private final ConcurrentHashMap<String, Long> oauthStates = new ConcurrentHashMap<>();
-    private static final long OAUTH_STATE_TTL_MS = 5 * 60 * 1000L; // 5 分钟过期
+    /** OAuth state 过期时间：5 分钟 */
+    private static final int OAUTH_STATE_TTL_MINUTES = 5;
 
     /** 定时清理过期的 OAuth state */
     private final ScheduledExecutorService stateCleanup = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -59,20 +62,32 @@ public class AuthController {
 
     public AuthController(AuthService authService, UserRepository userRepository,
                           AdminRepository adminRepository, TotpService totpService,
-                          JwtUtil jwtUtil, JwtRequestFilter jwtRequestFilter) {
+                          JwtUtil jwtUtil, JwtRequestFilter jwtRequestFilter,
+                          OAuthStateRepository oauthStateRepository) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
         this.totpService = totpService;
         this.jwtUtil = jwtUtil;
         this.jwtRequestFilter = jwtRequestFilter;
+        this.oauthStateRepository = oauthStateRepository;
         // 每 2 分钟清理过期 state
         stateCleanup.scheduleAtFixedRate(this::cleanupExpiredStates, 2, 2, TimeUnit.MINUTES);
     }
 
+    /** 应用关闭时清理定时器线程，防止资源泄漏 */
+    @PreDestroy
+    public void destroy() {
+        stateCleanup.shutdownNow();
+    }
+
+    /** 清理过期的 OAuth state 记录 */
     private void cleanupExpiredStates() {
-        long now = System.currentTimeMillis();
-        oauthStates.entrySet().removeIf(e -> now - e.getValue() > OAUTH_STATE_TTL_MS);
+        try {
+            oauthStateRepository.deleteByExpireTimeBefore(LocalDateTime.now());
+        } catch (Exception e) {
+            // 清理失败不影响正常业务，忽略
+        }
     }
 
     /**
@@ -83,6 +98,7 @@ public class AuthController {
      * @param response HTTP 响应（用于设置 Cookie）
      * @return 包含 JWT Token 的登录响应
      */
+    @Operation(summary = "管理员登录", description = "管理员使用用户名/密码登录，支持 TOTP 二次验证。登录成功后 Token 写入 httpOnly Cookie。")
     @PostMapping("/admin/login")
     public ResponseEntity<ApiResponse<LoginResponse>> adminLogin(@Valid @RequestBody LoginRequest request,
                                                                   HttpServletResponse response) {
@@ -102,6 +118,7 @@ public class AuthController {
      * @param response HTTP 响应（用于设置 Cookie）
      * @return 包含 JWT Token 的登录响应
      */
+    @Operation(summary = "用户登录", description = "普通用户使用用户名/密码登录。登录成功后 Token 写入 httpOnly Cookie。")
     @PostMapping("/user/login")
     public ResponseEntity<ApiResponse<LoginResponse>> userLogin(@Valid @RequestBody LoginRequest request,
                                                                  HttpServletResponse response) {
@@ -119,6 +136,7 @@ public class AuthController {
      * @param request 注册请求
      * @return 操作结果
      */
+    @Operation(summary = "用户注册", description = "新用户注册，需要邮箱验证码。密码要求：8-50位，包含大小写字母和数字。")
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegisterRequest request) {
         authService.register(request);
@@ -432,9 +450,13 @@ public class AuthController {
      * <p>有效期 5 分钟，使用后自动失效。</p>
      */
     @GetMapping("/oauth/state")
+    @Transactional
     public ResponseEntity<ApiResponse<Map<String, String>>> generateOAuthState() {
         String state = UUID.randomUUID().toString();
-        oauthStates.put(state, System.currentTimeMillis());
+        OAuthState oauthState = new OAuthState();
+        oauthState.setState(state);
+        oauthState.setExpireTime(LocalDateTime.now().plusMinutes(OAUTH_STATE_TTL_MINUTES));
+        oauthStateRepository.save(oauthState);
         Map<String, String> result = new HashMap<>();
         result.put("state", state);
         return ResponseEntity.ok(ApiResponse.ok(result));
@@ -453,6 +475,7 @@ public class AuthController {
      * @return 操作结果
      */
     @PostMapping("/oauth/set-cookies")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> setOAuthCookies(@RequestBody Map<String, String> body,
                                                               HttpServletResponse response) {
         // 验证 state 参数（防止 session fixation）
@@ -460,13 +483,14 @@ public class AuthController {
         if (state == null || state.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("缺少 state 参数"));
         }
-        Long stateTimestamp = oauthStates.remove(state);
-        if (stateTimestamp == null) {
+        // 从数据库中查找并删除 state（一次性使用）
+        OAuthState oauthState = oauthStateRepository.findByStateAndExpireTimeAfter(state, LocalDateTime.now())
+                .orElse(null);
+        if (oauthState == null) {
             return ResponseEntity.badRequest().body(ApiResponse.error("无效或已过期的 state 参数"));
         }
-        if (System.currentTimeMillis() - stateTimestamp > OAUTH_STATE_TTL_MS) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("state 参数已过期"));
-        }
+        // 立即删除，防止重复使用
+        oauthStateRepository.delete(oauthState);
 
         String accessToken = body.get("token");
         String refreshTokenValue = body.get("refreshToken");

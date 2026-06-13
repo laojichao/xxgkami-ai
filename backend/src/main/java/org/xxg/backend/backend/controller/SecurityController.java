@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,6 +23,7 @@ import java.util.regex.Pattern;
  */
 @RestController
 @RequestMapping("/security")
+@Tag(name = "安全管理", description = "IP 黑名单、访问日志")
 public class SecurityController {
 
     private static final Pattern IPV4_PATTERN = Pattern.compile(

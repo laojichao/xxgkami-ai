@@ -155,7 +155,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             return userRepository.findByUsername(username)
                     .map(user -> {
                         // Account must be enabled
-                        if (!user.getStatus()) return false;
+                        if (!Boolean.TRUE.equals(user.getStatus())) return false;
                         // Account must have an active session (not logged out)
                         if (user.getAccessToken() == null) return false;
                         // Account must not be locked out

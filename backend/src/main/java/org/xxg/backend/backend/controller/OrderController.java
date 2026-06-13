@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -25,6 +27,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/orders")
+@Tag(name = "订单管理", description = "订单创建、查询、状态更新")
 public class OrderController {
     private final OrderService orderService;
     private final UserRepository userRepository;

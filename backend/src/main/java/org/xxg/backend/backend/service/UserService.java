@@ -137,7 +137,7 @@ public class UserService {
     @Transactional
     public void toggleUserStatus(Integer userId) {
         User user = getUserById(userId);
-        user.setStatus(!user.getStatus());
+        user.setStatus(!Boolean.TRUE.equals(user.getStatus()));
         user.setUpdateTime(LocalDateTime.now());
         userRepository.save(user);
     }
@@ -154,7 +154,9 @@ public class UserService {
         walletRepository.deleteByUserId(userId);
         walletTransactionRepository.deleteByUserId(userId);
         socialUserRepository.deleteByUserId(userId);
-        verificationCodeRepository.deleteByEmail(user.getEmail());
+        if (user.getEmail() != null) {
+            verificationCodeRepository.deleteByEmail(user.getEmail());
+        }
         // Note: orders are kept for audit trail
         // Note: cards are kept for audit trail
 

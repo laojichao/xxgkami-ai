@@ -105,7 +105,10 @@ public class SecurityConfig {
                     "/payment/notify", "/payment/return",
                     "/system/health", "/error",
                     "/cards/use", "/cards/verify",
-                    "/custom/**", "/open/**"
+                    "/custom/**", "/open/**",
+                    // Swagger UI / OpenAPI (仅开发环境公开，生产环境可通过环境变量关闭)
+                    "/swagger-ui/**", "/swagger-ui.html",
+                    "/v3/api-docs/**", "/v3/api-docs"
                 ).permitAll()
                 // === Pricing：GET 公开，写操作仅管理员 ===
                 .requestMatchers(HttpMethod.GET, "/pricing", "/pricing/**").permitAll()

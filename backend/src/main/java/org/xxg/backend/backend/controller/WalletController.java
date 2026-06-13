@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +25,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/wallet")
+@Tag(name = "钱包管理", description = "余额查询、充值、交易记录")
 public class WalletController {
     private final WalletService walletService;
     private final UserRepository userRepository;

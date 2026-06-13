@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +21,7 @@ import java.util.Map;
  * <p>基础路径：/user, /admin/users</p>
  */
 @RestController
+@Tag(name = "用户管理", description = "用户 CRUD、个人资料、密码修改")
 public class UserController {
     private final UserService userService;
     public UserController(UserService userService) { this.userService = userService; }
@@ -118,7 +121,12 @@ public class UserController {
     }
 
     @DeleteMapping("/admin/users/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Integer id) {
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Integer id, Authentication auth) {
+        // 防止管理员删除自己的账号
+        User currentUser = userService.getUserByUsername(auth.getName());
+        if (currentUser != null && currentUser.getId().equals(id)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("不能删除自己的账号"));
+        }
         userService.deleteUser(id);
         return ResponseEntity.ok(ApiResponse.ok("用户已删除"));
     }

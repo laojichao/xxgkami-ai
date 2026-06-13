@@ -209,8 +209,12 @@ public class CardService {
             }
         } else if (card.getCardType() == Card.CardType.count) {
             // Count card - use pessimistic lock to prevent concurrent double-spend
+            // Re-fetch with lock if cardStatus was not locked (defensive)
             CardStatus lockedStatus = cardStatus;
-            if (lockedStatus == null || lockedStatus.getRemainCount() <= 0) {
+            if (lockedStatus == null) {
+                lockedStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
+            }
+            if (lockedStatus == null || lockedStatus.getRemainCount() == null || lockedStatus.getRemainCount() <= 0) {
                 result.put("success", false);
                 result.put("message", "次数已用尽");
                 result.put("statusCode", 403);

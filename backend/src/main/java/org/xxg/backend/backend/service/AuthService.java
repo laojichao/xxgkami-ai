@@ -166,7 +166,7 @@ public class AuthService {
             user.setLockTime(null);
         }
 
-        if (!user.getStatus()) {
+        if (!Boolean.TRUE.equals(user.getStatus())) {
             throw new BusinessException("账号已被禁用");
         }
 
@@ -179,7 +179,7 @@ public class AuthService {
         user.setAccessToken(hashedAccessToken);
         user.setRefreshToken(hashedRefreshToken);
         user.setLastLoginTime(LocalDateTime.now());
-        user.setLoginCount(user.getLoginCount() + 1);
+        user.setLoginCount((user.getLoginCount() != null ? user.getLoginCount() : 0) + 1);
         userRepository.save(user);
 
         Map<String, Object> userInfo = new HashMap<>();

@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,12 +24,14 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/cards")
+@Tag(name = "卡密管理", description = "卡密生成、验证、查询、启停用、机器码解绑")
 public class CardController {
     private final CardService cardService;
     public CardController(CardService cardService) { this.cardService = cardService; }
 
     // --- Frontend-compatible endpoints ---
 
+    @Operation(summary = "使用卡密", description = "公开接口，验证卡密有效性并绑定机器码。限流：30次/分钟/IP。")
     @PostMapping("/use")
     public ResponseEntity<Map<String, Object>> useCard(@RequestBody Map<String, String> body) {
         String cardKey = body.get("card_key");

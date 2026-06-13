@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import java.util.List;
  * <p>权限：查询接口公开访问，增删改接口仅管理员</p>
  */
 @RestController
+@Tag(name = "定价管理", description = "卡密定价方案的增删改查")
 public class CardPricingController {
     private final CardPricingService service;
     public CardPricingController(CardPricingService service) { this.service = service; }
