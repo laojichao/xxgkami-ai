@@ -945,7 +945,7 @@ export const paymentApi = {
    * 发起支付
    */
   async createPayment(data) {
-    return await apiRequest('/payment/pay', {
+    return await apiRequest('/payment/create', {
       method: 'POST',
       body: JSON.stringify(data)
     });

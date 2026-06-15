@@ -436,23 +436,28 @@ const obfuscateCardKey = (rawKey) => {
   }
 }
 
-/** 处理导出数据：根据选中列映射字段值 */
+/** 处理导出数据：根据选中列映射字段值（兼容 camelCase 和 snake_case） */
 const processExportData = (data) => {
   return data.map(item => {
     const processed = {}
+    // 辅助函数：兼容 camelCase 和 snake_case
+    const get = (camel, snake) => item[camel] ?? item[snake]
 
     if (selectedColumns.value.includes('id')) processed.id = item.id
-    if (selectedColumns.value.includes('card_key')) processed.card_key = item.card_key
-    if (selectedColumns.value.includes('encrypted_key')) processed.encrypted_key = obfuscateCardKey(item.card_key)
+    if (selectedColumns.value.includes('card_key')) processed.card_key = get('cardKey', 'card_key')
+    if (selectedColumns.value.includes('encrypted_key')) processed.encrypted_key = obfuscateCardKey(get('cardKey', 'card_key'))
 
     if (selectedColumns.value.includes('user_info')) {
-      processed.user_info = item.device_id ? `Device: ${item.device_id}` : (item.ip_address ? `IP: ${item.ip_address}` : '-')
+      const mc = get('machineCode', 'machine_code')
+      const ip = get('ipAddress', 'ip_address')
+      processed.user_info = mc ? `Device: ${mc}` : (ip ? `IP: ${ip}` : '-')
     }
 
     if (selectedColumns.value.includes('remaining_time')) {
-      if (item.card_type === 'time') {
-        if (item.expire_time) {
-          const ms = new Date(item.expire_time).getTime() - Date.now()
+      if (get('cardType', 'card_type') === 'time') {
+        const expireTime = get('expireTime', 'expire_time')
+        if (expireTime) {
+          const ms = new Date(expireTime).getTime() - Date.now()
           if (ms <= 0) {
             processed.remaining_time = '已过期'
           } else {
@@ -469,19 +474,23 @@ const processExportData = (data) => {
       }
     }
     if (selectedColumns.value.includes('remaining_count')) {
-      processed.remaining_count = item.card_type === 'count' ? `${item.remaining_count}/${item.total_count}` : '-'
+      const ct = get('cardType', 'card_type')
+      const rc = get('remainingCount', 'remaining_count')
+      const tc = get('totalCount', 'total_count')
+      processed.remaining_count = ct === 'count' ? `${rc}/${tc}` : '-'
     }
 
     if (selectedColumns.value.includes('expire_time')) {
-      processed.expire_time = item.expire_time ? formatDate(item.expire_time) : (item.card_type === 'time' ? '未激活' : '-')
+      const expireTime = get('expireTime', 'expire_time')
+      processed.expire_time = expireTime ? formatDate(expireTime) : (get('cardType', 'card_type') === 'time' ? '未激活' : '-')
     }
-    if (selectedColumns.value.includes('create_time')) processed.create_time = formatDate(item.create_time)
+    if (selectedColumns.value.includes('create_time')) processed.create_time = formatDate(get('createTime', 'create_time'))
 
-    if (selectedColumns.value.includes('card_type')) processed.card_type = getCardTypeText(item.card_type)
+    if (selectedColumns.value.includes('card_type')) processed.card_type = getCardTypeText(get('cardType', 'card_type'))
     if (selectedColumns.value.includes('status')) processed.status = getStatusText(item.status)
-    if (selectedColumns.value.includes('machine_code')) processed.machine_code = item.machine_code || '-'
-    if (selectedColumns.value.includes('is_exclusive')) processed.is_exclusive = item.api_key_id ? '是' : '否'
-    if (selectedColumns.value.includes('api_key_id')) processed.api_key_id = item.api_key_id || '-'
+    if (selectedColumns.value.includes('machine_code')) processed.machine_code = get('machineCode', 'machine_code') || '-'
+    if (selectedColumns.value.includes('is_exclusive')) processed.is_exclusive = get('apiKeyId', 'api_key_id') ? '是' : '否'
+    if (selectedColumns.value.includes('api_key_id')) processed.api_key_id = get('apiKeyId', 'api_key_id') || '-'
 
     return processed
   })
@@ -493,7 +502,7 @@ const filteredKeys = computed(() => {
   const q = (machineCodeSearch.value || '').trim().toLowerCase()
   if (!q) return list
   return list.filter((k) => {
-    const mc = (k.machine_code ?? '').toString().toLowerCase()
+    const mc = (k.machineCode ?? k.machine_code ?? '').toString().toLowerCase()
     return mc.includes(q)
   })
 })
@@ -695,9 +704,17 @@ const getStatusClass = (status) => {
 }
 
 const createKeys = () => {
-  const keyData = { ...newKey }
-  if (keyData.card_type === 'time') {
-    keyData.total_count = 0
+  // 转换为 camelCase 以匹配后端 DTO
+  const keyData = {
+    cardType: newKey.card_type,
+    count: newKey.count,
+    duration: newKey.duration,
+    totalCount: newKey.card_type === 'time' ? 0 : newKey.total_count,
+    verifyMethod: newKey.verify_method,
+    encryptionType: newKey.encryption_type,
+    allowReverify: newKey.allow_reverify,
+    stackTimeIfSameMachine: newKey.stack_time_if_same_machine,
+    allowSelfUnbind: newKey.allow_self_unbind
   }
 
   emit('create-keys', keyData)
@@ -716,23 +733,37 @@ const createKeys = () => {
 const editKey = (key) => {
   Object.assign(editingKey, {
     id: key.id,
-    card_key: key.card_key,
-    card_type: key.card_type,
+    card_key: key.cardKey || key.card_key,
+    card_type: key.cardType || key.card_type,
     duration: key.duration,
-    total_count: key.total_count || 100,
-    remaining_count: key.remaining_count || key.total_count || 100,
+    total_count: key.totalCount || key.total_count || 100,
+    remaining_count: key.remainingCount || key.remaining_count || key.totalCount || key.total_count || 100,
     status: key.status,
-    verify_method: key.verify_method || 'web',
-    encryption_type: key.encryption_type || 'advanced',
-    allow_reverify: key.allow_reverify !== undefined ? key.allow_reverify : 1,
-    machine_code: key.machine_code || '',
-    allow_self_unbind: key.allow_self_unbind === true || key.allow_self_unbind === 1
+    verify_method: key.verifyMethod || key.verify_method || 'web',
+    encryption_type: key.encryptionType || key.encryption_type || 'advanced',
+    allow_reverify: key.allowReverify !== undefined ? key.allowReverify : (key.allow_reverify !== undefined ? key.allow_reverify : 1),
+    machine_code: key.machineCode || key.machine_code || '',
+    allow_self_unbind: key.allowSelfUnbind === true || key.allowSelfUnbind === 1 || key.allow_self_unbind === true || key.allow_self_unbind === 1
   })
   showEditKeyModal.value = true
 }
 
 const updateKey = () => {
-  emit('update-key', { ...editingKey })
+  // 转换为 camelCase 以匹配后端 DTO
+  emit('update-key', {
+    id: editingKey.id,
+    cardKey: editingKey.card_key,
+    cardType: editingKey.card_type,
+    duration: editingKey.duration,
+    totalCount: editingKey.total_count,
+    remainingCount: editingKey.remaining_count,
+    status: editingKey.status,
+    verifyMethod: editingKey.verify_method,
+    encryptionType: editingKey.encryption_type,
+    allowReverify: editingKey.allow_reverify,
+    machineCode: editingKey.machine_code,
+    allowSelfUnbind: editingKey.allow_self_unbind
+  })
   showEditKeyModal.value = false
 }
 

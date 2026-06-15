@@ -2,16 +2,16 @@
 <template>
   <tr>
     <td>{{ keyData.id }}</td>
-    <td class="key-code" @click="$emit('copy', keyData.card_key)" :title="showKey ? '点击复制' : '点击复制（当前已隐藏）'">
-      <span v-if="showKey">{{ keyData.card_key }}</span>
-      <span v-else class="key-masked">{{ maskKey(keyData.card_key) }}</span>
+    <td class="key-code" @click="$emit('copy', cardKey)" :title="showKey ? '点击复制' : '点击复制（当前已隐藏）'">
+      <span v-if="showKey">{{ cardKey }}</span>
+      <span v-else class="key-masked">{{ maskKey(cardKey) }}</span>
       <button class="key-toggle-btn" @click.stop="showKey = !showKey" :title="showKey ? '隐藏' : '显示'">
         {{ showKey ? '🙈' : '👁' }}
       </button>
     </td>
     <td>
-      <span class="card-type" :class="keyData.card_type">
-        {{ getCardTypeText(keyData.card_type) }}
+      <span class="card-type" :class="cardType">
+        {{ getCardTypeText(cardType) }}
       </span>
     </td>
     <td>
@@ -19,26 +19,26 @@
         {{ getStatusText(keyData.status) }}
       </span>
     </td>
-    <td class="machine-code-cell" :title="keyData.machine_code || ''">
-      <span v-if="keyData.machine_code" class="machine-code-tag">{{ keyData.machine_code }}</span>
+    <td class="machine-code-cell" :title="machineCode || ''">
+      <span v-if="machineCode" class="machine-code-tag">{{ machineCode }}</span>
       <span v-else class="machine-code-empty">未绑定</span>
     </td>
-    <td>{{ formatDate(keyData.create_time) }}</td>
+    <td>{{ formatDate(keyData.createTime || keyData.create_time) }}</td>
     <td class="duration-cell">
-      <template v-if="keyData.card_type === 'time'">
+      <template v-if="cardType === 'time'">
         <span
-          v-if="keyData.expire_time"
+          v-if="keyData.expireTime || keyData.expire_time"
           :class="['time-countdown', { 'is-expired': isTimeCardExpired(keyData) }]"
         >
           {{ formatTimeCardRemaining(keyData) }}
         </span>
         <span v-else class="time-spec">{{ (keyData.duration ?? 0) }} 天（未激活）</span>
       </template>
-      <template v-else>{{ keyData.remaining_count }} 次</template>
+      <template v-else>{{ keyData.remainingCount || keyData.remaining_count }} 次</template>
     </td>
     <td>
       <div class="action-buttons">
-        <button class="btn-secondary btn-sm" @click="$emit('copy', keyData.card_key)">
+        <button class="btn-secondary btn-sm" @click="$emit('copy', cardKey)">
           <i class="fas fa-copy"></i>
           复制
         </button>
@@ -72,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   keyData: { type: Object, required: true },
@@ -83,6 +83,11 @@ defineEmits(['copy', 'edit', 'toggle-status', 'delete'])
 
 const showKey = ref(false)
 
+// 兼容 camelCase 和 snake_case 属性名
+const cardKey = computed(() => props.keyData.cardKey || props.keyData.card_key || '')
+const cardType = computed(() => props.keyData.cardType || props.keyData.card_type || 'time')
+const machineCode = computed(() => props.keyData.machineCode || props.keyData.machine_code || '')
+
 /** 将卡密脱敏显示，保留首尾各4字符 */
 const maskKey = (key) => {
   if (!key || key.length <= 8) return '****-****'
@@ -92,7 +97,7 @@ const maskKey = (key) => {
 const pad2 = (n) => String(n).padStart(2, '0')
 
 const parseExpireTimeMs = (item) => {
-  const raw = item?.expire_time
+  const raw = item?.expireTime || item?.expire_time
   if (raw == null || raw === '') return null
   const t = new Date(raw).getTime()
   return Number.isFinite(t) ? t : null
