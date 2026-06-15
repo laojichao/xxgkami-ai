@@ -996,25 +996,25 @@ const fetchOrders = async () => {
 
         if (Array.isArray(ordersResult)) {
             purchaseHistory.value = ordersResult.map(order => ({
-                orderNo: order.order_id,
-                cardType: order.card_type,
-                specification: order.card_spec,
+                orderNo: order.orderNo || order.order_id,
+                cardType: order.cardType || order.card_type,
+                specification: order.cardSpec || order.card_spec,
                 quantity: order.quantity,
-                totalPrice: order.total_price,
-                purchaseTime: order.purchase_time,
+                totalPrice: order.totalPrice || order.total_price,
+                purchaseTime: order.createTime || order.purchase_time,
                 status: order.status,
-                paymentMethod: order.payment_method,
-                cardKeys: order.card_keys
+                paymentMethod: order.paymentMethod || order.payment_method,
+                cardKeys: order.cardKeys || order.card_keys
             }));
         }
 
         if (cardsResult && cardsResult.success && Array.isArray(cardsResult.data)) {
             myCards.value = cardsResult.data.map(card => ({
-                cardKey: card.card_key,
+                cardKey: card.cardKey || card.card_key,
                 status: card.status,
-                createTime: card.create_time,
-                useTime: card.use_time,
-                expireTime: card.expire_time
+                createTime: card.createTime || card.create_time,
+                useTime: card.useTime || card.use_time,
+                expireTime: card.expireTime || card.expire_time
             }));
 
             const usedCardsList = cardsResult.data
@@ -1022,10 +1022,10 @@ const fetchOrders = async () => {
 
             usageRecords.value = usedCardsList
                 .map(card => ({
-                    cardKey: card.card_key,
-                    useTime: card.use_time,
-                    deviceId: card.device_id || 'Unknown',
-                    ipAddress: card.ip_address || '-',
+                    cardKey: card.cardKey || card.card_key,
+                    useTime: card.useTime || card.use_time,
+                    deviceId: card.machineCode || card.device_id || 'Unknown',
+                    ipAddress: card.ipAddress || card.ip_address || '-',
                     status: '成功',
                     remark: '正常使用'
                 }))
@@ -1042,13 +1042,14 @@ const fetchOrders = async () => {
             const cards = [];
             if (Array.isArray(ordersResult)) {
                 ordersResult.forEach(order => {
-                    if (order.card_keys) {
-                        const keys = order.card_keys.split(',');
+                    const cardKeysStr = order.cardKeys || order.card_keys;
+                    if (cardKeysStr) {
+                        const keys = cardKeysStr.split(',');
                         keys.forEach(key => {
                             cards.push({
                                 cardKey: key,
                                 status: 0,
-                                createTime: order.purchase_time,
+                                createTime: order.createTime || order.purchase_time,
                                 useTime: null,
                                 expireTime: null
                             });
@@ -1068,8 +1069,10 @@ const fetchPricing = async () => {
   try {
     const result = await pricingApi.getAllPricing();
     if (result.success && result.data) {
-      timeCardOptions.value = result.data.timeCards || [];
-      countCardOptions.value = result.data.countCards || [];
+      // 后端返回扁平列表，按 type 字段分组
+      const allPricing = Array.isArray(result.data) ? result.data : []
+      timeCardOptions.value = allPricing.filter(p => p.type === 'time')
+      countCardOptions.value = allPricing.filter(p => p.type === 'count')
     }
   } catch (e) {
     logger.error("Failed to fetch pricing", e);

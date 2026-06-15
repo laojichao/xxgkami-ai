@@ -153,17 +153,17 @@
       </div>
       
       <div v-else class="orders-grid">
-        <div class="order-card" v-for="order in orders" :key="order.order_id">
+        <div class="order-card" v-for="order in orders" :key="order.orderNo">
           <div class="order-header">
             <div class="order-id">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-              <span>{{ order.order_id }}</span>
+              <span>{{ order.orderNo }}</span>
             </div>
             <div class="order-status" :class="getStatusClass(order.status)">
               {{ getStatusText(order.status) }}
             </div>
           </div>
-          
+
           <div class="order-info">
             <div class="info-row">
               <div class="info-item">
@@ -172,60 +172,60 @@
               </div>
               <div class="info-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                <span>{{ order.purchase_time }}</span>
+                <span>{{ order.createTime }}</span>
               </div>
             </div>
-            
+
             <div class="info-row">
               <div class="info-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
-                <span class="card-type" :class="order.card_type">
-                  {{ order.card_type === 'time' ? '时间卡' : '次数卡' }}
+                <span class="card-type" :class="order.cardType">
+                  {{ order.cardType === 'time' ? '时间卡' : '次数卡' }}
                 </span>
-                <span class="card-spec">{{ order.card_spec }}</span>
+                <span class="card-spec">{{ order.cardSpec }}</span>
               </div>
               <div class="info-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
                 <span>数量: {{ order.quantity }}</span>
               </div>
             </div>
-            
+
             <div class="info-row">
               <div class="info-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                <span>单价: ¥{{ order.unit_price }}</span>
+                <span>单价: ¥{{ order.unitPrice }}</span>
               </div>
               <div class="info-item total-price">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12" y2="18"></line><line x1="8" y1="18" x2="8" y2="18"></line><line x1="16" y1="18" x2="16" y2="18"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="16" y1="14" x2="16" y2="14"></line><line x1="12" y1="10" x2="12" y2="10"></line><line x1="8" y1="10" x2="8" y2="10"></line><line x1="16" y1="10" x2="16" y2="10"></line></svg>
-                <span>总价: ¥{{ order.total_price }}</span>
+                <span>总价: ¥{{ order.totalPrice }}</span>
               </div>
             </div>
-            
+
             <div class="info-row">
               <div class="info-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
-                <span>{{ order.payment_method }}</span>
+                <span>{{ order.paymentMethod }}</span>
               </div>
             </div>
           </div>
-          
+
           <div class="order-actions">
             <button class="btn-secondary" @click="viewOrderDetail(order)">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               查看详情
             </button>
-            <button 
+            <button
               v-if="order.status === 'pending'"
-              class="btn-success" 
-              @click="updateOrderStatus(order.order_id, 'completed')"
+              class="btn-success"
+              @click="updateOrderStatus(order.orderNo, 'completed')"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               完成
             </button>
-            <button 
+            <button
               v-if="order.status === 'pending'"
-              class="btn-danger" 
-              @click="updateOrderStatus(order.order_id, 'failed')"
+              class="btn-danger"
+              @click="updateOrderStatus(order.orderNo, 'failed')"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               失败
@@ -301,7 +301,7 @@
             <div class="detail-grid">
               <div class="detail-item">
                 <label>订单号：</label>
-                <span>{{ selectedOrder.order_id }}</span>
+                <span>{{ selectedOrder.orderNo }}</span>
               </div>
               <div class="detail-item">
                 <label>用户名：</label>
@@ -309,7 +309,7 @@
               </div>
               <div class="detail-item">
                 <label>购买时间：</label>
-                <span>{{ selectedOrder.purchase_time }}</span>
+                <span>{{ selectedOrder.createTime }}</span>
               </div>
               <div class="detail-item">
                 <label>订单状态：</label>
@@ -325,13 +325,13 @@
             <div class="detail-grid">
               <div class="detail-item">
                 <label>卡密类型：</label>
-                <span class="card-type-badge" :class="selectedOrder.card_type">
-                  {{ selectedOrder.card_type === 'time' ? '时间卡' : '次数卡' }}
+                <span class="card-type-badge" :class="selectedOrder.cardType">
+                  {{ selectedOrder.cardType === 'time' ? '时间卡' : '次数卡' }}
                 </span>
               </div>
               <div class="detail-item">
                 <label>规格：</label>
-                <span>{{ selectedOrder.card_spec }}</span>
+                <span>{{ selectedOrder.cardSpec }}</span>
               </div>
               <div class="detail-item">
                 <label>数量：</label>
@@ -339,23 +339,23 @@
               </div>
               <div class="detail-item">
                 <label>单价：</label>
-                <span>¥{{ selectedOrder.unit_price }}</span>
+                <span>¥{{ selectedOrder.unitPrice }}</span>
               </div>
               <div class="detail-item">
                 <label>总价：</label>
-                <span class="total-price">¥{{ selectedOrder.total_price }}</span>
+                <span class="total-price">¥{{ selectedOrder.totalPrice }}</span>
               </div>
               <div class="detail-item">
                 <label>支付方式：</label>
-                <span>{{ selectedOrder.payment_method }}</span>
+                <span>{{ selectedOrder.paymentMethod }}</span>
               </div>
             </div>
           </div>
 
-          <div class="detail-section" v-if="selectedOrder.card_keys && selectedOrder.card_keys.length > 0">
+          <div class="detail-section" v-if="selectedOrder.cardKeys && selectedOrder.cardKeys.length > 0">
             <h4>卡密信息</h4>
             <div class="card-keys">
-              <div v-for="(key, index) in selectedOrder.card_keys" :key="index" class="card-key-item">
+              <div v-for="(key, index) in selectedOrder.cardKeys" :key="index" class="card-key-item">
                 <span class="key-index">{{ index + 1 }}.</span>
                 <code class="key-value">{{ key }}</code>
                 <button class="copy-btn" @click="copyCardKey(key)">
@@ -510,10 +510,10 @@ const getOrders = async () => {
     if (response.success) {
       // 后端返回 Page 对象，取 content 数组；兼容直接返回数组的情况
       const rawList = Array.isArray(response.data) ? response.data : (response.data.content || response.data)
-      // 处理数据，添加 card_keys 数组转换
+      // 处理数据，添加 cardKeys 数组转换
       orders.value = rawList.map(order => ({
         ...order,
-        card_keys: order.card_keys ? order.card_keys.split(',') : []
+        cardKeys: order.cardKeys ? order.cardKeys.split(',') : []
       }))
 
       // 从后端 Page 对象获取总条数
@@ -676,7 +676,7 @@ const confirmStatusUpdate = () => {
   }
   
   updateOrderStatus(
-    selectedOrder.value.order_id,
+    selectedOrder.value.orderNo,
     statusUpdateForm.status,
     statusUpdateForm.remark
   )

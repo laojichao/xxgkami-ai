@@ -10,7 +10,7 @@ import org.xxg.backend.backend.dto.ApiResponse;
  * Webhook测试接口
  * <p>用于开发和调试阶段测试Webhook回调的连通性。</p>
  * <p>基础路径：/webhook-test</p>
- * <p>权限：公开访问（仅用于测试，接收任意JSON请求体并记录日志）</p>
+ * <p>权限：仅管理员（SecurityConfig 中配置为 hasRole("ADMIN")）</p>
  */
 @RestController
 @RequestMapping("/webhook-test")

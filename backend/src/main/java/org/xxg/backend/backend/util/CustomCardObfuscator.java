@@ -25,7 +25,7 @@ public class CustomCardObfuscator {
             byte[] hash = md.digest(cardKey.getBytes("UTF-8"));
             return Base64.getEncoder().encodeToString(hash);
         } catch (Exception e) {
-            throw new RuntimeException("Hash error", e);
+            throw new RuntimeException("卡密哈希计算失败", e);
         }
     }
 

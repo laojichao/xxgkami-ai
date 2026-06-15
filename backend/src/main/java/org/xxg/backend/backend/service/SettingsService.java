@@ -1,5 +1,8 @@
 package org.xxg.backend.backend.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.Setting;
@@ -16,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class SettingsService {
 
+    private static final Logger log = LoggerFactory.getLogger(SettingsService.class);
     private final SettingRepository settingRepository;
 
     /** 本地缓存，避免频繁查询数据库 */
@@ -123,5 +127,22 @@ public class SettingsService {
         settingsCache.clear();
         settingsCache.putAll(newCache);
         cacheLoaded = true;
+    }
+
+    /**
+     * 定时刷新配置缓存，每 5 分钟执行一次。
+     * <p>确保多实例部署时配置变更能及时生效，
+     * 即使管理员未手动调用 /settings/refresh-cache 接口。</p>
+     */
+    @Scheduled(fixedRate = 300000) // 每5分钟执行一次
+    public void scheduledRefreshCache() {
+        try {
+            if (cacheLoaded) {
+                refreshCache();
+                log.debug("配置缓存定时刷新完成");
+            }
+        } catch (Exception e) {
+            log.warn("配置缓存定时刷新失败: {}", e.getMessage());
+        }
     }
 }

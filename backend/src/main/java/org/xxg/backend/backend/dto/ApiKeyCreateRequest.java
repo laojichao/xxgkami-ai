@@ -1,5 +1,6 @@
 package org.xxg.backend.backend.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -10,6 +11,7 @@ import lombok.Data;
 @Data
 public class ApiKeyCreateRequest {
     /** 密钥名称 */
+    @NotBlank(message = "密钥名称不能为空")
     @Size(max = 100, message = "名称长度不能超过100个字符")
     private String name;
 

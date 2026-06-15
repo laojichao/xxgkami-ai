@@ -32,8 +32,7 @@ public class ApiKeyController {
      */
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> create(@Valid @RequestBody ApiKeyCreateRequest request) {
-        String name = request.getName() != null ? request.getName() : "API Key";
-        ApiKey apiKey = apiKeyService.createApiKey(name, request.getDescription());
+        ApiKey apiKey = apiKeyService.createApiKey(request.getName(), request.getDescription());
         // 创建时返回完整密钥值（仅此一次，后续查询不再返回）
         Map<String, Object> result = new java.util.HashMap<>();
         result.put("id", apiKey.getId());

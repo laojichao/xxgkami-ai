@@ -133,12 +133,13 @@ const fetchPricing = async () => {
   try {
     const res = await pricingApi.getAllPricing()
     if (res.success && res.data) {
-      timeCards.value = res.data.timeCards || []
-      countCards.value = res.data.countCards || []
+      // 后端返回扁平列表，按 type 字段分组
+      const allPricing = Array.isArray(res.data) ? res.data : []
+      timeCards.value = allPricing.filter(p => p.type === 'time')
+      countCards.value = allPricing.filter(p => p.type === 'count')
     }
   } catch (error) {
     logger.error('Failed to fetch pricing:', error)
-    // alert('获取定价失败')
   }
 }
 

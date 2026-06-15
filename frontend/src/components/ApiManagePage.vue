@@ -165,12 +165,12 @@ const fetchApiKeys = async () => {
         if (cardsRes.success) {
           cardCodes = cardsRes.data.map(c => ({
             id: c.id,
-            code: c.card_key,
+            code: c.cardKey || c.card_key,
             status: c.status === 0 ? 'unused' : (c.status === 4 ? 'merged' : 'used'),
-            expiryDate: c.expire_time,
-            type: c.card_type === 'time' ? '时间卡' : '次数卡',
-            value: c.card_type === 'time' ? `${c.duration}天` : `${c.total_count}次`,
-            usedBy: c.device_id ? `Device ${c.device_id.substring(0, 6)}...` : null
+            expiryDate: c.expireTime || c.expire_time,
+            type: (c.cardType || c.card_type) === 'time' ? '时间卡' : '次数卡',
+            value: (c.cardType || c.card_type) === 'time' ? `${c.duration}天` : `${c.totalCount || c.total_count}次`,
+            usedBy: (c.machineCode || c.device_id) ? `Device ${(c.machineCode || c.device_id).substring(0, 6)}...` : null
           }));
         }
       } catch (e) {
@@ -187,11 +187,11 @@ const fetchApiKeys = async () => {
         lastUsed: null,
         requestCount: 0,
         cardCodes: cardCodes,
-        webhookConfig: (() => { try { return key.webhook_config ? JSON.parse(key.webhook_config) : null } catch(e) { logger.warn('Invalid webhook_config JSON:', e); return null } })(),
+        webhookConfig: (() => { try { return key.webhookConfig ? JSON.parse(key.webhookConfig) : null } catch(e) { logger.warn('Invalid webhookConfig JSON:', e); return null } })(),
         assignedUsers: key.assignedUsers || [],
-        enableCardEncryption: key.enable_card_encryption || false,
-        requireMachineCode: key.require_machine_code || false,
-        machineSpecOnceConfig: key.machine_spec_once_config || ''
+        enableCardEncryption: key.enableCardEncryption || false,
+        requireMachineCode: key.requireMachineCode || false,
+        machineSpecOnceConfig: key.machineSpecOnceConfig || ''
       }
     }))
   } catch (error) {
@@ -339,12 +339,12 @@ const fetchCardCodes = async (apiKeyId) => {
     const res = await cardApi.getApiKeyCards(apiKeyId)
     const cards = res.data.map(c => ({
       id: c.id,
-      code: c.card_key,
+      code: c.cardKey || c.card_key,
       status: c.status === 0 ? 'unused' : 'used',
-      expiryDate: c.expire_time,
-      type: c.card_type === 'time' ? '时间卡' : '次数卡',
-      value: c.card_type === 'time' ? `${c.duration}天` : `${c.total_count}次`,
-      usedBy: c.device_id ? `Device ${c.device_id.substring(0, 6)}...` : null
+      expiryDate: c.expireTime || c.expire_time,
+      type: (c.cardType || c.card_type) === 'time' ? '时间卡' : '次数卡',
+      value: (c.cardType || c.card_type) === 'time' ? `${c.duration}天` : `${c.totalCount || c.total_count}次`,
+      usedBy: (c.machineCode || c.device_id) ? `Device ${(c.machineCode || c.device_id).substring(0, 6)}...` : null
     }))
 
     if (currentApiKey.value.id === apiKeyId) {

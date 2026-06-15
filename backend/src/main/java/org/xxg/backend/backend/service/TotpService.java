@@ -38,7 +38,7 @@ public class TotpService {
             byte[] keyBytes = digest.digest(jwtSecret.getBytes(StandardCharsets.UTF_8));
             return new SecretKeySpec(keyBytes, "AES");
         } catch (Exception e) {
-            throw new RuntimeException("Failed to derive AES key", e);
+            throw new RuntimeException("AES 密钥派生失败", e);
         }
     }
 
@@ -64,7 +64,7 @@ public class TotpService {
             buffer.put(encrypted);
             return Base64.getEncoder().encodeToString(buffer.array());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to encrypt TOTP secret", e);
+            throw new RuntimeException("TOTP 密钥加密失败", e);
         }
     }
 
@@ -90,7 +90,7 @@ public class TotpService {
             byte[] decrypted = cipher.doFinal(ciphertext);
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to decrypt TOTP secret", e);
+            throw new RuntimeException("TOTP 密钥解密失败", e);
         }
     }
 

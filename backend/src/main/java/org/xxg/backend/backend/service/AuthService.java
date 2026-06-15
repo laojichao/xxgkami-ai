@@ -467,7 +467,7 @@ public class AuthService {
             byte[] hash = digest.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             return java.util.Base64.getEncoder().encodeToString(hash);
         } catch (Exception e) {
-            throw new RuntimeException("Token hashing failed", e);
+            throw new RuntimeException("Token 哈希计算失败", e);
         }
     }
 }

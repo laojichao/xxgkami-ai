@@ -36,7 +36,7 @@ public class OnlineUserService {
     }
 
     public int getOnlineCount() {
-        return (int) onlineUsers.mappingCount();
+        return onlineUsers.size();
     }
 
     public List<String> getOnlineUsers() {

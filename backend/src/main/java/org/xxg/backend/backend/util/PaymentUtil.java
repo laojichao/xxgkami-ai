@@ -44,7 +44,7 @@ public class PaymentUtil {
             }
             return sb.toString().toUpperCase();
         } catch (Exception e) {
-            throw new RuntimeException("HMAC-SHA256 error", e);
+            throw new RuntimeException("HMAC-SHA256 签名计算失败", e);
         }
     }
 
@@ -93,7 +93,7 @@ public class PaymentUtil {
             }
             return sb.toString();
         } catch (Exception e) {
-            throw new RuntimeException("MD5 error", e);
+            throw new RuntimeException("MD5 哈希计算失败", e);
         }
     }
 }
