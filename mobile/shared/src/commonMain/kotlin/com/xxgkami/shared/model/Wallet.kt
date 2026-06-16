@@ -16,10 +16,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Wallet(
     val id: Long? = null,
-    @SerialName("user_id") val userId: Int? = null,
+    val userId: Int? = null,
     val balance: String? = null,
-    @SerialName("total_recharge") val totalRecharge: String? = null,
-    @SerialName("total_consume") val totalConsume: String? = null
+    val totalRecharge: String? = null,
+    val totalConsume: String? = null
 )
 
 /**
@@ -37,7 +37,7 @@ data class WalletTransaction(
     val id: Long? = null,
     val type: String? = null,
     val amount: String? = null,
-    @SerialName("balance_after") val balanceAfter: String? = null,
+    val balanceAfter: String? = null,
     val description: String? = null,
-    @SerialName("create_time") val createTime: String? = null
+    val createTime: String? = null
 )

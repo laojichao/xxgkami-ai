@@ -89,7 +89,7 @@ class CardViewModel : ViewModel() {
     }
 
     /**
-     * 解绑卡密的机器码
+     * 解绑卡密的机器码（需提供机器码验证）
      * @param cardKey 卡密字符串
      * @param machineCode 要解绑的机器码
      */
@@ -98,6 +98,25 @@ class CardViewModel : ViewModel() {
             _error.value = null
             try {
                 cardApi.machineUnbind(cardKey, machineCode)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _error.value = ErrorMapper.mapError(e)
+            }
+        }
+    }
+
+    /**
+     * 自助解绑卡密的机器码（无需机器码验证）
+     * @param cardKey 卡密字符串
+     */
+    fun unbindMachineCode(cardKey: String) {
+        viewModelScope.launch {
+            _error.value = null
+            try {
+                cardApi.machineUnbind(cardKey)
+                // 解绑成功后刷新卡密列表
+                cardsUserId?.let { loadUserCards(it, forceRefresh = true) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -22,11 +22,14 @@ public class SettingsService {
     private static final Logger log = LoggerFactory.getLogger(SettingsService.class);
     private final SettingRepository settingRepository;
 
-    /** 本地缓存，避免频繁查询数据库 */
-    private final Map<String, String> settingsCache = new ConcurrentHashMap<>();
+    /** 本地缓存，避免频繁查询数据库（使用 volatile 引用替换实现线程安全的原子更新） */
+    private volatile Map<String, String> settingsCache = new ConcurrentHashMap<>();
 
     /** 缓存是否已加载标记 */
     private volatile boolean cacheLoaded = false;
+
+    /** null 哨兵值，用于区分"未缓存"和"缓存值为 null" */
+    private static final String NULL_SENTINEL = "__NULL__";
 
     public SettingsService(SettingRepository settingRepository) {
         this.settingRepository = settingRepository;
@@ -43,13 +46,16 @@ public class SettingsService {
     public String getValue(String name, String defaultValue) {
         // 先从缓存读取
         String cached = settingsCache.get(name);
-        if (cached != null) return cached;
+        if (cached != null) {
+            return NULL_SENTINEL.equals(cached) ? defaultValue : cached;
+        }
         // 缓存未命中，查数据库并回填缓存
         String value = settingRepository.findByName(name)
                 .map(Setting::getValue)
                 .orElse(defaultValue);
-        settingsCache.put(name, value);
-        return value;
+        // ConcurrentHashMap 不允许 null 值，使用哨兵值代替
+        settingsCache.put(name, value != null ? value : NULL_SENTINEL);
+        return value != null ? value : defaultValue;
     }
 
     /**
@@ -123,9 +129,12 @@ public class SettingsService {
      */
     public void refreshCache() {
         Map<String, String> newCache = new ConcurrentHashMap<>();
-        settingRepository.findAll().forEach(s -> newCache.put(s.getName(), s.getValue()));
-        settingsCache.clear();
-        settingsCache.putAll(newCache);
+        settingRepository.findAll().forEach(s -> {
+            String val = s.getValue();
+            newCache.put(s.getName(), val != null ? val : NULL_SENTINEL);
+        });
+        // 原子替换缓存引用，避免 clear+putAll 之间的缓存穿透窗口
+        this.settingsCache = newCache;
         cacheLoaded = true;
     }
 

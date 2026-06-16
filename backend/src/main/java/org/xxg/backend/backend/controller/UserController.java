@@ -78,9 +78,39 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("密码修改成功"));
     }
 
+    private static final java.util.Set<String> ALLOWED_AVATAR_EXTENSIONS = java.util.Set.of("jpg", "jpeg", "png", "gif", "webp");
+
     @PostMapping("/user/avatar")
-    public ResponseEntity<ApiResponse<Map<String, String>>> uploadAvatar(Authentication auth) {
-        return ResponseEntity.ok(ApiResponse.ok(Map.of("url", "/default-avatar.png")));
+    public ResponseEntity<ApiResponse<Map<String, String>>> uploadAvatar(Authentication auth,
+                                                                           @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("请选择要上传的文件"));
+        }
+        if (file.getSize() > 2 * 1024 * 1024) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("文件大小不能超过2MB"));
+        }
+        // 使用文件扩展名白名单校验（不依赖可伪造的 Content-Type）
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || !originalFilename.contains(".")) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("文件名无效"));
+        }
+        String ext = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
+        if (!ALLOWED_AVATAR_EXTENSIONS.contains(ext)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("仅支持 jpg/jpeg/png/gif/webp 格式"));
+        }
+        try {
+            User user = userService.getUserByUsername(auth.getName());
+            String fileName = "avatar_" + user.getId() + "_" + System.currentTimeMillis() + "." + ext;
+            java.nio.file.Path uploadDir = java.nio.file.Paths.get("uploads", "avatars");
+            java.nio.file.Files.createDirectories(uploadDir);
+            java.nio.file.Path filePath = uploadDir.resolve(fileName);
+            file.transferTo(filePath.toFile());
+            String url = "/uploads/avatars/" + fileName;
+            userService.updateAvatar(user.getId(), url);
+            return ResponseEntity.ok(ApiResponse.ok(Map.of("url", url)));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ApiResponse.error("头像上传失败"));
+        }
     }
 
     @GetMapping("/user/social")
@@ -106,7 +136,7 @@ public class UserController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword) {
         size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
-        return ResponseEntity.ok(ApiResponse.ok(userService.getAllUsers(PageRequest.of(page - 1, size))));
+        return ResponseEntity.ok(ApiResponse.ok(userService.searchUsers(keyword, PageRequest.of(page - 1, size))));
     }
 
     @PostMapping("/admin/users")

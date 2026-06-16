@@ -10,6 +10,14 @@ let isRefreshing = false;
 let failedQueue = [];
 let isRedirecting = false;
 
+/**
+ * 重置 isRedirecting 标志。
+ * 在用户重新登录成功后调用，恢复 API 请求能力。
+ */
+export function resetRedirecting() {
+  isRedirecting = false;
+}
+
 const processQueue = (error, token = null) => {
   failedQueue.forEach(prom => {
     if (error) {
@@ -300,20 +308,20 @@ export const authApi = {
   /**
    * 禁用TOTP
    */
-  async disableTotp(id) {
+  async disableTotp(code) {
     return await apiRequest('/auth/totp/disable', {
       method: 'POST',
-      body: JSON.stringify({ id })
+      body: JSON.stringify({ code })
     });
   },
 
   /**
    * 发送重置密码验证码
    */
-  async sendResetCode(username, email) {
+  async sendResetCode(email) {
     return await apiRequest('/auth/reset-code', {
       method: 'POST',
-      body: JSON.stringify({ username, email })
+      body: JSON.stringify({ email })
     });
   },
 
@@ -953,6 +961,80 @@ export const paymentApi = {
 };
 
 /**
+ * 钱包API服务
+ */
+export const walletApi = {
+  /**
+   * 获取当前用户钱包信息
+   */
+  async getWallet() {
+    return await apiRequest('/wallet');
+  },
+  /**
+   * 钱包充值
+   * @param {number} amount - 充值金额
+   */
+  async recharge(amount) {
+    return await apiRequest('/wallet/recharge', {
+      method: 'POST',
+      body: JSON.stringify({ amount })
+    });
+  },
+  /**
+   * 获取交易记录（分页）
+   * @param {number} page - 页码，默认0
+   * @param {number} size - 每页条数，默认20
+   */
+  async getTransactions(page = 0, size = 20) {
+    return await apiRequest(`/wallet/transactions?page=${page}&size=${size}`);
+  }
+};
+
+/**
+ * 安全API服务（IP黑名单、访问日志）
+ */
+export const securityApi = {
+  /**
+   * 获取IP黑名单列表
+   */
+  async getBlacklist() {
+    return await apiRequest('/security/blacklist');
+  },
+  /**
+   * 封禁指定IP
+   * @param {string} ip - 要封禁的IP地址
+   * @param {string} reason - 封禁原因
+   */
+  async blockIp(ip, reason) {
+    return await apiRequest('/security/blacklist', {
+      method: 'POST',
+      body: JSON.stringify({ ip, reason })
+    });
+  },
+  /**
+   * 解除IP封禁
+   * @param {string} ip - 要解封的IP地址
+   */
+  async unblockIp(ip) {
+    return await apiRequest(`/security/blacklist/${encodeURIComponent(ip)}`, {
+      method: 'DELETE'
+    });
+  },
+  /**
+   * 查询访问日志（分页+筛选）
+   * @param {object} params - { page, size, ip, username }
+   */
+  async getAccessLogs(params = {}) {
+    const query = new URLSearchParams();
+    if (params.page !== undefined) query.append('page', params.page);
+    if (params.size !== undefined) query.append('size', params.size);
+    if (params.ip) query.append('ip', params.ip);
+    if (params.username) query.append('username', params.username);
+    return await apiRequest(`/security/access-logs?${query.toString()}`);
+  }
+};
+
+/**
  * 公开API服务（无需认证）
  */
 export const publicApi = {
@@ -978,5 +1060,7 @@ export default {
   maintenanceApi,
   pricingApi,
   paymentApi,
-  publicApi
+  publicApi,
+  walletApi,
+  securityApi
 };

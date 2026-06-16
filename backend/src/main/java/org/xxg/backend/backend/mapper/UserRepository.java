@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.mapper;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,4 +28,8 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     long countByCreateTimeAfter(LocalDateTime time);
     /** 统计指定状态的用户数量 */
     long countByStatus(Boolean status);
+
+    /** 按用户名、邮箱、昵称模糊搜索用户 */
+    @Query("SELECT u FROM User u WHERE u.username LIKE %:keyword% OR u.email LIKE %:keyword% OR u.nickname LIKE %:keyword%")
+    Page<User> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
 }

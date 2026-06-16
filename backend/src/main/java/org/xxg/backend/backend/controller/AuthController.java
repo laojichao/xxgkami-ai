@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseCookie;
@@ -101,12 +102,15 @@ public class AuthController {
     @Operation(summary = "管理员登录", description = "管理员使用用户名/密码登录，支持 TOTP 二次验证。登录成功后 Token 写入 httpOnly Cookie。")
     @PostMapping("/admin/login")
     public ResponseEntity<ApiResponse<LoginResponse>> adminLogin(@Valid @RequestBody LoginRequest request,
+                                                                  HttpServletRequest servletRequest,
                                                                   HttpServletResponse response) {
         LoginResponse loginResponse = authService.adminLogin(request);
         setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
-        // Don't return tokens in response body — they are in httpOnly cookies
-        loginResponse.setToken(null);
-        loginResponse.setRefreshToken(null);
+        // 移动端客户端需要从响应体中获取 Token，Web端使用 httpOnly Cookie
+        if (!isMobileClient(servletRequest)) {
+            loginResponse.setToken(null);
+            loginResponse.setRefreshToken(null);
+        }
         return ResponseEntity.ok(ApiResponse.ok(loginResponse));
     }
 
@@ -121,12 +125,15 @@ public class AuthController {
     @Operation(summary = "用户登录", description = "普通用户使用用户名/密码登录。登录成功后 Token 写入 httpOnly Cookie。")
     @PostMapping("/user/login")
     public ResponseEntity<ApiResponse<LoginResponse>> userLogin(@Valid @RequestBody LoginRequest request,
+                                                                 HttpServletRequest servletRequest,
                                                                  HttpServletResponse response) {
         LoginResponse loginResponse = authService.userLogin(request);
         setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
-        // Don't return tokens in response body — they are in httpOnly cookies
-        loginResponse.setToken(null);
-        loginResponse.setRefreshToken(null);
+        // 移动端客户端需要从响应体中获取 Token，Web端使用 httpOnly Cookie
+        if (!isMobileClient(servletRequest)) {
+            loginResponse.setToken(null);
+            loginResponse.setRefreshToken(null);
+        }
         return ResponseEntity.ok(ApiResponse.ok(loginResponse));
     }
 
@@ -227,9 +234,11 @@ public class AuthController {
         refreshRequest.setRefreshToken(refreshTokenValue);
         LoginResponse loginResponse = authService.refreshToken(refreshRequest);
         setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
-        // Don't return tokens in response body — they are in httpOnly cookies
-        loginResponse.setToken(null);
-        loginResponse.setRefreshToken(null);
+        // 移动端客户端需要从响应体中获取 Token，Web端使用 httpOnly Cookie
+        if (!isMobileClient(servletRequest)) {
+            loginResponse.setToken(null);
+            loginResponse.setRefreshToken(null);
+        }
         return ResponseEntity.ok(ApiResponse.ok(loginResponse));
     }
 
@@ -365,6 +374,10 @@ public class AuthController {
         String username = auth.getName();
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
+        // 防止已启用 TOTP 的管理员被重置密钥
+        if (Boolean.TRUE.equals(admin.getTotpEnabled())) {
+            throw new BusinessException("TOTP 已启用，请先禁用后再重新配置");
+        }
         String secret = totpService.generateSecret();
         admin.setTotpSecret(totpService.encryptSecret(secret));
         adminRepository.save(admin);
@@ -506,6 +519,22 @@ public class AuthController {
         }
         setTokenCookies(response, accessToken, refreshTokenValue);
         return ResponseEntity.ok(ApiResponse.ok("Cookie 已设置"));
+    }
+
+    /**
+     * 判断请求是否来自移动端客户端。
+     * <p>通过 User-Agent 头部识别 Android/iOS/Ktor 等移动端特征。
+     * 移动端客户端需要在响应体中获取 Token（无法使用 httpOnly Cookie）。</p>
+     *
+     * @param request HTTP 请求
+     * @return true 如果是移动端客户端
+     */
+    private boolean isMobileClient(HttpServletRequest request) {
+        String userAgent = request.getHeader("User-Agent");
+        if (userAgent == null) return false;
+        String ua = userAgent.toLowerCase();
+        return ua.contains("android") || ua.contains("iphone") || ua.contains("ktor")
+                || ua.contains("okhttp") || ua.contains("xxgkami");
     }
 
     /**

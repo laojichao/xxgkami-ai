@@ -260,7 +260,7 @@ public class AuthService {
         verificationCodeRepository.save(vCode);
 
         try {
-            emailService.sendVerificationCode(email, code, type);
+            emailService.sendVerificationCodeSync(email, code, type);
         } catch (Exception e) {
             log.error("Failed to send email to {}: {}", email, e.getMessage());
             verificationCodeRepository.delete(vCode);

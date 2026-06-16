@@ -35,4 +35,8 @@ public class GenerateCardRequest {
     private Integer days;
     /** 关联的API密钥ID */
     private Integer apiKeyId;
+
+    /** 批量生成数量（前端传 count，后端循环生成） */
+    @Min(value = 1, message = "生成数量必须大于0")
+    private Integer count = 1;
 }

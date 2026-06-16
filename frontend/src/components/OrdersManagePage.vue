@@ -401,7 +401,6 @@
               <option value="">请选择新状态</option>
               <option value="completed">已完成</option>
               <option value="failed">已失败</option>
-              <option value="refunded">已退款</option>
             </select>
           </div>
           <div class="form-group">

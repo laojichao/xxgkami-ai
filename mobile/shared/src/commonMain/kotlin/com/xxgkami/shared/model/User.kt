@@ -27,7 +27,7 @@ data class User(
     val phone: String? = null,
     val status: Boolean? = null,
     val role: String? = null,
-    @SerialName("create_time") val createTime: String? = null
+    val createTime: String? = null
 )
 
 /** 登录请求 */

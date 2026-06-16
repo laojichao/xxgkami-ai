@@ -60,8 +60,12 @@ public class BackupService {
         // 错误输出重定向到单独文件，避免与备份数据混合导致 SQL 文件损坏
         pb.redirectError(new File(backupDir + "/" + filename + ".err"));
         Process process = pb.start();
-        int exitCode = process.waitFor();
-        if (exitCode != 0) throw new Exception("数据库备份失败，退出码: " + exitCode);
+        try {
+            int exitCode = process.waitFor();
+            if (exitCode != 0) throw new Exception("数据库备份失败，退出码: " + exitCode);
+        } finally {
+            process.destroy();
+        }
         // 设置备份文件权限为仅所有者可读写（0600），防止其他用户读取敏感数据
         try {
             Path backupPath2 = backupFile.toPath();

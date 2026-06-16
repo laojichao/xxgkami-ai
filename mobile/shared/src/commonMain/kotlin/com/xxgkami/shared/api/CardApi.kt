@@ -47,11 +47,20 @@ class CardApi(private val client: ApiClient) {
         return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.MapSerializer(kotlinx.serialization.builtins.serializer<String>(), kotlinx.serialization.builtins.serializer<String>())), response)
     }
 
-    /** 解绑卡密的机器码 */
+    /** 解绑卡密的机器码（需提供机器码验证） */
     suspend fun machineUnbind(cardKey: String, machineCode: String): ApiResponse<Unit> {
         val body = buildJsonObject {
             put("card_key", JsonPrimitive(cardKey))
             put("machine_code", JsonPrimitive(machineCode))
+        }.toString()
+        val response = client.post("/public/cards/machine-bind/unbind", body)
+        return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.serializer<Unit>()), response)
+    }
+
+    /** 解绑卡密的机器码（自助解绑，无需机器码验证） */
+    suspend fun machineUnbind(cardKey: String): ApiResponse<Unit> {
+        val body = buildJsonObject {
+            put("card_key", JsonPrimitive(cardKey))
         }.toString()
         val response = client.post("/public/cards/machine-bind/unbind", body)
         return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.serializer<Unit>()), response)

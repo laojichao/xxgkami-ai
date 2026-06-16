@@ -3,6 +3,7 @@ package org.xxg.backend.backend.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Arrays;
@@ -23,5 +24,15 @@ public class WebConfig implements WebMvcConfigurer {
         // CORS is handled by SecurityConfig.corsConfigurationSource()
         // Intentionally left empty to avoid duplicate/conflicting CORS rules.
         // The wildcard safety check is still performed at startup via SecurityConfig.
+    }
+
+    /**
+     * 配置静态资源映射，使上传的文件可通过 HTTP 访问。
+     * <p>uploads/ 目录映射到 /uploads/ 路径，用于头像等用户上传文件。</p>
+     */
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:uploads/");
     }
 }

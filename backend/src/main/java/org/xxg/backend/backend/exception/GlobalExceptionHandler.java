@@ -10,8 +10,11 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.xxg.backend.backend.dto.ApiResponse;
 
 import java.util.HashMap;
@@ -100,6 +103,36 @@ public class GlobalExceptionHandler {
         // 仅记录异常类型，不记录完整消息（可能包含 SQL 语句和表结构）
         log.warn("Data integrity violation: {}", e.getClass().getSimpleName());
         return ResponseEntity.status(409).body(ApiResponse.error("数据冲突，请检查输入后重试"));
+    }
+
+    /**
+     * 处理请求体 JSON 解析异常（如格式错误、类型不匹配）
+     * 返回 400 状态码
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("Request body parse error: {}", e.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error("请求参数格式错误"));
+    }
+
+    /**
+     * 处理缺少请求参数异常
+     * 返回 400 状态码
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParameter(MissingServletRequestParameterException e) {
+        log.debug("Missing parameter: {}", e.getParameterName());
+        return ResponseEntity.badRequest().body(ApiResponse.error("缺少必要参数"));
+    }
+
+    /**
+     * 处理参数类型不匹配异常（如将字符串传给 Integer 参数）
+     * 返回 400 状态码
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.debug("Type mismatch for parameter: {}", e.getName());
+        return ResponseEntity.badRequest().body(ApiResponse.error("参数类型错误"));
     }
 
     /**

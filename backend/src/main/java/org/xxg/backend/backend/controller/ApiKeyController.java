@@ -32,7 +32,9 @@ public class ApiKeyController {
      */
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> create(@Valid @RequestBody ApiKeyCreateRequest request) {
-        ApiKey apiKey = apiKeyService.createApiKey(request.getName(), request.getDescription());
+        ApiKey apiKey = apiKeyService.createApiKey(request.getName(), request.getDescription(),
+                request.getEnableCardEncryption(), request.getRequireMachineCode(),
+                request.getWebhookConfig(), request.getMachineSpecOnceConfig());
         // 创建时返回完整密钥值（仅此一次，后续查询不再返回）
         Map<String, Object> result = new java.util.HashMap<>();
         result.put("id", apiKey.getId());
@@ -80,7 +82,9 @@ public class ApiKeyController {
     public ResponseEntity<ApiResponse<ApiKey>> update(@PathVariable Integer id,
                                                        @Valid @RequestBody UpdateApiKeyRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(
-                apiKeyService.updateApiKey(id, request.getName(), request.getDescription(), request.getStatus())));
+                apiKeyService.updateApiKey(id, request.getName(), request.getDescription(), request.getStatus(),
+                        request.getEnableCardEncryption(), request.getRequireMachineCode(),
+                        request.getWebhookConfig(), request.getMachineSpecOnceConfig())));
     }
 
     /**

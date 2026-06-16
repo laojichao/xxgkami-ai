@@ -6,7 +6,7 @@ import LoginForm from './components/loginform.vue'
 import Dashboard from './components/Dashboard.vue'
 import UserPage from './components/UserPage.vue'
 import NotificationPage from './components/NotificationPage.vue'
-import { authApi, maintenanceApi, userProfileApi } from './services/api.js'
+import { authApi, maintenanceApi, userProfileApi, resetRedirecting } from './services/api.js'
 import { ElMessage } from 'element-plus'
 import logger from './utils/logger'
 
@@ -104,6 +104,7 @@ const showLogin = () => {
 
 // 处理登录成功
 const handleLoginSuccess = (data) => {
+  resetRedirecting()
   isLoggedIn.value = true
   userInfo.value = data.userInfo
   // 持久化登录状态到 localStorage

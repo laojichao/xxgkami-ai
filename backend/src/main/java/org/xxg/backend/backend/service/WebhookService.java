@@ -105,6 +105,7 @@ public class WebhookService {
             }
 
             httpClient.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofString())
+                    .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                     .thenAccept(response -> {
                         log.debug("[WEBHOOK] Response: {}", response.statusCode());
                     })

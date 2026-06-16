@@ -47,4 +47,9 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
     List<Card> findByMachineCode(String machineCode);
     /** 根据卡密ID和创建者ID查询卡密（权限校验用） */
     Optional<Card> findByIdAndCreatorId(Integer id, Integer creatorId);
+    /** 根据API Key ID查询卡密列表 */
+    List<Card> findByApiKeyId(Integer apiKeyId);
+    /** 统计指定时间范围内按天分组的卡密使用数量 */
+    @Query("SELECT FUNCTION('DATE', c.useTime) as day, COUNT(c) FROM Card c WHERE c.useTime >= :startTime AND c.status = 1 GROUP BY FUNCTION('DATE', c.useTime) ORDER BY day")
+    List<Object[]> countUsedCardsGroupByDay(@Param("startTime") LocalDateTime startTime);
 }

@@ -8,6 +8,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
+import org.xxg.backend.backend.dto.CardResponse;
 import org.xxg.backend.backend.dto.GenerateCardRequest;
 import org.xxg.backend.backend.dto.VerifyCardRequest;
 import org.xxg.backend.backend.entity.Card;
@@ -15,6 +16,7 @@ import org.xxg.backend.backend.service.CardService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 卡密管理接口控制器
@@ -67,39 +69,47 @@ public class CardController {
     }
 
     @PostMapping("/admin/create")
-    public ResponseEntity<ApiResponse<Card>> adminCreate(@Valid @RequestBody GenerateCardRequest request) throws Exception {
+    public ResponseEntity<ApiResponse<List<Card>>> adminCreate(@Valid @RequestBody GenerateCardRequest request) throws Exception {
         return generateCard(request);
     }
 
     @PostMapping("/generate")
-    public ResponseEntity<ApiResponse<Card>> generateCard(@Valid @RequestBody GenerateCardRequest request) throws Exception {
-        Card card = cardService.generateCard(request.getCardType(), request.getDuration(), request.getTotalCount(),
-                request.getCreatorType(), request.getCreatorId(), request.getCreatorName(),
-                request.getVerifyMethod(), request.getDays(), request.getApiKeyId());
-        return ResponseEntity.ok(ApiResponse.ok("卡密生成成功", card));
+    public ResponseEntity<ApiResponse<List<Card>>> generateCard(@Valid @RequestBody GenerateCardRequest request) throws Exception {
+        int count = request.getCount() != null ? request.getCount() : 1;
+        List<Card> cards = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            Card card = cardService.generateCard(request.getCardType(), request.getDuration(), request.getTotalCount(),
+                    request.getCreatorType(), request.getCreatorId(), request.getCreatorName(),
+                    request.getVerifyMethod(), request.getDays(), request.getApiKeyId());
+            cards.add(card);
+        }
+        return ResponseEntity.ok(ApiResponse.ok("卡密生成成功，共 " + count + " 张", cards));
     }
 
     @GetMapping("/admin/all")
-    public ResponseEntity<ApiResponse<Page<Card>>> adminAllCards(
+    public ResponseEntity<ApiResponse<Page<CardResponse>>> adminAllCards(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "100") int size) {
         size = Math.min(size, 500); // Cap result size to prevent OOM
-        return ResponseEntity.ok(ApiResponse.ok(
-                cardService.getCardsByCreator("admin", null, PageRequest.of(page, size))));
+        Page<Card> cardPage = cardService.getCardsByCreator("admin", null, PageRequest.of(page, size));
+        Page<CardResponse> responsePage = cardPage.map(CardResponse::fromEntity);
+        return ResponseEntity.ok(ApiResponse.ok(responsePage));
     }
 
     @GetMapping("/admin")
-    public ResponseEntity<ApiResponse<Page<Card>>> getAdminCards(
+    public ResponseEntity<ApiResponse<Page<CardResponse>>> getAdminCards(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
-        return ResponseEntity.ok(ApiResponse.ok(
-                cardService.getCardsByCreator("admin", null, PageRequest.of(page, size))));
+        Page<Card> cardPage = cardService.getCardsByCreator("admin", null, PageRequest.of(page, size));
+        Page<CardResponse> responsePage = cardPage.map(CardResponse::fromEntity);
+        return ResponseEntity.ok(ApiResponse.ok(responsePage));
     }
 
     @PutMapping("/admin/{id}")
     public ResponseEntity<ApiResponse<Card>> updateCard(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
-        return ResponseEntity.status(501).body(ApiResponse.error("卡密更新功能暂未实现"));
+        Card updated = cardService.updateCard(id, body);
+        return ResponseEntity.ok(ApiResponse.ok("卡密更新成功", updated));
     }
 
     @PatchMapping("/admin/{id}/status")
@@ -131,20 +141,24 @@ public class CardController {
     }
 
     @GetMapping("/apikey/{apiKeyId}")
-    public ResponseEntity<ApiResponse<List<Card>>> getApiKeyCards(@PathVariable Long apiKeyId) {
-        return ResponseEntity.ok(ApiResponse.ok(List.of()));
+    public ResponseEntity<ApiResponse<List<CardResponse>>> getApiKeyCards(@PathVariable Long apiKeyId) {
+        List<Card> cards = cardService.getCardsByApiKeyId(apiKeyId.intValue());
+        List<CardResponse> responses = cards.stream().map(CardResponse::fromEntity).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(responses));
     }
 
     @GetMapping("/trend")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getUsageTrend(@RequestParam(defaultValue = "7") int days) {
-        return ResponseEntity.ok(ApiResponse.ok(Map.of("trend", List.of())));
+        return ResponseEntity.ok(ApiResponse.ok(cardService.getUsageTrend(days)));
     }
 
     // --- Standard endpoints ---
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<ApiResponse<List<Card>>> getUserCards(@PathVariable Integer userId) {
-        return ResponseEntity.ok(ApiResponse.ok(cardService.getCardsByCreator("user", userId)));
+    public ResponseEntity<ApiResponse<List<CardResponse>>> getUserCards(@PathVariable Integer userId) {
+        List<Card> cards = cardService.getCardsByCreator("user", userId);
+        List<CardResponse> responses = cards.stream().map(CardResponse::fromEntity).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(responses));
     }
 
     @DeleteMapping("/{id}")

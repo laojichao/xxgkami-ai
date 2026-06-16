@@ -28,6 +28,8 @@ import java.util.*;
 @Service
 public class OrderService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OrderService.class);
+
     private final OrderRepository orderRepository;
     private final CardPricingRepository cardPricingRepository;
     private final CardService cardService;
@@ -256,13 +258,10 @@ public class OrderService {
     @Transactional
     public void cancelExpiredOrders() {
         LocalDateTime expireTime = LocalDateTime.now().minusMinutes(30);
-        List<Order> expiredOrders = orderRepository.findByStatusAndCreateTimeBefore("pending", expireTime);
-        for (Order order : expiredOrders) {
-            if ("pending".equals(order.getStatus())) {
-                order.setStatus("cancelled");
-                order.setUpdateTime(LocalDateTime.now());
-                orderRepository.save(order);
-            }
+        int cancelled = orderRepository.batchCancelExpiredOrders(
+                "cancelled", LocalDateTime.now(), "pending", expireTime);
+        if (cancelled > 0) {
+            log.info("已自动取消 {} 个超时订单", cancelled);
         }
     }
 

@@ -377,15 +377,16 @@ public class CardService {
 
     /**
      * 自助解绑卡密的机器码（公开接口调用）。
-     * <p>需要卡密允许自助解绑，且必须提供当前绑定的机器码进行验证。
+     * <p>需要卡密允许自助解绑。如提供 machine_code 则验证匹配后解绑；
+     * 如未提供 machine_code，则在 allowSelfUnbind 为 true 时直接解绑。
      * 使用悲观锁保证读-改-写的原子性。</p>
      *
      * @param cardKey     卡密明文
-     * @param machineCode 当前绑定的机器码
+     * @param machineCode 当前绑定的机器码（可选）
      */
     @Transactional
     public void selfUnbindMachineCode(String cardKey, String machineCode) {
-        Card card = cardRepository.findByCardKey(cardKey).orElse(null);
+        Card card = cardRepository.findByCardKeyForUpdate(cardKey).orElse(null);
         // 统一错误消息，防止通过不同响应枚举有效卡密
         if (card == null || card.getStatus() == 2) {
             throw new BusinessException("卡密无效或已停用");
@@ -393,9 +394,14 @@ public class CardService {
         if (!card.getAllowSelfUnbind()) {
             throw new BusinessException("此卡密不支持自助解绑");
         }
-        // Verify machine code matches before unbinding
-        if (card.getMachineCode() == null || !card.getMachineCode().equals(machineCode)) {
-            throw new BusinessException("卡密无效或机器码不匹配");
+        if (card.getMachineCode() == null || card.getMachineCode().isEmpty()) {
+            throw new BusinessException("该卡密未绑定机器码，无需解绑");
+        }
+        // 如果提供了机器码，验证是否匹配
+        if (machineCode != null && !machineCode.isBlank()) {
+            if (!card.getMachineCode().equals(machineCode)) {
+                throw new BusinessException("机器码不匹配");
+            }
         }
         card.setMachineCode(null);
         cardRepository.save(card);
@@ -559,5 +565,96 @@ public class CardService {
         cardStatusRepository.findByCardHash(card.getEncryptedKey())
                 .ifPresent(s -> cardStatusRepository.delete(s));
         cardRepository.delete(card);
+    }
+
+    /**
+     * 更新卡密信息。
+     * <p>允许更新卡密的类型、时长、总次数、剩余次数、验证方式、是否允许自助解绑等字段。
+     * 不允许更新 cardKey、encryptedKey、status 等核心安全字段。</p>
+     *
+     * @param cardId 卡密 ID
+     * @param updates 需要更新的字段 Map
+     * @return 更新后的卡密实体
+     */
+    @Transactional
+    public Card updateCard(Integer cardId, Map<String, Object> updates) {
+        Card card = cardRepository.findById(cardId)
+                .orElseThrow(() -> new BusinessException("卡密不存在"));
+        if (updates.containsKey("cardType")) {
+            try {
+                card.setCardType(Card.CardType.valueOf(updates.get("cardType").toString()));
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("无效的卡密类型: " + updates.get("cardType"));
+            }
+        }
+        if (updates.containsKey("duration")) {
+            try {
+                card.setDuration(((Number) updates.get("duration")).intValue());
+            } catch (ClassCastException | NullPointerException e) {
+                throw new BusinessException("duration 字段格式无效");
+            }
+        }
+        if (updates.containsKey("totalCount")) {
+            try {
+                card.setTotalCount(((Number) updates.get("totalCount")).intValue());
+            } catch (ClassCastException | NullPointerException e) {
+                throw new BusinessException("totalCount 字段格式无效");
+            }
+        }
+        if (updates.containsKey("remainingCount")) {
+            try {
+                card.setRemainingCount(((Number) updates.get("remainingCount")).intValue());
+            } catch (ClassCastException | NullPointerException e) {
+                throw new BusinessException("remainingCount 字段格式无效");
+            }
+        }
+        if (updates.containsKey("verifyMethod")) {
+            try {
+                card.setVerifyMethod(Card.VerifyMethod.valueOf(updates.get("verifyMethod").toString()));
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("无效的验证方式: " + updates.get("verifyMethod"));
+            }
+        }
+        if (updates.containsKey("allowSelfUnbind")) {
+            card.setAllowSelfUnbind(Boolean.parseBoolean(updates.get("allowSelfUnbind").toString()));
+        }
+        if (updates.containsKey("stackTimeIfSameMachine")) {
+            card.setStackTimeIfSameMachine(Boolean.parseBoolean(updates.get("stackTimeIfSameMachine").toString()));
+        }
+        if (updates.containsKey("allowReverify")) {
+            card.setAllowReverify(Boolean.parseBoolean(updates.get("allowReverify").toString()));
+        }
+        return cardRepository.save(card);
+    }
+
+    /**
+     * 根据 API Key ID 获取关联的卡密列表
+     * @param apiKeyId API Key ID
+     * @return 卡密列表
+     */
+    @Transactional(readOnly = true)
+    public List<Card> getCardsByApiKeyId(Integer apiKeyId) {
+        return cardRepository.findByApiKeyId(apiKeyId);
+    }
+
+    /**
+     * 获取卡密使用趋势数据
+     * @param days 统计天数
+     * @return 包含每日使用数量的趋势数据
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getUsageTrend(int days) {
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> trend = new ArrayList<>();
+        LocalDateTime startTime = LocalDateTime.now().minusDays(days);
+        List<Object[]> rows = cardRepository.countUsedCardsGroupByDay(startTime);
+        for (Object[] row : rows) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("date", row[0] != null ? row[0].toString() : "");
+            item.put("count", row[1] != null ? ((Number) row[1]).longValue() : 0);
+            trend.add(item);
+        }
+        result.put("trend", trend);
+        return result;
     }
 }

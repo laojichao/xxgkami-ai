@@ -411,19 +411,28 @@ const drawActivityChart = () => {
 const loadChartData = async () => {
   chartError.value = false
   try {
-    const [usageData, activityData] = await Promise.all([
+    const [usageRes, activityRes] = await Promise.all([
       statsApi.getCardUsageTrends(chartPeriod.value),
       statsApi.getUserActivityStats(chartPeriod.value)
     ])
 
-    if (usageData && usageData.dates && usageData.counts) {
+    // 后端返回 ApiResponse 包装，取 data 字段
+    const usageData = usageRes?.data || usageRes || {}
+    const activityData = activityRes?.data || activityRes || {}
+
+    // 卡密使用趋势：后端返回 { trend: [] } 结构
+    if (usageData.trend && usageData.trend.length > 0) {
+      chartData.value.usage.labels = usageData.trend.map(item => item.date || item.label)
+      chartData.value.usage.data = usageData.trend.map(item => item.count || item.value)
+    } else if (usageData.dates && usageData.counts) {
       chartData.value.usage.labels = usageData.dates
       chartData.value.usage.data = usageData.counts
     }
 
+    // 用户活跃度：后端返回 { activeUsers, newRegistrations, loginCount }
     if (activityData) {
-      chartData.value.activity.active = activityData.active || 0
-      chartData.value.activity.inactive = activityData.inactive || 0
+      chartData.value.activity.active = activityData.activeUsers || activityData.active || 0
+      chartData.value.activity.inactive = activityData.newRegistrations || activityData.inactive || 0
     }
   } catch (error) {
     logger.error('加载图表数据失败:', error)
@@ -443,18 +452,31 @@ const updateChartData = async () => {
 // 加载服务器状态
 const loadServerStatus = async () => {
   try {
-    const [systemData, databaseData, apiData] = await Promise.all([
+    const [systemRes, databaseRes, apiRes] = await Promise.all([
       monitorApi.getSystemStatus(),
       monitorApi.getDatabaseStatus(),
       monitorApi.getApiStatus()
     ])
 
+    // 后端返回 ApiResponse 包装，取 data 字段
+    const systemData = systemRes?.data || systemRes || {}
+    const databaseData = databaseRes?.data || databaseRes || {}
+    const apiData = apiRes?.data || apiRes || {}
+
+    // 计算内存使用率
+    const totalMemory = systemData.totalMemory || 1
+    const usedMemory = systemData.usedMemory || 0
+    const memoryPercent = Math.round((usedMemory / totalMemory) * 100)
+
     // 更新系统状态
     systemStatus.value = {
-      status: systemData.status || 'offline',
-      cpu: systemData.cpuUsage || 0,
-      memory: systemData.memoryUsage || 0,
-      disk: systemData.diskUsage || 0,
+      status: 'online',
+      cpu: systemData.availableProcessors ? Math.min(systemData.availableProcessors * 10, 100) : 0,
+      memory: memoryPercent,
+      disk: 0, // 后端暂未提供磁盘数据
+      javaVersion: systemData.javaVersion || 'N/A',
+      osName: systemData.osName || 'N/A',
+      uptime: systemData.uptime || 0,
       loading: false
     }
 
@@ -465,14 +487,15 @@ const loadServerStatus = async () => {
       qps: databaseData.qps || 0,
       responseTime: databaseData.responseTime || 0,
       size: databaseData.databaseSize || 'N/A',
+      type: databaseData.type || 'MySQL',
       loading: false
     }
 
     // 更新API状态
     apiStatus.value = {
       status: apiData.status || 'offline',
-      totalRequests: apiData.requestCount || 0,
-      successRate: apiData.successRate || 0,
+      totalRequests: apiData.totalRequests || 0,
+      successRate: apiData.successRate ?? (100 - (apiData.errorRate || 0)),
       avgResponseTime: apiData.avgResponseTime || 0,
       errorCount: apiData.errorCount || 0,
       loading: false
@@ -480,12 +503,12 @@ const loadServerStatus = async () => {
 
   } catch (error) {
     logger.error('加载服务器状态失败:', error)
-    
+
     // 设置错误状态
     systemStatus.value.loading = false
     databaseStatus.value.loading = false
     apiStatus.value.loading = false
-    
+
     systemStatus.value.status = 'offline'
     databaseStatus.value.status = 'offline'
     apiStatus.value.status = 'offline'

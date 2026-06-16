@@ -77,14 +77,26 @@ public class PublicController {
             return ResponseEntity.ok(ApiResponse.error("卡密无效或已停用"));
         }
         result.put("bound", card.getMachineCode() != null && !card.getMachineCode().isEmpty());
+        result.put("allowSelfUnbind", Boolean.TRUE.equals(card.getAllowSelfUnbind()));
+        result.put("cardType", card.getCardType() != null ? card.getCardType().name() : null);
+        // 机器码脱敏：仅显示前4位和后4位
+        String mc = card.getMachineCode();
+        if (mc != null && mc.length() > 8) {
+            result.put("machineCode", mc.substring(0, 4) + "****" + mc.substring(mc.length() - 4));
+        } else if (mc != null) {
+            result.put("machineCode", "****");
+        } else {
+            result.put("machineCode", null);
+        }
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     /**
      * 自助解绑卡密的机器码。
-     * <p>需要卡密允许自助解绑，且必须提供当前绑定的机器码进行验证。</p>
+     * <p>需要卡密允许自助解绑。如提供 machine_code 则验证匹配后解绑；
+     * 如未提供 machine_code，则在 allowSelfUnbind 为 true 时直接解绑。</p>
      *
-     * @param body 请求体，包含 card_key 和 machine_code 字段
+     * @param body 请求体，包含 card_key 字段，machine_code 为可选
      * @return 操作结果
      */
     @PostMapping("/cards/machine-bind/unbind")
@@ -97,10 +109,7 @@ public class PublicController {
             return ResponseEntity.ok(ApiResponse.error("卡密格式不正确"));
         }
         String machineCode = body.get("machine_code");
-        if (machineCode == null || machineCode.isBlank()) {
-            return ResponseEntity.ok(ApiResponse.error("请提供当前机器码"));
-        }
-        if (machineCode.length() > 255) {
+        if (machineCode != null && machineCode.length() > 255) {
             return ResponseEntity.ok(ApiResponse.error("机器码格式不正确"));
         }
         cardService.selfUnbindMachineCode(cardKey, machineCode);

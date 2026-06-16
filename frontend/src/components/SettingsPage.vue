@@ -436,12 +436,21 @@ const enableTotp = async () => {
 }
 
 const disableTotp = async () => {
+    let code = '';
     try {
-        await ElMessageBox.confirm('确定要禁用 Authenticator 吗？这将降低您的账户安全性。', '确认操作', { type: 'warning' })
+        const { value } = await ElMessageBox.prompt('请输入当前 Authenticator 验证码以禁用两步验证：', '禁用 Authenticator', {
+            confirmButtonText: '确认禁用',
+            cancelButtonText: '取消',
+            inputPattern: /^\d{6}$/,
+            inputErrorMessage: '验证码必须为6位数字',
+            inputPlaceholder: '6位验证码',
+            type: 'warning'
+        });
+        code = value;
     } catch { return }
     totpLoading.value = true;
     try {
-        const res = await authApi.disableTotp(props.userInfo.id);
+        const res = await authApi.disableTotp(code);
         if (res.success) {
             showToast('Authenticator 已禁用', 'success');
             // Notify parent to update totp state

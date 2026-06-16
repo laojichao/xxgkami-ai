@@ -18,4 +18,16 @@ public class ApiKeyCreateRequest {
     /** 密钥描述 */
     @Size(max = 500, message = "描述长度不能超过500个字符")
     private String description;
+
+    /** 是否启用卡密加密传输 */
+    private Boolean enableCardEncryption;
+
+    /** 是否要求绑定机器码 */
+    private Boolean requireMachineCode;
+
+    /** Webhook回调配置(JSON格式) */
+    private String webhookConfig;
+
+    /** 机器码一次性绑定配置(JSON格式) */
+    private String machineSpecOnceConfig;
 }

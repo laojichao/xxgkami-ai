@@ -3,6 +3,8 @@ package com.xxgkami.android.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -75,7 +77,7 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
                     if (cards.isEmpty()) {
                         CardEmptyState()
                     } else {
-                        CardList(cards = cards)
+                        CardList(cards = cards, viewModel = viewModel)
                     }
                 }
             }
@@ -86,27 +88,65 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
 /**
  * 卡密列表内容
  * @param cards 卡密数据列表
+ * @param viewModel CardViewModel，用于解绑操作
  */
 @Composable
-private fun CardList(cards: List<Card>) {
+private fun CardList(cards: List<Card>, viewModel: CardViewModel) {
+    var unbindTarget by remember { mutableStateOf<Card?>(null) }
+
     LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         items(cards, key = { card -> card.id ?: card.hashCode() }) { card ->
-            CardItemCard(card = card)
+            CardItemCard(
+                card = card,
+                onUnbind = { unbindTarget = card }
+            )
         }
+    }
+
+    // 解绑确认对话框
+    unbindTarget?.let { card ->
+        AlertDialog(
+            onDismissRequest = { unbindTarget = null },
+            title = { Text("解绑设备") },
+            text = { Text("确定要解绑卡密 ${card.cardKey ?: ""} 的设备绑定吗？解绑后可在新设备上使用。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    card.cardKey?.let { key -> viewModel.unbindMachineCode(key) }
+                    unbindTarget = null
+                }) { Text("确认解绑") }
+            },
+            dismissButton = {
+                TextButton(onClick = { unbindTarget = null }) { Text("取消") }
+            }
+        )
     }
 }
 
 /**
  * 单个卡密卡片
- * 展示卡密号、类型和状态
+ * 展示卡密号、类型和状态，支持自助解绑操作
  * @param card 卡密数据对象
+ * @param onUnbind 解绑按钮点击回调
  */
 @Composable
-private fun CardItemCard(card: Card) {
+private fun CardItemCard(card: Card, onUnbind: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("卡密: ${card.cardKey ?: ""}", style = MaterialTheme.typography.bodyMedium)
-            Text("类型: ${card.cardType ?: "未知"} | 状态: ${statusText(card.status)}", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("卡密: ${card.cardKey ?: ""}", style = MaterialTheme.typography.bodyMedium)
+                    Text("类型: ${card.cardType ?: "未知"} | 状态: ${statusText(card.status)}", style = MaterialTheme.typography.bodySmall)
+                    if (card.machineCode != null) {
+                        Text("已绑定设备", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                // 仅在卡密已绑定机器码时显示解绑按钮
+                if (card.machineCode != null) {
+                    IconButton(onClick = onUnbind) {
+                        Icon(Icons.Default.LinkOff, contentDescription = "解绑设备", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
         }
     }
 }

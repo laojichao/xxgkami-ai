@@ -33,6 +33,22 @@ public class ApiKeyService {
 
     @Transactional
     public ApiKey createApiKey(String name, String description) {
+        return createApiKey(name, description, null, null, null, null);
+    }
+
+    /**
+     * 创建新的API密钥（支持完整参数）
+     * @param name 密钥名称
+     * @param description 密钥描述
+     * @param enableCardEncryption 是否启用卡密加密
+     * @param requireMachineCode 是否要求机器码
+     * @param webhookConfig Webhook配置
+     * @param machineSpecOnceConfig 机器码一次性配置
+     * @return 创建成功的API密钥实体
+     */
+    @Transactional
+    public ApiKey createApiKey(String name, String description, Boolean enableCardEncryption,
+                               Boolean requireMachineCode, String webhookConfig, String machineSpecOnceConfig) {
         ApiKey apiKey = new ApiKey();
         apiKey.setKeyName(name);
         apiKey.setName(name);
@@ -42,6 +58,10 @@ public class ApiKeyService {
         apiKey.setDescription(description);
         apiKey.setStatus(true);
         apiKey.setCreateTime(LocalDateTime.now());
+        if (enableCardEncryption != null) apiKey.setEnableCardEncryption(enableCardEncryption);
+        if (requireMachineCode != null) apiKey.setRequireMachineCode(requireMachineCode);
+        if (webhookConfig != null) apiKey.setWebhookConfig(webhookConfig);
+        if (machineSpecOnceConfig != null) apiKey.setMachineSpecOnceConfig(machineSpecOnceConfig);
         return apiKeyRepository.save(apiKey);
     }
 
@@ -99,6 +119,25 @@ public class ApiKeyService {
      */
     @Transactional
     public ApiKey updateApiKey(Integer id, String name, String description, Boolean status) {
+        return updateApiKey(id, name, description, status, null, null, null, null);
+    }
+
+    /**
+     * 更新API密钥信息（支持完整参数）
+     * @param id 密钥ID
+     * @param name 新名称
+     * @param description 新描述
+     * @param status 新状态
+     * @param enableCardEncryption 是否启用卡密加密
+     * @param requireMachineCode 是否要求机器码
+     * @param webhookConfig Webhook配置
+     * @param machineSpecOnceConfig 机器码一次性配置
+     * @return 更新后的API密钥实体
+     */
+    @Transactional
+    public ApiKey updateApiKey(Integer id, String name, String description, Boolean status,
+                                Boolean enableCardEncryption, Boolean requireMachineCode,
+                                String webhookConfig, String machineSpecOnceConfig) {
         ApiKey apiKey = getApiKeyById(id);
         if (name != null) {
             apiKey.setKeyName(name);
@@ -106,6 +145,10 @@ public class ApiKeyService {
         }
         if (description != null) apiKey.setDescription(description);
         if (status != null) apiKey.setStatus(status);
+        if (enableCardEncryption != null) apiKey.setEnableCardEncryption(enableCardEncryption);
+        if (requireMachineCode != null) apiKey.setRequireMachineCode(requireMachineCode);
+        if (webhookConfig != null) apiKey.setWebhookConfig(webhookConfig);
+        if (machineSpecOnceConfig != null) apiKey.setMachineSpecOnceConfig(machineSpecOnceConfig);
         apiKey.setUpdateTime(LocalDateTime.now());
         return apiKeyRepository.save(apiKey);
     }
@@ -136,6 +179,6 @@ public class ApiKeyService {
     @Transactional(readOnly = true)
     public boolean validateApiKey(String keyValue) {
         ApiKey apiKey = apiKeyRepository.findByKeyValue(keyValue).orElse(null);
-        return apiKey != null && apiKey.getStatus();
+        return apiKey != null && Boolean.TRUE.equals(apiKey.getStatus());
     }
 }

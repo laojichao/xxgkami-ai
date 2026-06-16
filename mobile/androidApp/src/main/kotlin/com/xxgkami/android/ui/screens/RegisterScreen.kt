@@ -40,7 +40,7 @@ fun RegisterScreen(navController: NavController, viewModel: AuthViewModel = view
     // 输入校验：邮箱格式验证（RFC 5322 简化版）
     val emailRegex = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
     val isEmailValid = email.matches(emailRegex)
-    val isFormValid = username.isNotBlank() && isEmailValid && code.isNotBlank() && password.length >= 6
+    val isFormValid = username.isNotBlank() && isEmailValid && code.isNotBlank() && password.length >= 8
 
     Scaffold(topBar = { TopAppBar(title = { Text("注册") }) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
@@ -86,11 +86,11 @@ fun RegisterScreen(navController: NavController, viewModel: AuthViewModel = view
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = password, onValueChange = { password = it },
-                label = { Text("密码（至少6位）") },
+                label = { Text("密码（至少8位）") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isLoading,
-                isError = password.isNotEmpty() && password.length < 6
+                isError = password.isNotEmpty() && password.length < 8
             )
             Spacer(Modifier.height(24.dp))
             Button(

@@ -728,7 +728,7 @@ const sendForgotCode = async () => {
   }
   
   try {
-    const response = await authApi.sendResetCode(forgotPasswordForm.username, forgotPasswordForm.email)
+    const response = await authApi.sendResetCode(forgotPasswordForm.email)
     if (response.success) {
       forgotPasswordSuccess.value = '验证码已发送，请查收邮件'
       forgotPasswordError.value = ''
@@ -783,9 +783,9 @@ const handleResetPassword = async () => {
   
   try {
     const response = await authApi.resetPassword({
-      username: forgotPasswordForm.username,
+      email: forgotPasswordForm.email,
       code: forgotPasswordForm.code,
-      password: forgotPasswordForm.password
+      newPassword: forgotPasswordForm.password
     })
     
     if (response.success) {

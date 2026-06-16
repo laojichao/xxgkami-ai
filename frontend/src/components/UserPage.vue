@@ -701,7 +701,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi } from '../services/api.js'
+import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi, paymentApi } from '../services/api.js'
 import UserSettingsPage from './UserSettingsPage.vue'
 import logger from '../utils/logger'
 
@@ -1128,12 +1128,14 @@ onBeforeUnmount(() => {
   }
 })
 
-onMounted(() => {
-    fetchOrders();
-    fetchUserProfile();
-    fetchPricing();
-    fetchSocialBindings();
-    fetchOAuthSettings();
+onMounted(async () => {
+    await Promise.allSettled([
+        fetchOrders(),
+        fetchUserProfile(),
+        fetchPricing(),
+        fetchSocialBindings(),
+        fetchOAuthSettings()
+    ]);
 
     let paymentStatus = null;
 
@@ -1324,27 +1326,34 @@ const purchaseCard = async (cardType) => {
     const result = await orderApi.createOrder(createOrderData)
 
     if (result.success) {
-      if (result.paymentUrl) {
-        const url = result.paymentUrl;
-        const isRelativeUrl = url.startsWith('/') && !url.startsWith('//');
-        let isTrustedUrl = isRelativeUrl;
-        if (!isRelativeUrl) {
-          try {
-            const parsed = new URL(url);
-            isTrustedUrl = parsed.origin === window.location.origin;
-          } catch (e) {
-            isTrustedUrl = false;
+      // 订单创建成功后，调用支付接口获取支付链接
+      try {
+        const paymentResult = await paymentApi.createPayment({
+          orderNo: result.data.order_no || result.data.orderNo
+        });
+        if (paymentResult.success && paymentResult.paymentUrl) {
+          const url = paymentResult.paymentUrl;
+          const isRelativeUrl = url.startsWith('/') && !url.startsWith('//');
+          let isTrustedUrl = isRelativeUrl;
+          if (!isRelativeUrl) {
+            try {
+              const parsed = new URL(url);
+              isTrustedUrl = parsed.origin === window.location.origin;
+            } catch (e) {
+              isTrustedUrl = false;
+            }
           }
-        }
-        if (!isTrustedUrl) {
-          ElMessage.error('支付链接异常，请联系管理员');
+          if (!isTrustedUrl) {
+            ElMessage.error('支付链接异常，请联系管理员');
+            return;
+          }
+          ElMessage.success('订单创建成功，正在跳转支付...');
+          pollOrderStatus(result.data.order_no || result.data.orderNo);
+          window.location.href = url;
           return;
         }
-        ElMessage.success('订单创建成功，正在跳转支付...');
-        pollOrderStatus(result.data.order_id);
-
-        window.location.href = url;
-        return;
+      } catch (paymentError) {
+        logger.warn('调用支付接口失败，可能是余额支付或免支付订单:', paymentError);
       }
 
       ElMessage.success(result.message)

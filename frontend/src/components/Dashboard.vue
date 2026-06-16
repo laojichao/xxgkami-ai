@@ -225,6 +225,10 @@ const formatDate = (timestamp) => {
 
 const handleCreateKeys = async (keyData) => {
   const totalCount = keyData.count || 1
+  if (totalCount > 1000) {
+    ElMessage.error('单次创建数量不能超过 1000 条')
+    return
+  }
 
   // 少量（≤3）直接批量创建，不显示进度条
   if (totalCount <= 3) {
@@ -333,11 +337,13 @@ const handleToggleKeyStatus = async ({ id, status }) => {
 const loadDashboardStats = async () => {
   try {
     const result = await statsApi.getDashboardStats()
-    if (result && result.success) {
-      stats.totalKeys = result.totalKeys ?? result.data?.totalKeys ?? 0
-      stats.usedKeys = result.usedKeys ?? result.data?.usedKeys ?? 0
-      stats.activeKeys = result.activeKeys ?? result.data?.activeKeys ?? 0
-      stats.totalUsers = result.totalUsers ?? result.data?.totalUsers ?? 0
+    if (result && result.success && result.data) {
+      const cards = result.data.cards || {}
+      const users = result.data.users || {}
+      stats.totalKeys = cards.totalCards ?? 0
+      stats.usedKeys = cards.usedCards ?? 0
+      stats.activeKeys = cards.unusedCards ?? 0
+      stats.totalUsers = users.totalUsers ?? 0
     }
   } catch (error) {
     logger.error('加载统计数据失败:', error)

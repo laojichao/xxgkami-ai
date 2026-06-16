@@ -72,7 +72,11 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
                     },
                     modifier = Modifier.fillMaxSize().padding(padding)
                 ) {
-                    WalletContent(wallet = wallet, transactions = transactions)
+                    WalletContent(
+                        wallet = wallet,
+                        transactions = transactions,
+                        onRecharge = { amount -> walletViewModel.recharge(amount) }
+                    )
                 }
             }
         }
@@ -84,12 +88,13 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
  * 包含余额卡片和交易记录列表
  * @param wallet 钱包信息，可能为null
  * @param transactions 交易记录列表
+ * @param onRecharge 充值回调
  */
 @Composable
-private fun WalletContent(wallet: Wallet?, transactions: List<WalletTransaction>) {
+private fun WalletContent(wallet: Wallet?, transactions: List<WalletTransaction>, onRecharge: (Double) -> Unit = {}) {
     LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         item {
-            WalletBalanceCard(wallet = wallet)
+            WalletBalanceCard(wallet = wallet, onRecharge = onRecharge)
             Spacer(Modifier.height(16.dp))
             Text("交易记录", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
@@ -109,11 +114,14 @@ private fun WalletContent(wallet: Wallet?, transactions: List<WalletTransaction>
 
 /**
  * 钱包余额概览卡片
- * 展示当前余额、累计充值和累计消费
+ * 展示当前余额、累计充值和累计消费，支持充值操作
  * @param wallet 钱包信息，可能为null
+ * @param onRecharge 充值回调，传入充值金额
  */
 @Composable
-private fun WalletBalanceCard(wallet: Wallet?) {
+private fun WalletBalanceCard(wallet: Wallet?, onRecharge: ((Double) -> Unit)? = null) {
+    var showRechargeDialog by remember { mutableStateOf(false) }
+
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("余额", style = MaterialTheme.typography.titleMedium)
@@ -129,7 +137,56 @@ private fun WalletBalanceCard(wallet: Wallet?) {
                     Text("¥${wallet?.totalConsume ?: "0.00"}", style = MaterialTheme.typography.bodyMedium)
                 }
             }
+            if (onRecharge != null) {
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = { showRechargeDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("充值")
+                }
+            }
         }
+    }
+
+    // 充值金额输入对话框
+    if (showRechargeDialog) {
+        var amountText by remember { mutableStateOf("") }
+        var amountError by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { showRechargeDialog = false },
+            title = { Text("钱包充值") },
+            text = {
+                Column {
+                    Text("请输入充值金额")
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { amountText = it; amountError = null },
+                        label = { Text("金额（元）") },
+                        isError = amountError != null,
+                        supportingText = amountError?.let { { Text(it) } },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val amount = amountText.toDoubleOrNull()
+                    if (amount == null || amount <= 0) {
+                        amountError = "请输入有效金额"
+                    } else if (amount > 10000) {
+                        amountError = "单次充值不能超过10000元"
+                    } else {
+                        onRecharge?.invoke(amount)
+                        showRechargeDialog = false
+                    }
+                }) { Text("确认充值") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRechargeDialog = false }) { Text("取消") }
+            }
+        )
     }
 }
 

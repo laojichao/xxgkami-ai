@@ -52,8 +52,11 @@ public class StatsService {
     public Map<String, Object> getUserActivityStats(int days) {
         Map<String, Object> stats = new HashMap<>();
         stats.put("period", days);
+        // 活跃用户数：暂用总用户数近似（需接入登录日志统计真实活跃数）
         stats.put("activeUsers", userService.getUserStats().getOrDefault("totalUsers", 0));
-        stats.put("newRegistrations", 0);
+        // 新注册用户数：统计指定天数内注册的用户
+        stats.put("newRegistrations", userService.getNewUserCount(days));
+        // 登录次数：需要登录日志表支持，暂返回 0
         stats.put("loginCount", 0);
         return stats;
     }

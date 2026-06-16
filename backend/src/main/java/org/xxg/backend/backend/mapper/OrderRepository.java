@@ -5,6 +5,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.xxg.backend.backend.entity.Order;
@@ -43,4 +44,10 @@ public interface OrderRepository extends JpaRepository<Order, Integer>, JpaSpeci
 
     /** 查询指定状态且在指定时间之前创建的订单（用于超时取消） */
     List<Order> findByStatusAndCreateTimeBefore(String status, LocalDateTime createTime);
+
+    /** 批量取消超时未支付订单（避免全量加载到内存导致 OOM） */
+    @Modifying
+    @Query("UPDATE Order o SET o.status = :newStatus, o.updateTime = :updateTime WHERE o.status = :oldStatus AND o.createTime < :expireTime")
+    int batchCancelExpiredOrders(@Param("newStatus") String newStatus, @Param("updateTime") LocalDateTime updateTime,
+                                 @Param("oldStatus") String oldStatus, @Param("expireTime") LocalDateTime expireTime);
 }

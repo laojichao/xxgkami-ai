@@ -77,6 +77,28 @@ public class UserService {
     }
 
     /**
+     * 按关键词搜索用户（用户名、邮箱、昵称模糊匹配）
+     * @param keyword 搜索关键词
+     * @param pageable 分页参数
+     * @return 匹配的用户分页结果
+     */
+    @Transactional(readOnly = true)
+    public Page<User> searchUsers(String keyword, Pageable pageable) {
+        if (keyword == null || keyword.isBlank()) {
+            return userRepository.findAll(pageable);
+        }
+        return userRepository.searchByKeyword(escapeLike(keyword.trim()), pageable);
+    }
+
+    /**
+     * 转义 LIKE 查询中的通配符，防止 LIKE 注入
+     */
+    private String escapeLike(String value) {
+        if (value == null) return null;
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    /**
      * 更新用户个人资料
      * @param userId 用户ID
      * @param nickname 新昵称，为null则不更新
@@ -107,6 +129,20 @@ public class UserService {
             }
             user.setPhone(phone);
         }
+        user.setUpdateTime(LocalDateTime.now());
+        return userRepository.save(user);
+    }
+
+    /**
+     * 更新用户头像
+     * @param userId 用户ID
+     * @param avatarUrl 头像URL
+     * @return 更新后的用户实体
+     */
+    @Transactional
+    public User updateAvatar(Integer userId, String avatarUrl) {
+        User user = getUserById(userId);
+        user.setAvatar(avatarUrl);
         user.setUpdateTime(LocalDateTime.now());
         return userRepository.save(user);
     }
@@ -199,5 +235,15 @@ public class UserService {
         stats.put("todayUsers", userRepository.countByCreateTimeAfter(
                 LocalDateTime.now().toLocalDate().atStartOfDay()));
         return stats;
+    }
+
+    /**
+     * 获取指定天数内新注册的用户数量
+     * @param days 统计天数
+     * @return 新注册用户数
+     */
+    @Transactional(readOnly = true)
+    public long getNewUserCount(int days) {
+        return userRepository.countByCreateTimeAfter(LocalDateTime.now().minusDays(days));
     }
 }

@@ -114,18 +114,20 @@ public class PaymentService {
 
             // 验证回调金额与订单金额一致性（防止支付金额被篡改）
             String callbackMoney = params.get("money");
-            if (callbackMoney != null && !callbackMoney.isBlank()) {
-                try {
-                    BigDecimal paidAmount = new BigDecimal(callbackMoney);
-                    if (paidAmount.compareTo(order.getTotalPrice()) != 0) {
-                        log.warn("支付回调金额不匹配，订单号: {}, 回调金额: {}, 订单金额: {}",
-                                orderNo, paidAmount, order.getTotalPrice());
-                        return "fail";
-                    }
-                } catch (NumberFormatException e) {
-                    log.warn("支付回调金额格式异常，订单号: {}, money: {}", orderNo, callbackMoney);
+            if (callbackMoney == null || callbackMoney.isBlank()) {
+                log.warn("支付回调缺少金额参数，订单号: {}", orderNo);
+                return "fail";
+            }
+            try {
+                BigDecimal paidAmount = new BigDecimal(callbackMoney);
+                if (paidAmount.compareTo(order.getTotalPrice()) != 0) {
+                    log.warn("支付回调金额不匹配，订单号: {}, 回调金额: {}, 订单金额: {}",
+                            orderNo, paidAmount, order.getTotalPrice());
                     return "fail";
                 }
+            } catch (NumberFormatException e) {
+                log.warn("支付回调金额格式异常，订单号: {}, money: {}", orderNo, callbackMoney);
+                return "fail";
             }
 
             // 根据订单信息生成卡密

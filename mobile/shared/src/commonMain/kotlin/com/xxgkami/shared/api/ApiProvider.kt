@@ -9,7 +9,8 @@ import kotlinx.serialization.json.Json
  */
 object ApiProvider {
     // 全局共享的 JSON 序列化配置，避免各 API 类重复创建实例导致配置不一致
-    val json: Json = Json { ignoreUnknownKeys = true }
+    // isLenient = true 允许将 JSON 数字（如 BigDecimal 100.00）反序列化为 String 类型
+    val json: Json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     // 全局共享的 API 客户端实例（默认无引擎，updateBaseUrl 时按平台注入证书锁定引擎）
     val apiClient: ApiClient = ApiClient()

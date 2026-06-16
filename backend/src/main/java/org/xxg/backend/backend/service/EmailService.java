@@ -36,19 +36,30 @@ public class EmailService {
     @Async
     public void sendVerificationCode(String to, String code, String type) {
         try {
-            if (fromEmail == null || fromEmail.isEmpty()) {
-                log.warn("[EMAIL] Mail not configured. Verification code generated for {} but not sent.", to);
-                return;
-            }
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(to);
-            message.setSubject("register".equals(type) ? "注册验证码" : "重置密码验证码");
-            message.setText("您的验证码是: " + code + "\n有效期10分钟，请勿泄露给他人。");
-            mailSender.send(message);
+            sendVerificationCodeSync(to, code, type);
         } catch (Exception e) {
-            log.error("[EMAIL] Failed to send to {}: {}", to, e.getMessage());
+            log.error("[EMAIL] Async send failed to {}: {}", to, e.getMessage());
         }
+    }
+
+    /**
+     * 同步发送验证码邮件（用于需要确认发送结果的场景）
+     * @param to 收件人邮箱
+     * @param code 验证码
+     * @param type 验证码类型
+     * @throws Exception 发送失败时抛出异常
+     */
+    public void sendVerificationCodeSync(String to, String code, String type) throws Exception {
+        if (fromEmail == null || fromEmail.isEmpty()) {
+            log.warn("[EMAIL] Mail not configured. Verification code generated for {} but not sent.", to);
+            throw new Exception("邮件服务未配置");
+        }
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromEmail);
+        message.setTo(to);
+        message.setSubject("register".equals(type) ? "注册验证码" : "重置密码验证码");
+        message.setText("您的验证码是: " + code + "\n有效期10分钟，请勿泄露给他人。");
+        mailSender.send(message);
     }
 
     /**
