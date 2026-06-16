@@ -73,58 +73,31 @@ public class AuthService {
         Admin admin = adminRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
-        // Check account lockout
-        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
-                && admin.getLockTime() != null
-                && admin.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isAfter(LocalDateTime.now())) {
-            throw new BusinessException("账户已锁定，请" + LOCKOUT_DURATION_MINUTES + "分钟后重试");
-        }
-        // If lock has expired, reset attempts
-        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
-                && admin.getLockTime() != null
-                && admin.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isBefore(LocalDateTime.now())) {
-            admin.setFailedLoginAttempts(0);
-            admin.setLockTime(null);
-        }
+        checkAndResetLockout(admin.getFailedLoginAttempts(), admin.getLockTime(),
+                (attempts, lockTime) -> { admin.setFailedLoginAttempts(attempts); admin.setLockTime(lockTime); },
+                () -> adminRepository.save(admin));
 
         if (!passwordUtil.matches(request.getPassword(), admin.getPassword())) {
-            // Record failed attempt
-            int attempts = (admin.getFailedLoginAttempts() == null ? 0 : admin.getFailedLoginAttempts()) + 1;
-            admin.setFailedLoginAttempts(attempts);
-            if (attempts >= MAX_FAILED_ATTEMPTS) {
-                admin.setLockTime(LocalDateTime.now());
-            }
-            adminRepository.save(admin);
+            recordLoginFailure(admin.getFailedLoginAttempts(), admin.getLockTime(),
+                    (attempts, lockTime) -> { admin.setFailedLoginAttempts(attempts); admin.setLockTime(lockTime); },
+                    () -> adminRepository.save(admin));
             throw new BusinessException("用户名或密码错误");
         }
 
-        // Reset failed attempts on successful login
-        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() > 0) {
-            admin.setFailedLoginAttempts(0);
-            admin.setLockTime(null);
-        }
+        resetLoginFailures(admin.getFailedLoginAttempts(), admin.getLockTime(),
+                (attempts, lockTime) -> { admin.setFailedLoginAttempts(attempts); admin.setLockTime(lockTime); });
 
-        // 强制 TOTP 二次验证：管理员启用 TOTP 后必须提供验证码
+        // TOTP 二次验证
         if (Boolean.TRUE.equals(admin.getTotpEnabled())) {
-            if (request.getTotpCode() == null || request.getTotpCode().isBlank()) {
-                throw new BusinessException("请输入 TOTP 验证码");
-            }
-            String decryptedSecret = totpService.decryptSecret(admin.getTotpSecret());
-            if (!totpService.verifyCode(decryptedSecret, request.getTotpCode())) {
-                throw new BusinessException("TOTP 验证码错误");
-            }
+            verifyTotpCode(admin.getTotpSecret(), request.getTotpCode());
         }
 
+        // 生成并存储 Token
         String accessToken = jwtUtil.generateAccessToken(admin.getUsername(), "admin");
         String refreshToken = jwtUtil.generateRefreshToken(admin.getUsername(), "admin");
-
-        // 存储哈希后的 token，防止数据库泄露时明文 token 被直接利用
-        String hashedAccessToken = hashToken(accessToken);
-        String hashedRefreshToken = hashToken(refreshToken);
-        admin.setAccessToken(hashedAccessToken);
-        admin.setRefreshToken(hashedRefreshToken);
-        admin.setLastLogin(LocalDateTime.now());
-        adminRepository.save(admin);
+        storeHashedTokens(accessToken, refreshToken,
+                t -> admin.setAccessToken(t), t -> admin.setRefreshToken(t),
+                () -> { admin.setLastLogin(LocalDateTime.now()); adminRepository.save(admin); });
 
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put("id", admin.getId());
@@ -133,11 +106,7 @@ public class AuthService {
         userInfo.put("email", admin.getEmail());
         userInfo.put("createTime", admin.getCreateTime());
 
-        return LoginResponse.builder()
-                .token(accessToken)
-                .refreshToken(refreshToken)
-                .userInfo(userInfo)
-                .build();
+        return LoginResponse.builder().token(accessToken).refreshToken(refreshToken).userInfo(userInfo).build();
     }
 
     @Transactional
@@ -145,36 +114,19 @@ public class AuthService {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
-        // Check account lockout
-        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
-                && user.getLockTime() != null
-                && user.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isAfter(LocalDateTime.now())) {
-            throw new BusinessException("账户已锁定，请" + LOCKOUT_DURATION_MINUTES + "分钟后重试");
-        }
-        // If lock has expired, reset attempts
-        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
-                && user.getLockTime() != null
-                && user.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isBefore(LocalDateTime.now())) {
-            user.setFailedLoginAttempts(0);
-            user.setLockTime(null);
-        }
+        checkAndResetLockout(user.getFailedLoginAttempts(), user.getLockTime(),
+                (attempts, lockTime) -> { user.setFailedLoginAttempts(attempts); user.setLockTime(lockTime); },
+                () -> userRepository.save(user));
 
         if (!passwordUtil.matches(request.getPassword(), user.getPassword())) {
-            // Record failed attempt
-            int attempts = (user.getFailedLoginAttempts() == null ? 0 : user.getFailedLoginAttempts()) + 1;
-            user.setFailedLoginAttempts(attempts);
-            if (attempts >= MAX_FAILED_ATTEMPTS) {
-                user.setLockTime(LocalDateTime.now());
-            }
-            userRepository.save(user);
+            recordLoginFailure(user.getFailedLoginAttempts(), user.getLockTime(),
+                    (attempts, lockTime) -> { user.setFailedLoginAttempts(attempts); user.setLockTime(lockTime); },
+                    () -> userRepository.save(user));
             throw new BusinessException("用户名或密码错误");
         }
 
-        // Reset failed attempts on successful login
-        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() > 0) {
-            user.setFailedLoginAttempts(0);
-            user.setLockTime(null);
-        }
+        resetLoginFailures(user.getFailedLoginAttempts(), user.getLockTime(),
+                (attempts, lockTime) -> { user.setFailedLoginAttempts(attempts); user.setLockTime(lockTime); });
 
         if (!Boolean.TRUE.equals(user.getStatus())) {
             throw new BusinessException("账号已被禁用");
@@ -182,15 +134,13 @@ public class AuthService {
 
         String accessToken = jwtUtil.generateAccessToken(user.getUsername(), "user");
         String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), "user");
-
-        // 存储哈希后的 token，防止数据库泄露时明文 token 被直接利用
-        String hashedAccessToken = hashToken(accessToken);
-        String hashedRefreshToken = hashToken(refreshToken);
-        user.setAccessToken(hashedAccessToken);
-        user.setRefreshToken(hashedRefreshToken);
-        user.setLastLoginTime(LocalDateTime.now());
-        user.setLoginCount((user.getLoginCount() != null ? user.getLoginCount() : 0) + 1);
-        userRepository.save(user);
+        storeHashedTokens(accessToken, refreshToken,
+                t -> user.setAccessToken(t), t -> user.setRefreshToken(t),
+                () -> {
+                    user.setLastLoginTime(LocalDateTime.now());
+                    user.setLoginCount((user.getLoginCount() != null ? user.getLoginCount() : 0) + 1);
+                    userRepository.save(user);
+                });
 
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put("id", user.getId());
@@ -201,11 +151,61 @@ public class AuthService {
         userInfo.put("avatar", user.getAvatar());
         userInfo.put("createTime", user.getCreateTime());
 
-        return LoginResponse.builder()
-                .token(accessToken)
-                .refreshToken(refreshToken)
-                .userInfo(userInfo)
-                .build();
+        return LoginResponse.builder().token(accessToken).refreshToken(refreshToken).userInfo(userInfo).build();
+    }
+
+    // === 登录公共方法 ===
+
+    /** 检查账户锁定状态，过期则自动重置 */
+    private void checkAndResetLockout(Integer failedAttempts, LocalDateTime lockTime,
+                                       java.util.function.BiConsumer<Integer, LocalDateTime> setter,
+                                       Runnable saver) {
+        if (failedAttempts != null && failedAttempts >= MAX_FAILED_ATTEMPTS && lockTime != null) {
+            if (lockTime.plusMinutes(LOCKOUT_DURATION_MINUTES).isAfter(LocalDateTime.now())) {
+                throw new BusinessException("账户已锁定，请" + LOCKOUT_DURATION_MINUTES + "分钟后重试");
+            }
+            // 锁定已过期，重置
+            setter.accept(0, null);
+            saver.run();
+        }
+    }
+
+    /** 记录登录失败，达到阈值时锁定账户 */
+    private void recordLoginFailure(Integer failedAttempts, LocalDateTime lockTime,
+                                     java.util.function.BiConsumer<Integer, LocalDateTime> setter,
+                                     Runnable saver) {
+        int attempts = (failedAttempts == null ? 0 : failedAttempts) + 1;
+        setter.accept(attempts, attempts >= MAX_FAILED_ATTEMPTS ? LocalDateTime.now() : lockTime);
+        saver.run();
+    }
+
+    /** 登录成功后重置失败计数 */
+    private void resetLoginFailures(Integer failedAttempts, LocalDateTime lockTime,
+                                     java.util.function.BiConsumer<Integer, LocalDateTime> setter) {
+        if (failedAttempts != null && failedAttempts > 0) {
+            setter.accept(0, null);
+        }
+    }
+
+    /** 验证 TOTP 验证码 */
+    private void verifyTotpCode(String encryptedSecret, String totpCode) {
+        if (totpCode == null || totpCode.isBlank()) {
+            throw new BusinessException("请输入 TOTP 验证码");
+        }
+        String decryptedSecret = totpService.decryptSecret(encryptedSecret);
+        if (!totpService.verifyCode(decryptedSecret, totpCode)) {
+            throw new BusinessException("TOTP 验证码错误");
+        }
+    }
+
+    /** 生成 Token、哈希存储、执行保存回调 */
+    private void storeHashedTokens(String accessToken, String refreshToken,
+                                    java.util.function.Consumer<String> setAccess,
+                                    java.util.function.Consumer<String> setRefresh,
+                                    Runnable saveCallback) {
+        setAccess.accept(hashToken(accessToken));
+        setRefresh.accept(hashToken(refreshToken));
+        saveCallback.run();
     }
 
     @Transactional

@@ -151,104 +151,119 @@ public class CardService {
     public Map<String, Object> verifyCard(String cardKey, String machineCode, Integer apiKeyId) {
         Map<String, Object> result = new HashMap<>();
 
-        // Use pessimistic lock on Card to prevent concurrent modifications
+        // 1. 查询卡密（悲观锁）
         Card card = cardRepository.findByCardKeyForUpdate(cardKey).orElse(null);
-        // Unified error message to prevent card key enumeration via different responses
-        if (card == null) {
-            result.put("success", false);
-            result.put("message", "卡密无效");
-            result.put("statusCode", 400);
-            return result;
+        if (card == null || card.getStatus() == 2) {
+            return buildErrorResponse("卡密无效", 400);
         }
 
-        // Check if disabled
-        if (card.getStatus() == 2) {
-            result.put("success", false);
-            result.put("message", "卡密无效");
-            result.put("statusCode", 400);
-            return result;
-        }
-
-        // Check if card status is invalidated
+        // 2. 校验 CardStatus 有效性
         CardStatus cardStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
         if (cardStatus != null && !Boolean.TRUE.equals(cardStatus.getIsValid())) {
-            result.put("success", false);
-            result.put("message", "卡密无效");
-            result.put("statusCode", 400);
-            return result;
+            return buildErrorResponse("卡密无效", 400);
         }
 
-        // Check machine code binding
-        if (card.getMachineCode() != null && !card.getMachineCode().isEmpty()) {
-            if (machineCode == null || !card.getMachineCode().equals(machineCode)) {
-                result.put("success", false);
-                result.put("message", "卡密无效或机器码不匹配");
-                result.put("statusCode", 400);
-                return result;
-            }
-        } else if (machineCode != null && !machineCode.isEmpty()) {
-            // Bind machine code on first use
-            card.setMachineCode(machineCode);
+        // 3. 校验/绑定机器码
+        String machineCodeError = validateOrBindMachineCode(card, machineCode);
+        if (machineCodeError != null) {
+            return buildErrorResponse(machineCodeError, 400);
         }
 
+        // 4. 按卡密类型验证
         if (card.getCardType() == Card.CardType.time) {
-
-            // Time card - check expiry
-            if (cardStatus != null && cardStatus.getExpireTime() != null
-                    && cardStatus.getExpireTime().isBefore(LocalDateTime.now())) {
-                result.put("success", false);
-                result.put("message", "卡密无效");
-                result.put("statusCode", 400);
-                return result;
-            }
-            // Calculate remaining time
-            if (cardStatus != null && cardStatus.getExpireTime() != null) {
-                long remainingSeconds = java.time.Duration.between(LocalDateTime.now(), cardStatus.getExpireTime()).getSeconds();
-                result.put("remaining_time", remainingSeconds);
-                result.put("expire_time", cardStatus.getExpireTime().toString());
+            String timeError = verifyTimeCard(cardStatus, result);
+            if (timeError != null) {
+                return buildErrorResponse(timeError, 400);
             }
         } else if (card.getCardType() == Card.CardType.count) {
-            // Count card - use pessimistic lock to prevent concurrent double-spend
-            // Re-fetch with lock if cardStatus was not locked (defensive)
-            CardStatus lockedStatus = cardStatus;
-            if (lockedStatus == null) {
-                lockedStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
+            String countError = verifyCountCard(card, cardStatus, result);
+            if (countError != null) {
+                return buildErrorResponse(countError, 403);
             }
-            if (lockedStatus == null || lockedStatus.getRemainCount() == null || lockedStatus.getRemainCount() <= 0) {
-                result.put("success", false);
-                result.put("message", "次数已用尽");
-                result.put("statusCode", 403);
-                return result;
-            }
-            // Decrement count atomically under lock
-            lockedStatus.setRemainCount(lockedStatus.getRemainCount() - 1);
-            lockedStatus.setLastUseTime(LocalDateTime.now());
-            cardStatusRepository.save(lockedStatus);
-            result.put("remaining_count", lockedStatus.getRemainCount());
         }
 
-        // Update card status
-        if (card.getStatus() == 0) {
-            card.setStatus(1); // mark as used
-            card.setUseTime(LocalDateTime.now());
-        }
-        cardRepository.save(card);
+        // 5. 更新卡密使用状态
+        finalizeCardUsage(card);
 
         result.put("success", true);
         result.put("message", "验证成功");
         result.put("statusCode", 200);
 
-        // Trigger webhook
+        // 6. 触发 Webhook
+        triggerWebhookSafely(apiKeyId, card);
+
+        return result;
+    }
+
+    /** 构建错误响应 */
+    private Map<String, Object> buildErrorResponse(String message, int statusCode) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", false);
+        result.put("message", message);
+        result.put("statusCode", statusCode);
+        return result;
+    }
+
+    /** 校验或绑定机器码，返回错误消息（无错误返回 null） */
+    private String validateOrBindMachineCode(Card card, String machineCode) {
+        if (card.getMachineCode() != null && !card.getMachineCode().isEmpty()) {
+            if (machineCode == null || !card.getMachineCode().equals(machineCode)) {
+                return "卡密无效或机器码不匹配";
+            }
+        } else if (machineCode != null && !machineCode.isEmpty()) {
+            card.setMachineCode(machineCode);
+        }
+        return null;
+    }
+
+    /** 时长卡验证，返回错误消息（无错误返回 null，结果写入 result） */
+    private String verifyTimeCard(CardStatus cardStatus, Map<String, Object> result) {
+        if (cardStatus != null && cardStatus.getExpireTime() != null
+                && cardStatus.getExpireTime().isBefore(LocalDateTime.now())) {
+            return "卡密无效";
+        }
+        if (cardStatus != null && cardStatus.getExpireTime() != null) {
+            long remainingSeconds = java.time.Duration.between(LocalDateTime.now(), cardStatus.getExpireTime()).getSeconds();
+            result.put("remaining_time", remainingSeconds);
+            result.put("expire_time", cardStatus.getExpireTime().toString());
+        }
+        return null;
+    }
+
+    /** 次数卡验证（悲观锁防并发），返回错误消息（无错误返回 null） */
+    private String verifyCountCard(Card card, CardStatus cardStatus, Map<String, Object> result) {
+        CardStatus lockedStatus = cardStatus;
+        if (lockedStatus == null) {
+            lockedStatus = cardStatusRepository.findByCardHashForUpdate(card.getEncryptedKey()).orElse(null);
+        }
+        if (lockedStatus == null || lockedStatus.getRemainCount() == null || lockedStatus.getRemainCount() <= 0) {
+            return "次数已用尽";
+        }
+        lockedStatus.setRemainCount(lockedStatus.getRemainCount() - 1);
+        lockedStatus.setLastUseTime(LocalDateTime.now());
+        cardStatusRepository.save(lockedStatus);
+        result.put("remaining_count", lockedStatus.getRemainCount());
+        return null;
+    }
+
+    /** 更新卡密首次使用状态 */
+    private void finalizeCardUsage(Card card) {
+        if (card.getStatus() == 0) {
+            card.setStatus(1);
+            card.setUseTime(LocalDateTime.now());
+        }
+        cardRepository.save(card);
+    }
+
+    /** 安全触发 Webhook（失败不阻塞主流程） */
+    private void triggerWebhookSafely(Integer apiKeyId, Card card) {
         if (apiKeyId != null) {
             try {
                 webhookService.triggerWebhook(apiKeyId, card, "verify");
             } catch (Exception e) {
-                // Webhook failure should not block card verification, but must be logged
                 log.warn("Webhook trigger failed for card {} apiKeyId={}: {}", card.getId(), apiKeyId, e.getMessage(), e);
             }
         }
-
-        return result;
     }
 
     /**
