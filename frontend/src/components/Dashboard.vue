@@ -114,54 +114,66 @@ import { ElMessage } from 'element-plus'
 import NavigationBar from './NavigationBar.vue'
 import logger from '../utils/logger'
 
+// === 常量配置 ===
+/** 异步组件加载延迟（毫秒） */
+const ASYNC_COMPONENT_DELAY_MS = 200
+/** 异步组件加载超时（毫秒） */
+const ASYNC_COMPONENT_TIMEOUT_MS = 15000
+/** 单次批量创建卡密上限 */
+const MAX_BATCH_CREATE_COUNT = 1000
+/** 少量创建阈值（不显示进度条） */
+const SMALL_BATCH_THRESHOLD = 3
+/** 创建完成进度条自动关闭时间（毫秒） */
+const PROGRESS_BAR_AUTO_DISMISS_MS = 5000
+
 // 首屏组件直接加载
 import OverviewPage from './OverviewPage.vue'
 
 // 非首屏组件懒加载，减少初始打包体积
 const KeysManagePage = defineAsyncComponent({
   loader: () => import('./KeysManagePage.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const PricingManagePage = defineAsyncComponent({
   loader: () => import('./PricingManagePage.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const OrdersManagePage = defineAsyncComponent({
   loader: () => import('./OrdersManagePage.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const ApiManagePage = defineAsyncComponent({
   loader: () => import('./ApiManagePage.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const UserManagePage = defineAsyncComponent({
   loader: () => import('./UserManagePage.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const SettingsPage = defineAsyncComponent({
   loader: () => import('./SettingsPage.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const NotificationPage = defineAsyncComponent({
   loader: () => import('./NotificationPage.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const MaintenanceAdmin = defineAsyncComponent({
   loader: () => import('./MaintenanceAdmin.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 const SystemInfo = defineAsyncComponent({
   loader: () => import('./SystemInfo.vue'),
-  delay: 200,
-  timeout: 15000
+  delay: ASYNC_COMPONENT_DELAY_MS,
+  timeout: ASYNC_COMPONENT_TIMEOUT_MS
 })
 
 const props = defineProps({
@@ -225,13 +237,13 @@ const formatDate = (timestamp) => {
 
 const handleCreateKeys = async (keyData) => {
   const totalCount = keyData.count || 1
-  if (totalCount > 1000) {
-    ElMessage.error('单次创建数量不能超过 1000 条')
+  if (totalCount > MAX_BATCH_CREATE_COUNT) {
+    ElMessage.error(`单次创建数量不能超过 ${MAX_BATCH_CREATE_COUNT} 条`)
     return
   }
 
   // 少量（≤3）直接批量创建，不显示进度条
-  if (totalCount <= 3) {
+  if (totalCount <= SMALL_BATCH_THRESHOLD) {
     try {
       const result = await cardApi.createCards(keyData)
       if (result.success) {
@@ -280,7 +292,7 @@ const handleCreateKeys = async (keyData) => {
     if (createProgress.done) {
       createProgress.visible = false
     }
-  }, 5000)
+  }, PROGRESS_BAR_AUTO_DISMISS_MS)
 }
 
 const handleDeleteKey = async (keyId) => {

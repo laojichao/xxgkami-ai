@@ -705,6 +705,18 @@ import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi, paymentApi 
 import UserSettingsPage from './UserSettingsPage.vue'
 import logger from '../utils/logger'
 
+// === 常量配置 ===
+/** 使用记录默认分页大小 */
+const DEFAULT_PAGE_SIZE = 10
+/** 最近使用记录截取条数 */
+const RECENT_RECORDS_LIMIT = 5
+/** 订单状态轮询最大次数 */
+const MAX_ORDER_POLL_ATTEMPTS = 20
+/** 订单状态轮询间隔（毫秒） */
+const ORDER_POLL_INTERVAL_MS = 3000
+/** 头像文件大小限制（MB） */
+const MAX_AVATAR_SIZE_MB = 2
+
 // Props 和 Emits
 const props = defineProps({
   userInfo: {
@@ -720,7 +732,7 @@ const activeMenu = ref('dashboard')
 const drawerVisible = ref(false)
 const loading = ref(false)
 const currentPage = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 // 使用记录总数（响应式）
 const total = computed(() => usageRecords.value.length)
 
@@ -1039,7 +1051,7 @@ const fetchOrders = async () => {
             stats.unusedCards = cardsResult.data.filter(card => card.status === 0).length;
             stats.expiredCards = cardsResult.data.filter(card => card.status === 2).length;
 
-            recentRecords.value = usageRecords.value.slice(0, 5);
+            recentRecords.value = usageRecords.value.slice(0, RECENT_RECORDS_LIMIT);
         } else {
             logger.warn('Failed to fetch card details, falling back to orders');
             const cards = [];
@@ -1091,7 +1103,7 @@ const pollOrderStatus = async (orderId) => {
 
   await fetchOrders();
 
-  const maxAttempts = 20;
+  const maxAttempts = MAX_ORDER_POLL_ATTEMPTS;
   let attempts = 0;
 
   pollTimer = setInterval(async () => {
@@ -1120,7 +1132,7 @@ const pollOrderStatus = async (orderId) => {
         }
       );
     }
-  }, 3000);
+  }, ORDER_POLL_INTERVAL_MS);
 }
 
 // 组件卸载前清理轮询定时器，防止内存泄漏

@@ -363,6 +363,18 @@ import { authApi, settingsApi } from '../services/api.js'
 import { ElMessage } from 'element-plus'
 import logger from '../utils/logger'
 
+// === 常量配置 ===
+/** 验证码倒计时秒数 */
+const VERIFICATION_CODE_COUNTDOWN_SEC = 60
+/** 模态框自动关闭延迟（毫秒） */
+const MODAL_AUTO_CLOSE_DELAY_MS = 1500
+/** 消息提示自动消失时间（毫秒） */
+const AUTO_DISMISS_MESSAGE_DELAY_MS = 3000
+/** 登录成功后重置表单延迟（毫秒） */
+const LOGIN_SUCCESS_RESET_DELAY_MS = 1000
+/** TOTP 输入框自动聚焦延迟（毫秒） */
+const TOTP_FOCUS_DELAY_MS = 100
+
 /** 父组件传入的初始用户类型（user/admin） */
 const props = defineProps({
   initialUserType: {
@@ -443,7 +455,7 @@ const sendRecoveryCode = async () => {
 }
 
 /** 启动恢复验证码倒计时（60秒） */
-const startRecoveryTimer = (initialValue = 60) => {
+const startRecoveryTimer = (initialValue = VERIFICATION_CODE_COUNTDOWN_SEC) => {
   recoveryTimer.value = initialValue
   if (recoveryTimerInterval) clearInterval(recoveryTimerInterval)
   recoveryTimerInterval = setInterval(() => {
@@ -476,7 +488,7 @@ const handleRecovery = async () => {
         // Auto login or just close modal?
         // Let's try to login again automatically without TOTP
         handleLogin()
-      }, 1500)
+      }, MODAL_AUTO_CLOSE_DELAY_MS)
     } else {
       recoveryError.value = response.message || '验证失败'
     }
@@ -615,7 +627,7 @@ const sendCode = async () => {
 }
 
 /** 启动注册验证码倒计时（60秒） */
-const startTimer = (initialValue = 60) => {
+const startTimer = (initialValue = VERIFICATION_CODE_COUNTDOWN_SEC) => {
   codeTimer.value = initialValue
   if (timerInterval) clearInterval(timerInterval)
   timerInterval = setInterval(() => {
@@ -636,7 +648,7 @@ watch(() => registerForm.email, (newEmail) => {
     if (lastTime) {
       const diff = Math.floor((Date.now() - parseInt(lastTime)) / 1000)
       if (diff < 60) {
-        startTimer(60 - diff)
+        startTimer(VERIFICATION_CODE_COUNTDOWN_SEC - diff)
       }
     }
   }
@@ -669,7 +681,7 @@ const handleRegister = async () => {
         showRegister.value = false
         // Reset form
         Object.keys(registerForm).forEach(key => registerForm[key] = '')
-      }, 1500))
+      }, MODAL_AUTO_CLOSE_DELAY_MS))
     } else {
       registerError.value = response.message || '注册失败'
     }
@@ -708,7 +720,7 @@ const autoDismiss = (messageRef) => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         messageRef.value = ''
-      }, 3000)
+      }, AUTO_DISMISS_MESSAGE_DELAY_MS)
     }
   })
   autoDismissCleanups.set(messageRef, () => {
@@ -746,7 +758,7 @@ const sendForgotCode = async () => {
 }
 
 /** 启动找回密码验证码倒计时（60秒） */
-const startForgotTimer = (initialValue = 60) => {
+const startForgotTimer = (initialValue = VERIFICATION_CODE_COUNTDOWN_SEC) => {
   forgotCodeTimer.value = initialValue
   if (forgotTimerInterval) clearInterval(forgotTimerInterval)
   forgotTimerInterval = setInterval(() => {
@@ -767,7 +779,7 @@ watch(() => forgotPasswordForm.email, (newEmail) => {
     if (lastTime) {
       const diff = Math.floor((Date.now() - parseInt(lastTime)) / 1000)
       if (diff < 60) {
-        startForgotTimer(60 - diff)
+        startForgotTimer(VERIFICATION_CODE_COUNTDOWN_SEC - diff)
       }
     }
   }
@@ -797,7 +809,7 @@ const handleResetPassword = async () => {
         showForgotPassword.value = false
         // Reset form
         Object.keys(forgotPasswordForm).forEach(key => forgotPasswordForm[key] = '')
-      }, 1500))
+      }, MODAL_AUTO_CLOSE_DELAY_MS))
     } else {
       forgotPasswordError.value = response.message || '重置失败'
     }
@@ -943,7 +955,7 @@ const handleLogin = async () => {
       
       setTimeout(() => {
         resetForm()
-      }, 1000)
+      }, LOGIN_SUCCESS_RESET_DELAY_MS)
     } else {
       // Check for TOTP requirement
       if (response.message === 'TOTP_REQUIRED') {
@@ -952,7 +964,7 @@ const handleLogin = async () => {
           // Focus TOTP input
           setTimeout(() => {
              if (totpInputRef.value) totpInputRef.value.focus();
-          }, 100);
+          }, TOTP_FOCUS_DELAY_MS);
           loading.value = false;
           return;
       }

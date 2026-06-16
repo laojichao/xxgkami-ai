@@ -6,6 +6,21 @@ import logger from '../utils/logger'
 // 开发环境使用 http://localhost:8080/api
 // 生产环境使用 /api (通过Nginx反向代理)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
+// === 常量配置 ===
+/** API 请求超时时间（毫秒） */
+const API_REQUEST_TIMEOUT_MS = 30000;
+/** Token 刷新请求超时时间（毫秒） */
+const TOKEN_REFRESH_TIMEOUT_MS = 15000;
+/** 默认分页大小 */
+const DEFAULT_PAGE_SIZE = 10;
+/** 用户列表最大获取数量 */
+const MAX_USERS_FETCH_SIZE = 500;
+/** 钱包交易记录默认分页大小 */
+const DEFAULT_TRANSACTION_PAGE_SIZE = 20;
+/** 卡密使用趋势默认天数 */
+const DEFAULT_USAGE_TREND_DAYS = 7;
+
 let isRefreshing = false;
 let failedQueue = [];
 let isRedirecting = false;
@@ -62,7 +77,7 @@ async function apiRequest(endpoint, options = {}) {
   try {
     // 添加请求超时控制（30秒）
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
     config.signal = controller.signal;
 
     let response;
@@ -95,7 +110,7 @@ async function apiRequest(endpoint, options = {}) {
        try {
            // 刷新 Token：服务端会从 Cookie 中读取 refresh_token 并更新 Cookie
            const refreshController = new AbortController();
-           const refreshTimeout = setTimeout(() => refreshController.abort(), 15000);
+           const refreshTimeout = setTimeout(() => refreshController.abort(), TOKEN_REFRESH_TIMEOUT_MS);
            const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
@@ -117,7 +132,7 @@ async function apiRequest(endpoint, options = {}) {
 
                // Retry original request with a NEW AbortController（新 Token 已通过 Cookie 自动携带）
                const retryController = new AbortController();
-               const retryTimeout = setTimeout(() => retryController.abort(), 30000);
+               const retryTimeout = setTimeout(() => retryController.abort(), API_REQUEST_TIMEOUT_MS);
                const retryConfig = { ...config, signal: retryController.signal };
                const retryResponse = await fetch(url, retryConfig);
                clearTimeout(retryTimeout);
@@ -792,7 +807,7 @@ export const apiKeyApi = {
   },
 
   async getAllUsers() {
-    return await apiRequest('/admin/users?size=500');
+    return await apiRequest(`/admin/users?size=${MAX_USERS_FETCH_SIZE}`);
   }
 };
 
