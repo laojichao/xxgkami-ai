@@ -34,6 +34,16 @@ import java.util.*;
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
+    /** 登录失败锁定阈值 */
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    /** 账户锁定时长（分钟） */
+    private static final int LOCKOUT_DURATION_MINUTES = 15;
+    /** 验证码有效期（分钟） */
+    private static final int CODE_EXPIRE_MINUTES = 10;
+    /** 验证码发送冷却时间（秒） */
+    private static final int CODE_SEND_COOLDOWN_SECONDS = 60;
+
     private final AdminRepository adminRepository;
     private final UserRepository userRepository;
     private final VerificationCodeRepository verificationCodeRepository;
@@ -64,15 +74,15 @@ public class AuthService {
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
         // Check account lockout
-        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= 5
+        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
                 && admin.getLockTime() != null
-                && admin.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
-            throw new BusinessException("账户已锁定，请15分钟后重试");
+                && admin.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isAfter(LocalDateTime.now())) {
+            throw new BusinessException("账户已锁定，请" + LOCKOUT_DURATION_MINUTES + "分钟后重试");
         }
         // If lock has expired, reset attempts
-        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= 5
+        if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
                 && admin.getLockTime() != null
-                && admin.getLockTime().plusMinutes(15).isBefore(LocalDateTime.now())) {
+                && admin.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isBefore(LocalDateTime.now())) {
             admin.setFailedLoginAttempts(0);
             admin.setLockTime(null);
         }
@@ -81,7 +91,7 @@ public class AuthService {
             // Record failed attempt
             int attempts = (admin.getFailedLoginAttempts() == null ? 0 : admin.getFailedLoginAttempts()) + 1;
             admin.setFailedLoginAttempts(attempts);
-            if (attempts >= 5) {
+            if (attempts >= MAX_FAILED_ATTEMPTS) {
                 admin.setLockTime(LocalDateTime.now());
             }
             adminRepository.save(admin);
@@ -136,15 +146,15 @@ public class AuthService {
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
 
         // Check account lockout
-        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= 5
+        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
                 && user.getLockTime() != null
-                && user.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
-            throw new BusinessException("账户已锁定，请15分钟后重试");
+                && user.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isAfter(LocalDateTime.now())) {
+            throw new BusinessException("账户已锁定，请" + LOCKOUT_DURATION_MINUTES + "分钟后重试");
         }
         // If lock has expired, reset attempts
-        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= 5
+        if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= MAX_FAILED_ATTEMPTS
                 && user.getLockTime() != null
-                && user.getLockTime().plusMinutes(15).isBefore(LocalDateTime.now())) {
+                && user.getLockTime().plusMinutes(LOCKOUT_DURATION_MINUTES).isBefore(LocalDateTime.now())) {
             user.setFailedLoginAttempts(0);
             user.setLockTime(null);
         }
@@ -153,7 +163,7 @@ public class AuthService {
             // Record failed attempt
             int attempts = (user.getFailedLoginAttempts() == null ? 0 : user.getFailedLoginAttempts()) + 1;
             user.setFailedLoginAttempts(attempts);
-            if (attempts >= 5) {
+            if (attempts >= MAX_FAILED_ATTEMPTS) {
                 user.setLockTime(LocalDateTime.now());
             }
             userRepository.save(user);
@@ -216,7 +226,7 @@ public class AuthService {
             throw new BusinessException("验证码已过期");
         }
         // 限制验证码尝试次数，防止暴力破解
-        if (vCode.getAttempts() != null && vCode.getAttempts() >= 5) {
+        if (vCode.getAttempts() != null && vCode.getAttempts() >= MAX_FAILED_ATTEMPTS) {
             verificationCodeRepository.delete(vCode);
             throw new BusinessException("验证码已失效，请重新获取");
         }
@@ -244,7 +254,7 @@ public class AuthService {
     public void sendEmailCode(String email, String type) {
         // 60秒内不能重复发送
         boolean recentExists = verificationCodeRepository.existsRecentCode(
-                email, type, LocalDateTime.now().minusSeconds(60));
+                email, type, LocalDateTime.now().minusSeconds(CODE_SEND_COOLDOWN_SECONDS));
         if (recentExists) {
             throw new BusinessException("请60秒后再试");
         }
@@ -256,7 +266,7 @@ public class AuthService {
         vCode.setEmail(email);
         vCode.setCode(code);
         vCode.setType(type);
-        vCode.setExpireTime(LocalDateTime.now().plusMinutes(10));
+        vCode.setExpireTime(LocalDateTime.now().plusMinutes(CODE_EXPIRE_MINUTES));
         verificationCodeRepository.save(vCode);
 
         try {
@@ -336,7 +346,7 @@ public class AuthService {
         BindToken bindToken = new BindToken();
         bindToken.setToken(token);
         bindToken.setUserId(userId);
-        bindToken.setExpireTime(LocalDateTime.now().plusMinutes(10));
+        bindToken.setExpireTime(LocalDateTime.now().plusMinutes(CODE_EXPIRE_MINUTES));
         bindToken.setUsed(false);
         bindTokenRepository.save(bindToken);
 
@@ -399,7 +409,7 @@ public class AuthService {
             throw new BusinessException("验证码已过期");
         }
         // 限制验证码尝试次数，防止暴力破解
-        if (vCode.getAttempts() != null && vCode.getAttempts() >= 5) {
+        if (vCode.getAttempts() != null && vCode.getAttempts() >= MAX_FAILED_ATTEMPTS) {
             verificationCodeRepository.delete(vCode);
             throw new BusinessException("验证码已失效，请重新获取");
         }

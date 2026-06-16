@@ -414,6 +414,7 @@ const recoveryError = ref('')
 const recoverySuccess = ref('')
 const recoveryTimer = ref(0)
 let recoveryTimerInterval = null
+let pendingTimeouts = []
 
 /** TOTP恢复表单（邮箱验证码） */
 const recoveryForm = reactive({
@@ -548,6 +549,8 @@ onUnmounted(() => {
   if (recoveryTimerInterval) clearInterval(recoveryTimerInterval)
   if (timerInterval) clearInterval(timerInterval)
   if (forgotTimerInterval) clearInterval(forgotTimerInterval)
+  pendingTimeouts.forEach(id => clearTimeout(id))
+  pendingTimeouts = []
   // 清理 autoDismiss 创建的 watcher 和 setTimeout
   autoDismissCleanups.forEach(cleanup => cleanup())
 })
@@ -662,11 +665,11 @@ const handleRegister = async () => {
     
     if (response.success) {
       registerSuccess.value = '注册成功！请登录'
-      setTimeout(() => {
+      pendingTimeouts.push(setTimeout(() => {
         showRegister.value = false
         // Reset form
         Object.keys(registerForm).forEach(key => registerForm[key] = '')
-      }, 1500)
+      }, 1500))
     } else {
       registerError.value = response.message || '注册失败'
     }
@@ -790,11 +793,11 @@ const handleResetPassword = async () => {
     
     if (response.success) {
       forgotPasswordSuccess.value = '密码重置成功！请使用新密码登录'
-      setTimeout(() => {
+      pendingTimeouts.push(setTimeout(() => {
         showForgotPassword.value = false
         // Reset form
         Object.keys(forgotPasswordForm).forEach(key => forgotPasswordForm[key] = '')
-      }, 1500)
+      }, 1500))
     } else {
       forgotPasswordError.value = response.message || '重置失败'
     }

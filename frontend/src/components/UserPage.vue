@@ -986,8 +986,11 @@ const handleAvatarUpload = async (file) => {
 
 const fetchOrders = async () => {
     try {
-        const userId = localUserInfo.id || 1;
-        const timestamp = new Date().getTime();
+        const userId = localUserInfo.id;
+        if (!userId) {
+            logger.warn('用户ID不存在，跳过加载订单');
+            return;
+        }
 
         const [ordersResult, cardsResult] = await Promise.all([
             orderApi.getOrders(),
