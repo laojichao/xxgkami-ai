@@ -4,9 +4,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
 import org.xxg.backend.backend.entity.MaintenanceSettings;
+import org.xxg.backend.backend.mapper.AccessLogRepository;
 import org.xxg.backend.backend.service.MaintenanceService;
 import org.xxg.backend.backend.service.BackupService;
+import org.xxg.backend.backend.service.SettingsService;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -20,10 +23,15 @@ import java.util.Map;
 public class MaintenanceController {
     private final MaintenanceService maintenanceService;
     private final BackupService backupService;
+    private final SettingsService settingsService;
+    private final AccessLogRepository accessLogRepository;
 
-    public MaintenanceController(MaintenanceService maintenanceService, BackupService backupService) {
+    public MaintenanceController(MaintenanceService maintenanceService, BackupService backupService,
+                                  SettingsService settingsService, AccessLogRepository accessLogRepository) {
         this.maintenanceService = maintenanceService;
         this.backupService = backupService;
+        this.settingsService = settingsService;
+        this.accessLogRepository = accessLogRepository;
     }
 
     /**
@@ -78,25 +86,28 @@ public class MaintenanceController {
     }
 
     /**
-     * 清理系统缓存（暂未实现）
+     * 清理系统配置缓存
      * <p>POST /maintenance/clear-cache</p>
      * <p>权限：管理员</p>
-     * @return 501 未实现
+     * @return 操作结果
      */
     @PostMapping("/clear-cache")
     public ResponseEntity<ApiResponse<Void>> clearCache() {
-        return ResponseEntity.status(501).body(ApiResponse.error("缓存清理功能暂未实现"));
+        settingsService.refreshCache();
+        return ResponseEntity.ok(ApiResponse.ok("配置缓存已刷新"));
     }
 
     /**
-     * 清理系统日志（暂未实现）
+     * 清理30天前的访问日志
      * <p>POST /maintenance/clear-logs</p>
      * <p>权限：管理员</p>
-     * @return 501 未实现
+     * @return 操作结果
      */
     @PostMapping("/clear-logs")
     public ResponseEntity<ApiResponse<Void>> clearLogs() {
-        return ResponseEntity.status(501).body(ApiResponse.error("日志清理功能暂未实现"));
+        LocalDateTime expireTime = LocalDateTime.now().minusDays(30);
+        int deleted = accessLogRepository.deleteByCreateTimeBefore(expireTime);
+        return ResponseEntity.ok(ApiResponse.ok("已清理 " + deleted + " 条过期日志"));
     }
 }
 

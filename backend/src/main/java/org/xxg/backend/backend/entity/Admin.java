@@ -58,6 +58,10 @@ public class Admin {
     @Column(name = "lock_time")
     private LocalDateTime lockTime;
 
+    @JsonIgnore
+    @Column(name = "totp_recovery_codes", columnDefinition = "TEXT")
+    private String totpRecoveryCodes; // TOTP恢复码（JSON数组，每个码经过SHA-256哈希）
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

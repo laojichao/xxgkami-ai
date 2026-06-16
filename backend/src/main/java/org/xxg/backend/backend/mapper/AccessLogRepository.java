@@ -3,6 +3,9 @@ package org.xxg.backend.backend.mapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.xxg.backend.backend.entity.AccessLog;
 import java.time.LocalDateTime;
 
@@ -19,4 +22,8 @@ public interface AccessLogRepository extends JpaRepository<AccessLog, Long> {
     Page<AccessLog> findByCreateTimeBetween(LocalDateTime start, LocalDateTime end, Pageable pageable);
     /** 统计指定时间之后的访问日志数量 */
     long countByCreateTimeAfter(LocalDateTime time);
+    /** 删除指定时间之前的访问日志 */
+    @Modifying
+    @Query("DELETE FROM AccessLog a WHERE a.createTime < :before")
+    int deleteByCreateTimeBefore(@Param("before") LocalDateTime before);
 }

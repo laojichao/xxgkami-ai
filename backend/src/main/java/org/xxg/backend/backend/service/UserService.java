@@ -5,6 +5,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.User;
+import org.xxg.backend.backend.entity.Wallet;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.UserRepository;
 import org.xxg.backend.backend.mapper.WalletRepository;
@@ -245,5 +246,46 @@ public class UserService {
     @Transactional(readOnly = true)
     public long getNewUserCount(int days) {
         return userRepository.countByCreateTimeAfter(LocalDateTime.now().minusDays(days));
+    }
+
+    /**
+     * 管理员创建新用户
+     * @param username 用户名
+     * @param password 密码（明文，将被加密）
+     * @param email 邮箱
+     * @param nickname 昵称
+     * @return 创建成功的用户实体
+     */
+    @Transactional
+    public User createUser(String username, String password, String email, String nickname) {
+        if (username == null || username.isBlank()) {
+            throw new BusinessException("用户名不能为空");
+        }
+        if (password == null || password.length() < 8) {
+            throw new BusinessException("密码长度不能少于8位");
+        }
+        if (userRepository.existsByUsername(username)) {
+            throw new BusinessException("用户名已存在");
+        }
+        if (email != null && !email.isBlank() && userRepository.existsByEmail(email)) {
+            throw new BusinessException("邮箱已被使用");
+        }
+        User user = new User();
+        user.setUsername(username);
+        user.setPassword(passwordUtil.encode(password));
+        user.setEmail(email);
+        user.setNickname(nickname != null ? nickname : username);
+        user.setStatus(true);
+        user.setCreateTime(LocalDateTime.now());
+        user.setUpdateTime(LocalDateTime.now());
+        User saved = userRepository.save(user);
+        // 为新用户创建钱包
+        Wallet wallet = new Wallet();
+        wallet.setUserId(saved.getId());
+        wallet.setBalance(java.math.BigDecimal.ZERO);
+        wallet.setTotalRecharge(java.math.BigDecimal.ZERO);
+        wallet.setTotalConsume(java.math.BigDecimal.ZERO);
+        walletRepository.save(wallet);
+        return saved;
     }
 }

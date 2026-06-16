@@ -20,15 +20,19 @@ import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.AdminRepository;
 import org.xxg.backend.backend.mapper.OAuthStateRepository;
 import org.xxg.backend.backend.mapper.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xxg.backend.backend.service.AuthService;
+import org.xxg.backend.backend.service.EmailService;
 import org.xxg.backend.backend.service.TotpService;
 import org.xxg.backend.backend.util.JwtUtil;
 import org.xxg.backend.backend.filter.JwtRequestFilter;
 
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +47,8 @@ import java.util.concurrent.TimeUnit;
 @RequestMapping("/auth")
 @Tag(name = "认证接口", description = "登录、注册、Token 刷新、TOTP、OAuth")
 public class AuthController {
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+
     private final AuthService authService;
     private final UserRepository userRepository;
     private final AdminRepository adminRepository;
@@ -50,6 +56,7 @@ public class AuthController {
     private final JwtUtil jwtUtil;
     private final JwtRequestFilter jwtRequestFilter;
     private final OAuthStateRepository oauthStateRepository;
+    private final EmailService emailService;
 
     /** OAuth state 过期时间：5 分钟 */
     private static final int OAUTH_STATE_TTL_MINUTES = 5;
@@ -64,7 +71,7 @@ public class AuthController {
     public AuthController(AuthService authService, UserRepository userRepository,
                           AdminRepository adminRepository, TotpService totpService,
                           JwtUtil jwtUtil, JwtRequestFilter jwtRequestFilter,
-                          OAuthStateRepository oauthStateRepository) {
+                          OAuthStateRepository oauthStateRepository, EmailService emailService) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
@@ -72,6 +79,7 @@ public class AuthController {
         this.jwtUtil = jwtUtil;
         this.jwtRequestFilter = jwtRequestFilter;
         this.oauthStateRepository = oauthStateRepository;
+        this.emailService = emailService;
         // 每 2 分钟清理过期 state
         stateCleanup.scheduleAtFixedRate(this::cleanupExpiredStates, 2, 2, TimeUnit.MINUTES);
     }
@@ -443,17 +451,108 @@ public class AuthController {
     /**
      * 发送 TOTP 恢复码（暂未实现）。
      */
+    /**
+     * 生成 TOTP 恢复码。
+     * <p>生成 8 个一次性恢复码，哈希后存储到数据库，明文通过邮件发送给管理员。
+     * 每个恢复码为 8 位字母数字组合。</p>
+     *
+     * @param auth 当前认证信息
+     * @return 恢复码列表（仅此次返回，后续不可再查看）
+     */
     @PostMapping("/totp/recovery-code")
-    public ResponseEntity<ApiResponse<Map<String, String>>> sendRecoveryCode(@RequestBody Map<String, String> body) {
-        return ResponseEntity.status(501).body(ApiResponse.error("恢复码功能暂未实现"));
+    @Transactional
+    public ResponseEntity<ApiResponse<Map<String, Object>>> sendRecoveryCode(Authentication auth) {
+        if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
+        Admin admin = adminRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new BusinessException("管理员不存在"));
+        if (!Boolean.TRUE.equals(admin.getTotpEnabled())) {
+            throw new BusinessException("TOTP 未启用，无需生成恢复码");
+        }
+        // 生成 8 个恢复码
+        List<String> codes = new ArrayList<>();
+        List<String> hashedCodes = new ArrayList<>();
+        SecureRandom random = new SecureRandom();
+        for (int i = 0; i < 8; i++) {
+            String code = generateRecoveryCode(random);
+            codes.add(code);
+            hashedCodes.add(hashRecoveryCode(code));
+        }
+        // 存储哈希后的恢复码
+        admin.setTotpRecoveryCodes(String.join(",", hashedCodes));
+        adminRepository.save(admin);
+        // 通过邮件发送恢复码
+        try {
+            emailService.sendVerificationCodeSync(admin.getEmail(),
+                    String.join("\n", codes), "recovery");
+        } catch (Exception e) {
+            log.warn("恢复码邮件发送失败: {}", e.getMessage());
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("recoveryCodes", codes);
+        result.put("message", "恢复码已生成，请妥善保管。每个恢复码只能使用一次。");
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     /**
-     * 通过恢复码禁用 TOTP（暂未实现）。
+     * 通过恢复码禁用 TOTP。
+     * <p>验证恢复码后禁用 TOTP 并清除所有恢复码。</p>
+     *
+     * @param body 请求体，包含 username 和 recoveryCode
+     * @return 操作结果
      */
     @PostMapping("/totp/disable-by-recovery")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> disableTotpByRecovery(@RequestBody Map<String, String> body) {
-        return ResponseEntity.status(501).body(ApiResponse.error("恢复码功能暂未实现"));
+        String username = body.get("username");
+        String recoveryCode = body.get("recoveryCode");
+        if (username == null || username.isBlank() || recoveryCode == null || recoveryCode.isBlank()) {
+            throw new BusinessException("用户名和恢复码不能为空");
+        }
+        Admin admin = adminRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException("管理员不存在"));
+        if (!Boolean.TRUE.equals(admin.getTotpEnabled())) {
+            throw new BusinessException("TOTP 未启用");
+        }
+        String storedCodes = admin.getTotpRecoveryCodes();
+        if (storedCodes == null || storedCodes.isBlank()) {
+            throw new BusinessException("恢复码不存在，请联系系统管理员");
+        }
+        // 验证恢复码
+        String hashedInput = hashRecoveryCode(recoveryCode.trim());
+        List<String> hashedCodes = new ArrayList<>(Arrays.asList(storedCodes.split(",")));
+        boolean matched = hashedCodes.removeIf(hashed -> hashed.equals(hashedInput));
+        if (!matched) {
+            throw new BusinessException("恢复码无效或已使用");
+        }
+        // 禁用 TOTP 并更新剩余恢复码
+        admin.setTotpEnabled(false);
+        admin.setTotpSecret(null);
+        admin.setTotpRecoveryCodes(hashedCodes.isEmpty() ? null : String.join(",", hashedCodes));
+        adminRepository.save(admin);
+        return ResponseEntity.ok(ApiResponse.ok("TOTP 已禁用"));
+    }
+
+    /** 生成 8 位随机恢复码 */
+    private String generateRecoveryCode(SecureRandom random) {
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 排除易混淆字符
+        StringBuilder sb = new StringBuilder(8);
+        for (int i = 0; i < 8; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
+    }
+
+    /** 对恢复码进行 SHA-256 哈希 */
+    private String hashRecoveryCode(String code) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(code.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("恢复码哈希失败", e);
+        }
     }
 
     /**

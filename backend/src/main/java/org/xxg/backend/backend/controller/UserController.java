@@ -8,11 +8,16 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.dto.ApiResponse;
 import org.xxg.backend.backend.dto.ChangePasswordRequest;
+import org.xxg.backend.backend.entity.SocialUser;
 import org.xxg.backend.backend.entity.User;
+import org.xxg.backend.backend.mapper.SocialUserRepository;
 import org.xxg.backend.backend.service.UserService;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,7 +29,11 @@ import java.util.Map;
 @Tag(name = "用户管理", description = "用户 CRUD、个人资料、密码修改")
 public class UserController {
     private final UserService userService;
-    public UserController(UserService userService) { this.userService = userService; }
+    private final SocialUserRepository socialUserRepository;
+    public UserController(UserService userService, SocialUserRepository socialUserRepository) {
+        this.userService = userService;
+        this.socialUserRepository = socialUserRepository;
+    }
 
     // --- User profile endpoints ---
 
@@ -115,16 +124,51 @@ public class UserController {
 
     @GetMapping("/user/social")
     public ResponseEntity<ApiResponse<Object>> getSocialBindings(Authentication auth) {
-        return ResponseEntity.ok(ApiResponse.ok(java.util.List.of()));
+        User user = userService.getUserByUsername(auth.getName());
+        var bindings = socialUserRepository.findByUserId(user.getId());
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        bindings.ifPresent(su -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", su.getId());
+            item.put("socialType", su.getSocialType());
+            item.put("socialUid", su.getSocialUid());
+            item.put("createTime", su.getCreateTime());
+            result.add(item);
+        });
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping("/user/social/bind")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> bindSocial(Authentication auth, @RequestBody Map<String, String> body) {
+        User user = userService.getUserByUsername(auth.getName());
+        String socialUid = body.get("socialUid");
+        String socialType = body.get("socialType");
+        if (socialUid == null || socialUid.isBlank() || socialType == null || socialType.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("社交平台信息不完整"));
+        }
+        // 检查是否已绑定
+        if (socialUserRepository.findByUserId(user.getId()).isPresent()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("已绑定其他社交账号，请先解绑"));
+        }
+        // 检查该社交账号是否已被其他用户绑定
+        if (socialUserRepository.findBySocialUidAndSocialType(socialUid, socialType).isPresent()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("该社交账号已被其他用户绑定"));
+        }
+        SocialUser su = new SocialUser();
+        su.setUserId(user.getId());
+        su.setSocialUid(socialUid);
+        su.setSocialType(socialType);
+        socialUserRepository.save(su);
         return ResponseEntity.ok(ApiResponse.ok("绑定成功"));
     }
 
     @PostMapping("/user/social/unbind")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> unbindSocial(Authentication auth, @RequestBody Map<String, String> body) {
+        User user = userService.getUserByUsername(auth.getName());
+        socialUserRepository.findByUserId(user.getId())
+                .ifPresent(su -> socialUserRepository.delete(su));
         return ResponseEntity.ok(ApiResponse.ok("解绑成功"));
     }
 
@@ -141,7 +185,13 @@ public class UserController {
 
     @PostMapping("/admin/users")
     public ResponseEntity<ApiResponse<User>> createUser(@RequestBody Map<String, String> body) {
-        return ResponseEntity.ok(ApiResponse.error("暂不支持"));
+        User user = userService.createUser(
+                body.get("username"),
+                body.get("password"),
+                body.get("email"),
+                body.get("nickname")
+        );
+        return ResponseEntity.ok(ApiResponse.ok("用户创建成功", user));
     }
 
     @PutMapping("/admin/users/{id}")
