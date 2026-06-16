@@ -2,15 +2,21 @@ package org.xxg.backend.backend.controller;
 
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiKeyCreateRequest;
 import org.xxg.backend.backend.dto.ApiResponse;
 import org.xxg.backend.backend.dto.UpdateApiKeyRequest;
 import org.xxg.backend.backend.entity.ApiKey;
+import org.xxg.backend.backend.entity.UserApiKey;
+import org.xxg.backend.backend.exception.BusinessException;
+import org.xxg.backend.backend.mapper.UserApiKeyRepository;
 import org.xxg.backend.backend.service.ApiKeyService;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * API密钥管理接口
@@ -21,7 +27,11 @@ import java.util.Map;
 @RequestMapping("/admin/apikeys")
 public class ApiKeyController {
     private final ApiKeyService apiKeyService;
-    public ApiKeyController(ApiKeyService apiKeyService) { this.apiKeyService = apiKeyService; }
+    private final UserApiKeyRepository userApiKeyRepository;
+    public ApiKeyController(ApiKeyService apiKeyService, UserApiKeyRepository userApiKeyRepository) {
+        this.apiKeyService = apiKeyService;
+        this.userApiKeyRepository = userApiKeyRepository;
+    }
 
     /**
      * 创建新的API Key
@@ -101,28 +111,48 @@ public class ApiKeyController {
     }
 
     /**
-     * 将用户分配到指定API Key（暂未实现）
+     * 将用户分配到指定API Key
      * <p>POST /admin/apikeys/{id}/users</p>
      * <p>权限：管理员</p>
      * @param id API Key的ID
-     * @param body 请求体，包含用户信息
-     * @return 501 未实现
+     * @param body 请求体，包含 userId
+     * @return 操作结果
      */
     @PostMapping("/{id}/users")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> assignUser(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
-        return ResponseEntity.status(501).body(ApiResponse.error("用户分配功能暂未实现"));
+        Long userId = body.get("userId") != null ? Long.valueOf(body.get("userId").toString()) : null;
+        if (userId == null) {
+            throw new BusinessException("用户ID不能为空");
+        }
+        // 检查 API Key 是否存在
+        apiKeyService.getApiKeyById(id);
+        // 检查是否已分配
+        Optional<UserApiKey> existing = userApiKeyRepository.findByUserIdAndApiKeyId(userId, id.longValue());
+        if (existing.isPresent()) {
+            throw new BusinessException("该用户已分配此 API Key");
+        }
+        UserApiKey userApiKey = new UserApiKey();
+        userApiKey.setUserId(userId);
+        userApiKey.setApiKeyId(id.longValue());
+        userApiKey.setAssignTime(LocalDateTime.now());
+        userApiKeyRepository.save(userApiKey);
+        return ResponseEntity.ok(ApiResponse.ok("用户分配成功"));
     }
 
     /**
-     * 取消用户与API Key的关联（暂未实现）
+     * 取消用户与API Key的关联
      * <p>DELETE /admin/apikeys/{id}/users/{userId}</p>
      * <p>权限：管理员</p>
      * @param id API Key的ID
      * @param userId 用户ID
-     * @return 501 未实现
+     * @return 操作结果
      */
     @DeleteMapping("/{id}/users/{userId}")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> unassignUser(@PathVariable Integer id, @PathVariable Integer userId) {
-        return ResponseEntity.status(501).body(ApiResponse.error("取消分配功能暂未实现"));
+        userApiKeyRepository.findByUserIdAndApiKeyId(userId.longValue(), id.longValue())
+                .ifPresent(userApiKeyRepository::delete);
+        return ResponseEntity.ok(ApiResponse.ok("用户取消分配成功"));
     }
 }

@@ -449,7 +449,7 @@ public class AuthController {
     }
 
     /**
-     * 发送 TOTP 恢复码（暂未实现）。
+     * 生成 TOTP 恢复码。
      */
     /**
      * 生成 TOTP 恢复码。
