@@ -54,17 +54,23 @@ public class OrderController {
     }
 
     /**
-     * 获取当前用户的订单列表
+     * 获取当前用户的订单列表（分页）
      * <p>GET /orders</p>
      * <p>权限：已认证用户（仅返回自己的订单）</p>
      * @param auth Spring Security认证对象，用于获取当前用户名
-     * @return 当前用户的订单列表
+     * @param page 页码，默认0
+     * @param size 每页条数，默认20
+     * @return 当前用户的订单分页列表
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Order>>> getMyOrders(Authentication auth) {
+    public ResponseEntity<ApiResponse<Page<Order>>> getMyOrders(
+            Authentication auth,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         Integer userId = userRepository.findByUsername(auth.getName())
                 .orElseThrow(() -> new BusinessException("用户不存在")).getId();
-        return ResponseEntity.ok(ApiResponse.ok(orderService.getOrdersByUserId(userId)));
+        size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
+        return ResponseEntity.ok(ApiResponse.ok(orderService.getOrdersByUserId(userId, PageRequest.of(page, size))));
     }
 
     /**

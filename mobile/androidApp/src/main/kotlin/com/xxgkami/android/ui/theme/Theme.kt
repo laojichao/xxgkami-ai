@@ -36,6 +36,9 @@ private val DarkColorScheme = darkColorScheme(
  * XXGKami 应用主题
  * 提供统一的 Material3 主题包装，自动跟随系统浅色/暗色模式切换
  *
+ * Android 12+ 动态颜色处理：使用系统动态色但保留品牌主色（primary），
+ * 避免动态颜色完全覆盖品牌识别色。
+ *
  * @param darkTheme 是否使用暗色主题，默认跟随系统设置
  * @param content 主题包裹的内容
  */
@@ -45,10 +48,15 @@ fun XXGKamiTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        // Android 12+ 支持动态颜色（Material You），优先使用
+        // Android 12+ 支持动态颜色（Material You），但保留品牌主色 primary
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            // 使用动态色但覆盖 primary 为品牌色，保持品牌识别度
+            if (darkTheme) {
+                dynamicDarkColorScheme(context).copy(primary = DarkPrimary)
+            } else {
+                dynamicLightColorScheme(context).copy(primary = Primary)
+            }
         }
         darkTheme -> DarkColorScheme
         else -> LightColorScheme

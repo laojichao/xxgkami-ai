@@ -1,9 +1,9 @@
 <!-- 创建API密钥弹窗：输入名称/描述/加密开关 -->
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('update:visible', false)">
-    <div class="modal-content" @click.stop>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="create-api-key-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>创建新的API密钥</h3>
+        <h3 id="create-api-key-dialog-title">创建新的API密钥</h3>
         <button class="close-btn" @click="$emit('update:visible', false)">
           <i class="fas fa-times"></i>
         </button>

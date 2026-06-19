@@ -101,6 +101,7 @@ import { apiKeyApi, cardApi } from '../services/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
+import { obfuscateCardKey } from '../utils/cardKey.js'
 import ApiKeyCard from './api/ApiKeyCard.vue'
 import CreateApiKeyDialog from './api/CreateApiKeyDialog.vue'
 import EditApiKeyDialog from './api/EditApiKeyDialog.vue'
@@ -418,21 +419,8 @@ const copyCardCode = async (code) => {
 }
 
 /**
- * 卡密混淆函数（与后端 CustomCardObfuscator 保持一致）
- * 算法：URL编码 -> 反转 -> Base64 -> 替换字符
+ * 卡密混淆函数已抽取到 src/utils/cardKey.js，统一由工具模块导入使用
  */
-const obfuscateCardKey = (rawKey) => {
-  if (!rawKey) return rawKey
-  try {
-    const encoded = encodeURIComponent(rawKey)
-    const reversed = encoded.split('').reverse().join('')
-    const base64 = btoa(reversed)
-    return base64.replace(/e/g, '*').replace(/U/g, '-')
-  } catch (e) {
-    logger.error('Obfuscation failed:', e)
-    return rawKey
-  }
-}
 
 /** 复制混淆后的加密卡密到剪贴板 */
 const copyEncryptedCardCode = async (code) => {

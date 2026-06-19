@@ -204,6 +204,42 @@ const chartError = ref(false)
 
 // 定时器变量
 let statusInterval = null
+// resize 防抖定时器引用
+let resizeDebounceTimer = null
+
+/**
+ * 防抖处理窗口 resize 事件，重新绘制 canvas 图表
+ * 避免频繁触发重绘导致性能问题
+ */
+const handleResize = () => {
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer)
+  }
+  resizeDebounceTimer = setTimeout(() => {
+    drawUsageChart()
+    drawActivityChart()
+  }, 200)
+}
+
+/**
+ * 页面可见性变化处理：隐藏时暂停轮询，可见时恢复
+ * 避免页面后台运行时无意义的网络请求
+ */
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'hidden') {
+    // 页面隐藏时暂停服务器状态轮询
+    if (statusInterval) {
+      clearInterval(statusInterval)
+      statusInterval = null
+    }
+  } else if (document.visibilityState === 'visible') {
+    // 页面恢复可见时重新启动轮询（避免重复创建定时器）
+    if (!statusInterval) {
+      loadServerStatus()
+      statusInterval = setInterval(loadServerStatus, 30000)
+    }
+  }
+}
 
 // 服务器状态数据
 const systemStatus = ref({
@@ -546,20 +582,33 @@ onMounted(async () => {
     loadChartData(),
     loadServerStatus()
   ])
-  
+
   nextTick(() => {
     drawUsageChart()
     drawActivityChart()
   })
-  
+
   // 每30秒更新一次服务器状态
   statusInterval = setInterval(loadServerStatus, 30000)
+
+  // 监听窗口 resize 事件，防抖重绘 canvas 图表
+  window.addEventListener('resize', handleResize)
+  // 监听页面可见性变化，隐藏时暂停轮询以节省资源
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   if (statusInterval) {
     clearInterval(statusInterval)
+    statusInterval = null
   }
+  // 清理 resize 防抖定时器和事件监听器，防止内存泄漏
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer)
+    resizeDebounceTimer = null
+  }
+  window.removeEventListener('resize', handleResize)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 

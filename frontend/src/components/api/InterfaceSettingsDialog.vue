@@ -1,9 +1,9 @@
 <!-- 接口回调设置弹窗：配置Webhook URL/请求方式/自定义参数/返回配置/状态码 -->
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('update:visible', false)">
-    <div class="modal-content large-modal" @click.stop>
+    <div class="modal-content large-modal" role="dialog" aria-modal="true" aria-labelledby="interface-settings-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>{{ apiKeyName }} - 接口回调设置</h3>
+        <h3 id="interface-settings-dialog-title">{{ apiKeyName }} - 接口回调设置</h3>
         <div class="modal-header-right">
           <button type="button" class="btn-doc" @click.stop="toggleDocPanel" title="查看配置说明">
             <i class="fas fa-book"></i> 文档
@@ -373,6 +373,8 @@ const docPanelLayout = reactive({
   w: 440,
   h: 420
 })
+// 记录当前拖拽/缩放活动的清理函数，用于对话框关闭时主动移除残留监听器
+let activeDragCleanup = null
 
 /** 浮动面板样式计算 */
 const docPanelStyle = computed(() => {
@@ -433,6 +435,11 @@ watch(() => props.visible, (open) => {
     docPanelLayout.y = null
     docPanelLayout.w = 440
     docPanelLayout.h = 420
+    // 主动移除可能残留的拖拽/缩放 document 监听器，防止内存泄漏
+    if (activeDragCleanup) {
+      activeDragCleanup()
+      activeDragCleanup = null
+    }
   }
 })
 
@@ -526,9 +533,16 @@ function startDocPanelDrag(e) {
   const onUp = () => {
     document.removeEventListener('mousemove', onMove)
     document.removeEventListener('mouseup', onUp)
+    // 拖拽结束，清理活动记录
+    activeDragCleanup = null
   }
   document.addEventListener('mousemove', onMove)
   document.addEventListener('mouseup', onUp)
+  // 记录清理函数，供对话框关闭时主动移除残留监听器
+  activeDragCleanup = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+  }
   e.preventDefault()
 }
 
@@ -553,9 +567,16 @@ function startDocPanelResize(e) {
   const onUp = () => {
     document.removeEventListener('mousemove', onMove)
     document.removeEventListener('mouseup', onUp)
+    // 缩放结束，清理活动记录
+    activeDragCleanup = null
   }
   document.addEventListener('mousemove', onMove)
   document.addEventListener('mouseup', onUp)
+  // 记录清理函数，供对话框关闭时主动移除残留监听器
+  activeDragCleanup = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+  }
 }
 
 /* ========== 参数操作方法 ========== */

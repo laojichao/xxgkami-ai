@@ -1,9 +1,9 @@
 <!-- 导出数据弹窗：列选择/格式/范围/预览 -->
 <template>
   <div class="modal-overlay" @click="$emit('close')">
-    <div class="modal-content export-modal" @click.stop>
+    <div class="modal-content export-modal" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>导出卡密数据</h3>
+        <h3 id="export-dialog-title">导出卡密数据</h3>
         <button class="close-btn" @click="$emit('close')">&times;</button>
       </div>
       <div class="modal-body">

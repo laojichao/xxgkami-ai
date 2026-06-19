@@ -22,6 +22,8 @@ class JwtUtilTest {
         ReflectionTestUtils.setField(jwtUtil, "secret", "test-secret-key-must-be-at-least-32-bytes-long-for-hmac-sha256");
         ReflectionTestUtils.setField(jwtUtil, "accessTokenExpiration", 3600000L); // 1 小时
         ReflectionTestUtils.setField(jwtUtil, "refreshTokenExpiration", 604800000L); // 7 天
+        // 初始化缓存的签名密钥和 JwtParser（模拟 @PostConstruct 行为）
+        jwtUtil.init();
     }
 
     @Test
@@ -85,10 +87,13 @@ class JwtUtilTest {
     @Test
     @DisplayName("密钥长度不足时应抛出异常")
     void getSigningKey_TooShortSecret_ThrowsException() {
-        ReflectionTestUtils.setField(jwtUtil, "secret", "too-short");
+        JwtUtil shortKeyJwtUtil = new JwtUtil();
+        ReflectionTestUtils.setField(shortKeyJwtUtil, "secret", "too-short");
+        ReflectionTestUtils.setField(shortKeyJwtUtil, "accessTokenExpiration", 3600000L);
+        ReflectionTestUtils.setField(shortKeyJwtUtil, "refreshTokenExpiration", 604800000L);
 
-        assertThrows(IllegalStateException.class, () ->
-                jwtUtil.generateAccessToken("testuser", "user"));
+        // 密钥长度不足时，init() 应抛出 IllegalStateException
+        assertThrows(IllegalStateException.class, shortKeyJwtUtil::init);
     }
 
     @Test

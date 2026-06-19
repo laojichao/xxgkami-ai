@@ -185,7 +185,7 @@
               <option value="1">允许</option>
               <option value="0">不允许</option>
             </select>
-            <small class="form-hint" v-if="editingKey.allow_reverify == 0">关闭后，时间卡密激活一次即不可再次验证</small>
+            <small class="form-hint" v-if="Number(editingKey.allow_reverify) === 0">关闭后，时间卡密激活一次即不可再次验证</small>
             <small class="form-hint" v-else>开启后，时间卡密在有效期内可无限次验证</small>
           </div>
           <div class="form-group stack-time-stack-group">
@@ -283,7 +283,7 @@
               <option value="1">允许</option>
               <option value="0">不允许</option>
             </select>
-            <small class="form-hint" v-if="newKey.allow_reverify == 0">关闭后，时间卡密激活一次即不可再次验证</small>
+            <small class="form-hint" v-if="Number(newKey.allow_reverify) === 0">关闭后，时间卡密激活一次即不可再次验证</small>
             <small class="form-hint" v-else>开启后，时间卡密在有效期内可无限次验证</small>
           </div>
           <div class="form-group stack-time-stack-group" v-if="newKey.card_type === 'time'">
@@ -361,6 +361,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { cardApi } from '../services/api.js'
 import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
+import { obfuscateCardKey } from '../utils/cardKey.js'
+import { trapFocus } from '../utils/trapFocus.js'
 import BatchActions from './keys/BatchActions.vue'
 import KeyFilters from './keys/KeyFilters.vue'
 import KeyCard from './keys/KeyCard.vue'
@@ -422,19 +424,7 @@ const getColumnLabel = (key) => {
   return col ? col.label : key
 }
 
-/** 卡密混淆函数（与ApiManagePage保持一致） */
-const obfuscateCardKey = (rawKey) => {
-  if (!rawKey) return rawKey
-  try {
-    const encoded = encodeURIComponent(rawKey)
-    const reversed = encoded.split('').reverse().join('')
-    const base64 = btoa(reversed)
-    return base64.replace(/e/g, '*').replace(/U/g, '-')
-  } catch (e) {
-    logger.error('Obfuscation failed:', e)
-    return rawKey
-  }
-}
+/** 卡密混淆函数已抽取到 src/utils/cardKey.js，统一由工具模块导入使用 */
 
 /** 处理导出数据：根据选中列映射字段值（兼容 camelCase 和 snake_case） */
 const processExportData = (data) => {
@@ -778,26 +768,7 @@ const deleteKey = async (keyId) => {
   emit('delete-key', keyId)
 }
 
-/** 焦点陷阱：阻止 Tab 键将焦点移出模态框 */
-const trapFocus = (event, modalType) => {
-  if (event.key !== 'Tab') return
-  const modal = event.currentTarget
-  const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
-  if (focusable.length === 0) return
-  const first = focusable[0]
-  const last = focusable[focusable.length - 1]
-  if (event.shiftKey) {
-    if (document.activeElement === first) {
-      event.preventDefault()
-      last.focus()
-    }
-  } else {
-    if (document.activeElement === last) {
-      event.preventDefault()
-      first.focus()
-    }
-  }
-}
+/** 焦点陷阱函数已抽取到 src/utils/trapFocus.js，统一由工具模块导入使用 */
 
 const copyKey = async (cardKey) => {
   const success = await copyToClipboard(cardKey)

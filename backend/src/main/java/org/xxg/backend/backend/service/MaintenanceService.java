@@ -1,5 +1,7 @@
 package org.xxg.backend.backend.service;
 
+import org.jsoup.Jsoup;
+import org.jsoup.safety.Safelist;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.MaintenanceSettings;
@@ -28,43 +30,29 @@ public class MaintenanceService {
     @Transactional
     public MaintenanceSettings updateSettings(MaintenanceSettings settings) {
         settings.setId(1);
-        // Sanitize HTML fields to remove potentially dangerous content
+        // 使用 Jsoup Safelist 净化 HTML 字段，防止 XSS 攻击
         settings.setContent(sanitizeHtml(settings.getContent()));
         settings.setEmailTemplate(sanitizeHtml(settings.getEmailTemplate()));
-        // 邮件主题也需净化，防止注入
+        // 邮件主题为纯文本，移除 HTML 标签和特殊字符
         if (settings.getEmailSubject() != null) {
-            settings.setEmailSubject(settings.getEmailSubject().replaceAll("[<>\"']", "").trim());
+            settings.setEmailSubject(Jsoup.clean(settings.getEmailSubject(), Safelist.none()).trim());
         }
         return repository.save(settings);
     }
 
     /**
-     * HTML 净化器：移除危险元素，仅保留安全的格式化标签。
-     * <p>采用黑名单+白名单双重策略：</p>
-     * <ul>
-     *   <li>移除所有危险标签及其内容（script/style/iframe/object/embed/form/base/meta/link）</li>
-     *   <li>移除所有 on* 事件处理器（含无引号、大小写混合变体）</li>
-     *   <li>移除 javascript:/data:/vbscript: 协议 URL</li>
-     *   <li>移除 HTML 注释（可包含 IE 条件表达式）</li>
-     * </ul>
+     * HTML 净化器：使用 Jsoup Safelist（白名单）机制，仅保留安全的格式化标签和属性。
+     * <p>相比正则表达式，Jsoup 能更可靠地防止 XSS 绕过（如嵌套标签、编码绕过等）。</p>
+     * <p>允许的标签：基础格式化标签（a/b/i/strong/em/br/p/div/span/ul/ol/li/h1-h6/table 等），
+     * 允许的属性：href/src/style/title/alt 等，禁止 on* 事件处理器和 javascript: 协议。</p>
+     *
+     * @param html 待净化的 HTML 字符串
+     * @return 净化后的安全 HTML，输入为 null 时返回 null
      */
     private String sanitizeHtml(String html) {
         if (html == null) return null;
-        // 1. 移除危险标签及其内容
-        html = html.replaceAll("(?i)<(script|style|iframe|object|embed|applet|form|base|meta|link|svg|math)[^>]*>[\\s\\S]*?</\\1>", "");
-        // 2. 移除自闭合的危险标签
-        html = html.replaceAll("(?i)<(script|style|iframe|object|embed|applet|base|meta|link|svg|math)[^>]*/?>", "");
-        // 3. 移除 on* 事件处理器（支持无引号、单引号、双引号、有无空格等变体）
-        html = html.replaceAll("(?i)\\s*on\\w+\\s*=\\s*(\"[^\"]*\"|'[^']*'|\\S+)", "");
-        // 4. 移除 javascript:/data:/vbscript: 协议（在 href/src/action 等属性中）
-        html = html.replaceAll("(?i)(href|src|action|formaction|data|codebase)\\s*=\\s*\"\\s*(javascript|data|vbscript)[^\"]*\"", "");
-        html = html.replaceAll("(?i)(href|src|action|formaction|data|codebase)\\s*=\\s*'\\s*(javascript|data|vbscript)[^']*'", "");
-        html = html.replaceAll("(?i)(href|src|action|formaction|data|codebase)\\s*=\\s*(javascript|data|vbscript)\\S*", "");
-        // 5. 移除独立的 javascript:/data:/vbscript: URL
-        html = html.replaceAll("(?i)(javascript|data|vbscript)\\s*:", "");
-        // 6. 移除 HTML 注释
-        html = html.replaceAll("<!--[\\s\\S]*?-->", "");
-        return html;
+        // 使用 relaxed Safelist：允许较丰富的格式化标签，但禁止脚本和危险属性
+        return Jsoup.clean(html, Safelist.relaxed());
     }
 
     /**

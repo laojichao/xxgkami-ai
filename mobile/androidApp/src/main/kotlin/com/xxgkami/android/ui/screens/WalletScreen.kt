@@ -172,13 +172,13 @@ private fun WalletBalanceCard(wallet: Wallet?, onRecharge: ((Double) -> Unit)? =
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val amount = amountText.toDoubleOrNull()
-                    if (amount == null || amount <= 0) {
-                        amountError = "请输入有效金额"
-                    } else if (amount > 10000) {
-                        amountError = "单次充值不能超过10000元"
+                    // 使用 ViewModel 提供的统一校验函数，确保 UI 与 ViewModel 校验逻辑一致
+                    val validation = WalletViewModel.validateRechargeAmount(amountText)
+                    if (validation != null) {
+                        amountError = validation
                     } else {
-                        onRecharge?.invoke(amount)
+                        // 校验通过后传递原始字符串，由 ViewModel 再次校验并提交
+                        onRecharge?.invoke(amountText.trim().toDouble())
                         showRechargeDialog = false
                     }
                 }) { Text("确认充值") }

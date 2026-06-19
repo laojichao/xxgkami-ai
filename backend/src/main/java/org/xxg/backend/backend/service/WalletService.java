@@ -78,31 +78,34 @@ public class WalletService {
                 wallet.setBalance(BigDecimal.ZERO);
                 wallet = walletRepository.save(wallet);
             }
-            entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
-            wallet.setBalance(wallet.getBalance().add(amount));
-            wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
-            wallet.setUpdateTime(LocalDateTime.now());
-            walletRepository.save(wallet);
-
-            recordTransaction(userId, "recharge", amount, wallet.getBalance(), description, orderNo);
-            return wallet;
+            return doRecharge(wallet, userId, amount, description, orderNo);
         } catch (DataIntegrityViolationException e) {
             // 处理并发创建钱包的极端情况：另一个线程已创建了钱包，重新查询即可
             Wallet wallet = walletRepository.findByUserId(userId)
                     .orElseThrow(() -> new BusinessException("钱包创建失败"));
-            entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
-            wallet.setBalance(wallet.getBalance().add(amount));
-            wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
-            wallet.setUpdateTime(LocalDateTime.now());
-            walletRepository.save(wallet);
-
-            recordTransaction(userId, "recharge", amount, wallet.getBalance(), description, orderNo);
-            return wallet;
+            return doRecharge(wallet, userId, amount, description, orderNo);
         }
     }
 
     /**
+     * 执行充值核心逻辑（加锁、更新余额、记录流水）。
+     * 提取此方法消除 recharge 中的重复代码。
+     */
+    private Wallet doRecharge(Wallet wallet, Integer userId, BigDecimal amount,
+                              String description, String orderNo) {
+        entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
+        wallet.setBalance(wallet.getBalance().add(amount));
+        wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
+        wallet.setUpdateTime(LocalDateTime.now());
+        walletRepository.save(wallet);
+        recordTransaction(userId, "recharge", amount, wallet.getBalance(), description, orderNo);
+        return wallet;
+    }
+
+    /**
      * 用户钱包消费
+     * <p>注意：此方法为预留接口，当前业务流程中订单支付通过支付网关完成，
+     * 未直接调用此方法扣减钱包余额。未来支持钱包余额购买卡密时可启用。</p>
      * @param userId 用户ID
      * @param amount 消费金额
      * @param description 交易描述

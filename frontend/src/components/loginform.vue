@@ -884,10 +884,11 @@ const handleOAuthRegister = async () => {
          // Get User Info
          const userRes = await authApi.getUserInfo();
          if (userRes.success) {
+             // 仅保留非敏感信息到 localStorage，role 字段不存储，避免被篡改
+             // 权限判断统一通过后端 /auth/user-info 接口实时获取
              const minimalInfo = {
                id: userRes.data.id,
                username: userRes.data.username,
-               role: userRes.data.role,
                nickname: userRes.data.nickname
              }
              localStorage.setItem('userInfo', JSON.stringify(minimalInfo));
@@ -939,32 +940,34 @@ const handleLogin = async () => {
       
       if (resultData && resultData.userInfo) {
         // Token 已通过 httpOnly Cookie 设置，仅存储用户基本信息和登录状态
+        // role 字段不存储到 localStorage，避免被篡改，权限判断通过后端接口实时获取
         const minimalInfo = {
           id: resultData.userInfo.id,
           username: resultData.userInfo.username,
-          role: resultData.userInfo.role,
           nickname: resultData.userInfo.nickname
         }
         localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
         localStorage.setItem('isLoggedIn', 'true')
       }
-      
+
       emit('login-success', {
         userInfo: resultData.userInfo
       })
-      
-      setTimeout(() => {
+
+      // 将 setTimeout 纳入 pendingTimeouts 统一管理，防止组件卸载后内存泄漏
+      pendingTimeouts.push(setTimeout(() => {
         resetForm()
-      }, LOGIN_SUCCESS_RESET_DELAY_MS)
+      }, LOGIN_SUCCESS_RESET_DELAY_MS))
     } else {
       // Check for TOTP requirement
       if (response.message === 'TOTP_REQUIRED') {
           showTotpInput.value = true;
           // Clear password or keep it? Keep it.
           // Focus TOTP input
-          setTimeout(() => {
+          // 将 setTimeout 纳入 pendingTimeouts 统一管理，防止组件卸载后内存泄漏
+          pendingTimeouts.push(setTimeout(() => {
              if (totpInputRef.value) totpInputRef.value.focus();
-          }, TOTP_FOCUS_DELAY_MS);
+          }, TOTP_FOCUS_DELAY_MS));
           loading.value = false;
           return;
       }

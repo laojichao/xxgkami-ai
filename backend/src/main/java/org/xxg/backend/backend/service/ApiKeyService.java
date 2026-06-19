@@ -52,9 +52,11 @@ public class ApiKeyService {
         ApiKey apiKey = new ApiKey();
         apiKey.setKeyName(name);
         apiKey.setName(name);
-        // 使用 256 位 SecureRandom 生成 API Key（64 个十六进制字符），比 UUID 更安全
-        apiKey.setApiKeyValue(generateSecureKey(32));
-        apiKey.setKeyValue(generateSecureKey(32));
+        // 安全修复：统一使用一个密钥值，避免 apiKeyValue 与 keyValue 不一致导致认证混乱
+        // keyValue 字段长度更大（255），作为主存储；apiKeyValue 字段（32）存储其前缀用于快速查找
+        String unifiedKey = generateSecureKey(32);
+        apiKey.setKeyValue(unifiedKey);
+        apiKey.setApiKeyValue(unifiedKey.substring(0, 32));
         apiKey.setDescription(description);
         apiKey.setStatus(true);
         apiKey.setCreateTime(LocalDateTime.now());

@@ -21,7 +21,7 @@ public class WebhookTestController {
     /**
      * 测试Webhook回调
      * <p>POST /webhook-test</p>
-     * <p>权限：公开访问</p>
+     * <p>权限：管理员（SecurityConfig 中配置为 hasRole("ADMIN")）</p>
      * <p>接收Webhook请求并将请求体内容记录到日志，可用于验证第三方平台的Webhook推送是否正常。</p>
      * @param body 任意JSON格式的请求体
      * @return 固定返回成功响应

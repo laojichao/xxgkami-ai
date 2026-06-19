@@ -12,6 +12,7 @@ import org.xxg.backend.backend.mapper.WalletRepository;
 import org.xxg.backend.backend.mapper.WalletTransactionRepository;
 import org.xxg.backend.backend.mapper.SocialUserRepository;
 import org.xxg.backend.backend.mapper.VerificationCodeRepository;
+import org.xxg.backend.backend.filter.JwtRequestFilter;
 import org.xxg.backend.backend.util.PasswordUtil;
 
 import java.time.LocalDateTime;
@@ -30,19 +31,22 @@ public class UserService {
     private final SocialUserRepository socialUserRepository;
     private final VerificationCodeRepository verificationCodeRepository;
     private final PasswordUtil passwordUtil;
+    private final JwtRequestFilter jwtRequestFilter;
 
     public UserService(UserRepository userRepository,
                        WalletRepository walletRepository,
                        WalletTransactionRepository walletTransactionRepository,
                        SocialUserRepository socialUserRepository,
                        VerificationCodeRepository verificationCodeRepository,
-                       PasswordUtil passwordUtil) {
+                       PasswordUtil passwordUtil,
+                       JwtRequestFilter jwtRequestFilter) {
         this.userRepository = userRepository;
         this.walletRepository = walletRepository;
         this.walletTransactionRepository = walletTransactionRepository;
         this.socialUserRepository = socialUserRepository;
         this.verificationCodeRepository = verificationCodeRepository;
         this.passwordUtil = passwordUtil;
+        this.jwtRequestFilter = jwtRequestFilter;
     }
 
     /**
@@ -177,6 +181,8 @@ public class UserService {
         user.setStatus(!Boolean.TRUE.equals(user.getStatus()));
         user.setUpdateTime(LocalDateTime.now());
         userRepository.save(user);
+        // 安全修复：立即失效 JWT 缓存，使禁用立即生效（无需等待 30 秒缓存过期）
+        jwtRequestFilter.invalidateAccountCache(user.getUsername(), "user");
     }
 
     /**
@@ -186,6 +192,9 @@ public class UserService {
     @Transactional
     public void deleteUser(Integer userId) {
         User user = getUserById(userId);
+
+        // 安全修复：删除前先失效 JWT 缓存，使已签发的 Token 立即失效
+        jwtRequestFilter.invalidateAccountCache(user.getUsername(), "user");
 
         // Clean up related records
         walletRepository.deleteByUserId(userId);
@@ -261,9 +270,8 @@ public class UserService {
         if (username == null || username.isBlank()) {
             throw new BusinessException("用户名不能为空");
         }
-        if (password == null || password.length() < 8) {
-            throw new BusinessException("密码长度不能少于8位");
-        }
+        // 安全修复：调用完整的密码强度校验（大小写字母+数字+长度）
+        validatePasswordStrength(password);
         if (userRepository.existsByUsername(username)) {
             throw new BusinessException("用户名已存在");
         }

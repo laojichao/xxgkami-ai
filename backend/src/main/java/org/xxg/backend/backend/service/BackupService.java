@@ -80,9 +80,21 @@ public class BackupService {
         return filename;
     }
 
+    /**
+     * 从 JDBC URL 中提取数据库名。
+     * <p>使用正则表达式匹配，兼容 MySQL/PostgreSQL 等 URL 格式，
+     * 支持 jdbc:mysql://host:port/dbname?params 和 jdbc:mysql://host/dbname 等变体。</p>
+     * @param url JDBC 连接 URL
+     * @return 数据库名，解析失败返回空字符串
+     */
     private String extractDbName(String url) {
-        String[] parts = url.split("/");
-        String last = parts[parts.length - 1];
-        return last.contains("?") ? last.substring(0, last.indexOf("?")) : last;
+        if (url == null || url.isBlank()) return "";
+        // 安全修复：使用正则表达式提取数据库名，兼容各种 URL 格式
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("/([^/?]+)(?:\\?|$)").matcher(url);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return "";
     }
 }

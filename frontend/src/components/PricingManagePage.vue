@@ -74,7 +74,7 @@
 
     <!-- 编辑/添加 弹窗 -->
     <div v-if="showModal" class="modal-overlay">
-      <div class="modal-content">
+      <div class="modal-content" role="dialog" aria-modal="true" :aria-label="isEditing ? '编辑定价' : '添加定价'">
         <div class="modal-header">
           <h3>{{ isEditing ? '编辑定价' : '添加定价' }}</h3>
           <button class="close-btn" @click="closeModal">&times;</button>

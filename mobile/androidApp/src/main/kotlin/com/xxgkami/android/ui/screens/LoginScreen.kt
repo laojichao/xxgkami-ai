@@ -42,12 +42,16 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel = viewMod
             OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("密码") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(24.dp))
             Button(onClick = {
-                if (username.length > 50 || password.length > 128) return@Button
+                if (username.length > MAX_USERNAME_LENGTH || password.length > MAX_PASSWORD_LENGTH) return@Button
                 viewModel.login(username, password)
-            }, enabled = !isLoading && username.isNotBlank() && password.isNotBlank() && username.length <= 50 && password.length <= 128, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            }, enabled = !isLoading && username.isNotBlank() && password.isNotBlank() && username.length <= MAX_USERNAME_LENGTH && password.length <= MAX_PASSWORD_LENGTH, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp)) else Text("登录")
             }
             loginState?.let { if (!it.success) Text(it.message ?: "登录失败", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         }
     }
 }
+
+/** 登录页输入长度限制常量 */
+private const val MAX_USERNAME_LENGTH = 50
+private const val MAX_PASSWORD_LENGTH = 128

@@ -59,6 +59,13 @@ class AuthApi(private val client: ApiClient) {
 
     /**
      * 用户登出
+     *
+     * 注意：当前实现客户端传递 [id] 和 [role] 参数。
+     * 理想情况下应改为 POST /auth/logout 无 body，由服务端从 Token 提取用户信息，
+     * 避免客户端传递敏感参数。此修改需与后端协调，当前保留兼容。
+     *
+     * TODO: 待后端支持无 body 登出接口后，移除 [id] 和 [role] 参数
+     *
      * @param id 用户ID
      * @param role 用户角色
      */

@@ -495,7 +495,8 @@ const settings = reactive({
   aggregatedLogin: false,
   
   // 聚合登录设置
-  oauth_url: 'https://baoxian18.com',
+  // oauth_url 默认值置空，由管理员自行配置，避免硬编码第三方域名
+  oauth_url: '',
   oauth_appid: '',
   oauth_appkey: '',
   oauth_callback_domain: '',

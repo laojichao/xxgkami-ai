@@ -297,6 +297,12 @@ public class AuthService {
             if (admin.getRefreshToken() == null || !admin.getRefreshToken().equals(hashedRefreshToken)) {
                 throw new BusinessException("Refresh token 已失效，请重新登录");
             }
+            // 安全修复：刷新 token 时校验账号当前状态，防止被锁定账号继续刷新 token
+            if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= 5
+                    && admin.getLockTime() != null
+                    && admin.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
+                throw new BusinessException("账号已被锁定，请稍后再试");
+            }
 
             String newAccessToken = jwtUtil.generateAccessToken(username, role);
             String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
@@ -319,6 +325,15 @@ public class AuthService {
                     .orElseThrow(() -> new BusinessException("Refresh token 已失效，请重新登录"));
             if (user.getRefreshToken() == null || !user.getRefreshToken().equals(hashedRefreshToken)) {
                 throw new BusinessException("Refresh token 已失效，请重新登录");
+            }
+            // 安全修复：刷新 token 时校验账号当前状态，防止被禁用/锁定账号继续刷新 token
+            if (!Boolean.TRUE.equals(user.getStatus())) {
+                throw new BusinessException("账号已被禁用，请联系管理员");
+            }
+            if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= 5
+                    && user.getLockTime() != null
+                    && user.getLockTime().plusMinutes(15).isAfter(LocalDateTime.now())) {
+                throw new BusinessException("账号已被锁定，请稍后再试");
             }
 
             String newAccessToken = jwtUtil.generateAccessToken(username, role);

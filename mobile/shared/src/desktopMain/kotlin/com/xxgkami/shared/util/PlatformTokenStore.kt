@@ -52,7 +52,14 @@ actual class PlatformTokenStore actual constructor() {
     actual fun saveTokens(accessToken: String, refreshToken: String) {
         val data = Json.encodeToString(TokenPair(accessToken, refreshToken))
         val encrypted = encrypt(data)
-        tokenFile.writeText(encrypted)
+        // 原子写入：先写入临时文件，再重命名为目标文件，避免写入过程中崩溃导致文件损坏
+        val tmpFile = File(configDir, "tokens.enc.tmp")
+        tmpFile.writeText(encrypted)
+        if (!tmpFile.renameTo(tokenFile)) {
+            // 某些平台 renameTo 跨文件系统会失败，回退到直接写入
+            tokenFile.writeText(encrypted)
+            tmpFile.delete()
+        }
         ApiProvider.setTokens(accessToken, refreshToken)
     }
 
@@ -68,6 +75,8 @@ actual class PlatformTokenStore actual constructor() {
 
     actual fun clearTokens() {
         tokenFile.delete()
+        // 同时删除密钥文件，避免遗留密钥导致后续解密失败或密钥泄露
+        keyFile.delete()
         ApiProvider.clearTokens()
     }
 
@@ -93,7 +102,6 @@ actual class PlatformTokenStore actual constructor() {
             if (tokens != null) Pair(tokens.access, tokens.refresh) else null
         } catch (e: Exception) {
             // 解密失败（文件损坏、密钥变更等），清除无效文件
-            println("[PlatformTokenStore] Failed to decrypt tokens: ${e.message}")
             null
         }
     }
@@ -112,7 +120,6 @@ actual class PlatformTokenStore actual constructor() {
                 Base64.getDecoder().decode(keyFile.readText().trim())
             } catch (e: Exception) {
                 // 密钥文件损坏，重新生成
-                println("[PlatformTokenStore] Key file corrupted, regenerating: ${e.message}")
                 generateAndSaveKey()
             }
         }
@@ -120,7 +127,10 @@ actual class PlatformTokenStore actual constructor() {
     }
 
     /**
-     * 生成新的 AES-256 密钥并保存到文件
+     * 生成新的 AES-256 密钥并保存到文件。
+     *
+     * 权限设置时序说明：先创建临时文件并立即设置严格权限，再重命名为最终路径，
+     * 避免密钥文件在创建到设置权限的时间窗口内被其他用户读取。
      *
      * @return 32 字节 AES 密钥
      */
@@ -129,11 +139,30 @@ actual class PlatformTokenStore actual constructor() {
         secureRandom.nextBytes(key)
         val encoded = Base64.getEncoder().encodeToString(key)
         val tmpFile = File(configDir, ".key.tmp")
+        // 先写入临时文件
         tmpFile.writeText(encoded)
-        tmpFile.renameTo(keyFile)
-        // Set permissions after rename
+        // 立即对临时文件设置严格权限，再重命名为最终路径
+        // 这样最终文件从不存在到存在都保持严格权限，避免权限窗口期
+        applyKeyFilePermissions(tmpFile.toPath())
+        if (!tmpFile.renameTo(keyFile)) {
+            // 某些平台 renameTo 跨文件系统会失败，回退到直接写入并设置权限
+            keyFile.writeText(encoded)
+            applyKeyFilePermissions(keyFile.toPath())
+            tmpFile.delete()
+        }
+        return key
+    }
+
+    /**
+     * 对密钥文件路径设置严格的访问权限。
+     *
+     * - POSIX 系统（Linux/Mac）：设置为 rw-------（仅所有者可读写）
+     * - Windows 系统：通过 ACL 限制为仅当前用户可访问
+     *
+     * @param path 密钥文件路径
+     */
+    private fun applyKeyFilePermissions(path: java.nio.file.Path) {
         try {
-            val path = keyFile.toPath()
             if (File.separator != "\\") { // POSIX (Linux/Mac)
                 Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-------"))
             } else { // Windows - restrict ACL to current user only
@@ -153,14 +182,13 @@ actual class PlatformTokenStore actual constructor() {
                             .build()
                         aclView.acl = listOf(userEntry)
                     }
-                } catch (e: Exception) {
-                    println("[PlatformTokenStore] Warning: Could not set Windows file permissions: ${e.message}")
+                } catch (_: Exception) {
+                    // Windows ACL 设置失败时静默忽略，文件仍受用户目录权限保护
                 }
             }
-        } catch (e: Exception) {
-            println("[PlatformTokenStore] Warning: Could not set key file permissions: ${e.message}")
+        } catch (_: Exception) {
+            // 权限设置失败时静默忽略，文件仍受用户目录权限保护
         }
-        return key
     }
 
     /**

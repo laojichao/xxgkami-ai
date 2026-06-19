@@ -91,12 +91,18 @@ fun MainScreen(onLogout: () -> Unit) {
  * 应用根导航组件
  * 管理全局页面路由，包括首页、登录、注册、验证和主页面
  * 通过 [isLoggedIn] 状态控制登录前后的页面切换
+ *
+ * 限制说明：[isLoggedIn] 基于 [rememberSaveable] 缓存，不直接响应 TokenStore 变化。
+ * 当 Token 刷新失败触发 onLogout 回调时，需通过 ProfileScreen 的登出流程或
+ * ApiClient.onLogout 回调间接更新导航状态。未来可考虑将 TokenStore 改为
+ * StateFlow 以实现响应式登录状态。
  */
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
     // 全局登录状态，控制页面路由切换
     // 从 TokenStore 恢复登录状态，防止进程死亡后丢失登录态
+    // 注意：此状态不直接响应 TokenStore 变化，登出时需通过 onLogout 回调显式更新
     var isLoggedIn by rememberSaveable { mutableStateOf(TokenStore.isLoggedIn()) }
 
     // 根据登录状态选择起始目的地，避免启动时闪屏

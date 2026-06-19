@@ -2,6 +2,7 @@ package org.xxg.backend.backend.util;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -31,18 +32,33 @@ public class JwtUtil {
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
+    /** 缓存的签名密钥，启动时初始化一次 */
+    private SecretKey signingKey;
+
+    /** 缓存的 JwtParser 实例，启动时初始化一次，避免每次解析都重新创建 */
+    private JwtParser jwtParser;
+
     /**
-     * 根据配置的密钥字符串生成HMAC-SHA签名密钥。
-     * HMAC-SHA256 要求密钥至少 256 位（32 字节），过短的密钥会导致安全风险。
+     * 初始化签名密钥和 JwtParser，避免每次请求都重新创建。
+     * 安全修复：使用 @PostConstruct 缓存 JwtParser 实例，提升性能。
      */
-    private SecretKey getSigningKey() {
+    @PostConstruct
+    public void init() {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < 32) {
             throw new IllegalStateException(
                     "JWT secret 长度不足：HMAC-SHA256 要求至少 32 字节，当前 " + keyBytes.length + " 字节。" +
                     "请在环境变量 JWT_SECRET 中设置足够长的密钥。");
         }
-        return Keys.hmacShaKeyFor(keyBytes);
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        this.jwtParser = Jwts.parser().verifyWith(signingKey).build();
+    }
+
+    /**
+     * 获取签名密钥（启动时已缓存）。
+     */
+    private SecretKey getSigningKey() {
+        return signingKey;
     }
 
     /**
@@ -157,14 +173,11 @@ public class JwtUtil {
 
     /**
      * 解析令牌并提取所有声明
+     * <p>使用启动时缓存的 JwtParser 实例，避免每次解析都重新创建。</p>
      * @param token JWT令牌字符串
      * @return Claims对象，包含所有声明信息
      */
     private Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+        return jwtParser.parseSignedClaims(token).getPayload();
     }
 }

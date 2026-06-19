@@ -128,7 +128,16 @@ public class SettingsController {
 
     @PostMapping("/save")
     public ResponseEntity<ApiResponse<Void>> saveSettings(@RequestBody Map<String, String> settings) {
-        for (String key : settings.keySet()) {
+        // 安全修复：限制配置键和值的长度，防止超大请求导致内存或数据库问题
+        for (Map.Entry<String, String> entry : settings.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key == null || key.length() > 100) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("配置键长度不能超过100个字符"));
+            }
+            if (value != null && value.length() > 10000) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("配置值长度不能超过10000个字符: " + key));
+            }
             if (BLOCKED_KEYS.contains(key.toLowerCase())) {
                 return ResponseEntity.ok(ApiResponse.error("不允许修改敏感配置项: " + key));
             }

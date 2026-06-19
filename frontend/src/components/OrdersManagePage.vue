@@ -237,23 +237,23 @@
       <!-- 分页 -->
       <div class="pagination" v-if="orders.length > 0">
         <div class="pagination-info">
-          显示 {{ (pagination.page - 1) * pagination.pageSize + 1 }} - 
-          {{ Math.min(pagination.page * pagination.pageSize, pagination.total) }} 
-          条，共 {{ pagination.total }} 条
+          显示 {{ (pagination.page - 1) * pagination.pageSize + 1 }} -
+          {{ Math.min(pagination.page * pagination.pageSize, pagination.total) }}
+          条，共 {{ pagination.total }} 条<template v-if="!pagination.hasAccurateTotal">（当前页）</template>
         </div>
         <div class="pagination-controls">
-          <button 
-            class="btn-secondary" 
+          <button
+            class="btn-secondary"
             @click="handleCurrentChange(pagination.page - 1)"
-            :disabled="pagination.page <= 1"
+            :disabled="pagination.page <= 1 || !pagination.hasAccurateTotal"
           >
             <i class="fas fa-chevron-left"></i>
             上一页
           </button>
-          
-          <div class="page-numbers">
-            <button 
-              v-for="page in getPageNumbers()" 
+
+          <div class="page-numbers" v-if="pagination.hasAccurateTotal">
+            <button
+              v-for="page in getPageNumbers()"
               :key="page"
               class="page-btn"
               :class="{ active: page === pagination.page }"
@@ -262,11 +262,11 @@
               {{ page }}
             </button>
           </div>
-          
-          <button 
-            class="btn-secondary" 
+
+          <button
+            class="btn-secondary"
             @click="handleCurrentChange(pagination.page + 1)"
-            :disabled="pagination.page >= Math.ceil(pagination.total / pagination.pageSize)"
+            :disabled="!pagination.hasAccurateTotal || pagination.page >= Math.ceil(pagination.total / pagination.pageSize)"
           >
             下一页
             <i class="fas fa-chevron-right"></i>
@@ -431,6 +431,7 @@ import { orderApi } from '../services/api'
 import { copyToClipboard } from '../utils/clipboard.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import logger from '../utils/logger'
+import { trapFocus } from '../utils/trapFocus.js'
 
 // 响应式数据
 const loading = ref(false)
@@ -456,7 +457,9 @@ const searchParams = reactive({
 const pagination = reactive({
   page: 1,
   pageSize: 10,
-  total: 0
+  total: 0,
+  // 标记总数是否来自后端 totalElements，false 表示仅知当前页条数
+  hasAccurateTotal: true
 })
 
 // 状态更新表单
@@ -516,7 +519,15 @@ const getOrders = async () => {
       }))
 
       // 从后端 Page 对象获取总条数
-      pagination.total = response.data.totalElements || orders.value.length
+      // 当 totalElements 不存在时，不能使用当前页长度冒充总数
+      if (response.data && typeof response.data.totalElements !== 'undefined') {
+        pagination.total = response.data.totalElements
+        pagination.hasAccurateTotal = true
+      } else {
+        // 后端未返回 totalElements，仅记录当前页条数并标记为不精确
+        pagination.total = orders.value.length
+        pagination.hasAccurateTotal = false
+      }
     }
   } catch (error) {
     logger.error(error)
@@ -690,26 +701,7 @@ const showToast = (message, type = 'info') => {
 
 // 组件挂载时获取数据
 
-/** 焦点陷阱：阻止 Tab 键将焦点移出模态框 */
-const trapFocus = (event) => {
-  if (event.key !== 'Tab') return
-  const modal = event.currentTarget
-  const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
-  if (focusable.length === 0) return
-  const first = focusable[0]
-  const last = focusable[focusable.length - 1]
-  if (event.shiftKey) {
-    if (document.activeElement === first) {
-      event.preventDefault()
-      last.focus()
-    }
-  } else {
-    if (document.activeElement === last) {
-      event.preventDefault()
-      first.focus()
-    }
-  }
-}
+/** 焦点陷阱函数已抽取到 src/utils/trapFocus.js，统一由工具模块导入使用 */
 
 onMounted(() => {
   getOrders()

@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
+import logger from './utils/logger'
 
 // Element Plus
 import ElementPlus from 'element-plus'
@@ -9,8 +10,9 @@ import registerIcons from './utils/icons'
 
 const app = createApp(App)
 
+// 全局错误处理：使用统一 logger 输出，生产环境静默
 app.config.errorHandler = (err, instance, info) => {
-  console.error('[Global Error]', err, info)
+  logger.error('[Global Error]', err, info)
 }
 
 // 使用Element Plus

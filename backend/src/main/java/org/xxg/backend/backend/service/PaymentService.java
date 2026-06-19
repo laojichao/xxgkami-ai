@@ -79,6 +79,10 @@ public class PaymentService {
     /**
      * 处理易支付异步回调通知
      * 验证签名并完成订单状态更新，包含幂等性保护和卡密生成
+     * <p><b>安全提示：</b>支付回调接口应在 nginx/反向代理层配置 IP 白名单，
+     * 仅允许支付网关的 IP 访问 /payment/notify，防止伪造回调。
+     * 可选：通过环境变量 PAYMENT_CALLBACK_IP_WHITELIST 配置允许的 IP 列表（逗号分隔），
+     * 在代码中通过 request.getRemoteAddr() 校验。</p>
      * @param params 回调参数
      * @return "success"表示处理成功，"fail"表示处理失败
      */

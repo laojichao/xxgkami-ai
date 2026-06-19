@@ -1,9 +1,9 @@
 <!-- 核销接口多语言代码示例弹窗：支持语言切换/一键复制/语法高亮 -->
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('update:visible', false)">
-    <div class="modal-content large-modal code-examples-modal" @click.stop>
+    <div class="modal-content large-modal code-examples-modal" role="dialog" aria-modal="true" aria-labelledby="code-examples-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>核销接口代码实例（use_card）</h3>
+        <h3 id="code-examples-dialog-title">核销接口代码实例（use_card）</h3>
         <button type="button" class="close-btn" @click="$emit('update:visible', false)">
           <i class="fas fa-times"></i>
         </button>

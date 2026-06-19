@@ -1,9 +1,9 @@
 <!-- API专属卡密管理弹窗：生成/查看/删除卡密 -->
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('update:visible', false)">
-    <div class="modal-content large-modal" @click.stop>
+    <div class="modal-content large-modal" role="dialog" aria-modal="true" aria-labelledby="card-codes-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>{{ apiKeyName }} - 专属卡密管理</h3>
+        <h3 id="card-codes-dialog-title">{{ apiKeyName }} - 专属卡密管理</h3>
         <button class="close-btn" @click="$emit('update:visible', false)">
           <i class="fas fa-times"></i>
         </button>

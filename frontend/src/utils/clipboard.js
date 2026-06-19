@@ -3,6 +3,8 @@
  * @param {string} text - The text to copy.
  * @returns {Promise<boolean>} - Resolves to true if successful, false otherwise.
  */
+import logger from './logger'
+
 export async function copyToClipboard(text) {
   if (!text) return false;
 
@@ -12,7 +14,7 @@ export async function copyToClipboard(text) {
       await navigator.clipboard.writeText(text);
       return true;
     } catch (err) {
-      console.warn('Clipboard API failed, trying fallback...', err);
+      logger.warn('Clipboard API failed, trying fallback...', err);
     }
   }
 
@@ -35,7 +37,7 @@ export async function copyToClipboard(text) {
     const successful = document.execCommand('copy');
     return successful;
   } catch (err) {
-    console.error('Fallback copy failed:', err);
+    logger.error('Fallback copy failed:', err);
     return false;
   } finally {
     // 确保 textarea 无论成功与否都从 DOM 中移除，防止内存泄漏

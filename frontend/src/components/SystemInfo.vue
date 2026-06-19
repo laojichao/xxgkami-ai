@@ -25,7 +25,7 @@
           <el-descriptions-item label="发布时间">2026-05-06</el-descriptions-item>
           <el-descriptions-item label="开发语言">Vue 3 + Spring Boot 3</el-descriptions-item>
           <el-descriptions-item label="官方网站">
-            <a href="https://www.xxgkami.com" target="_blank" class="link">www.xxgkami.com</a>
+            <a href="https://www.xxgkami.com" target="_blank" rel="noopener noreferrer" class="link">www.xxgkami.com</a>
           </el-descriptions-item>
         </el-descriptions>
       </el-card>
@@ -40,16 +40,16 @@
           <el-descriptions-item label="作者">小小怪</el-descriptions-item>
           <el-descriptions-item label="联系邮箱">xxgyyds@vip.qq.com</el-descriptions-item>
           <el-descriptions-item label="QQ群组">
-            <a href="https://qm.qq.com/cgi-bin/qm/qr?k=5q7h3tdOC-fXyszk3kGCJxIImDW_hVBP&jump_from=webapi&authKey=n7o2H5vcTCkRNpnTbOSU9BxI4jP3WKv9Qytmfk2I2Y+zP28lb614xqvd3+qETV8x" target="_blank" class="link">1050160397 (点击加入)</a>
+            <a href="https://qm.qq.com/cgi-bin/qm/qr?k=5q7h3tdOC-fXyszk3kGCJxIImDW_hVBP&jump_from=webapi&authKey=n7o2H5vcTCkRNpnTbOSU9BxI4jP3WKv9Qytmfk2I2Y+zP28lb614xqvd3+qETV8x" target="_blank" rel="noopener noreferrer" class="link">1050160397 (点击加入)</a>
           </el-descriptions-item>
           <el-descriptions-item label="Gitee">
-            <a href="https://gitee.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" class="link">https://gitee.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
+            <a href="https://gitee.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" rel="noopener noreferrer" class="link">https://gitee.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
           </el-descriptions-item>
           <el-descriptions-item label="GitHub">
-            <a href="https://github.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" class="link">https://github.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
+            <a href="https://github.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" rel="noopener noreferrer" class="link">https://github.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
           </el-descriptions-item>
           <el-descriptions-item label="AtomGit">
-            <a href="https://atomgit.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" class="link">https://atomgit.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
+            <a href="https://atomgit.com/xiaoxiaoguai-yyds/xxgkami-pro" target="_blank" rel="noopener noreferrer" class="link">https://atomgit.com/xiaoxiaoguai-yyds/xxgkami-pro</a>
           </el-descriptions-item>
         </el-descriptions>
       </el-card>
@@ -76,7 +76,7 @@
         <div class="sponsor-content">
           <img src="../assets/aifadian.svg" alt="爱发电" class="sponsor-logo">
           <p>如果觉得本项目对您有帮助，欢迎赞助支持作者持续开发！</p>
-          <a href="https://ifdian.net/a/xxgyyds" target="_blank" class="sponsor-btn">
+          <a href="https://ifdian.net/a/xxgyyds" target="_blank" rel="noopener noreferrer" class="sponsor-btn">
             <el-button type="primary" size="large" color="#946ce6" :dark="false">
               前往爱发电赞助
             </el-button>

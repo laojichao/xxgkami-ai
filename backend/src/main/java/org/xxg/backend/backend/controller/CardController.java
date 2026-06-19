@@ -52,8 +52,16 @@ public class CardController {
             return ResponseEntity.badRequest().body(error);
         }
         // client sends "device_id", mapped to machineCode for binding
-        String machineCode = body.getOrDefault("device_id", body.getOrDefault("machine_code", "Unknown"));
-        if (machineCode != null && machineCode.length() > 255) {
+        String machineCode = body.getOrDefault("device_id", body.get("machine_code"));
+        // 安全修复：未提供机器码时拒绝验证，防止卡密被共享
+        if (machineCode == null || machineCode.isBlank()) {
+            Map<String, Object> error = new java.util.HashMap<>();
+            error.put("success", false);
+            error.put("message", "机器码不能为空");
+            error.put("statusCode", 400);
+            return ResponseEntity.badRequest().body(error);
+        }
+        if (machineCode.length() > 255) {
             Map<String, Object> error = new java.util.HashMap<>();
             error.put("success", false);
             error.put("message", "机器码长度不能超过255个字符");
@@ -76,13 +84,11 @@ public class CardController {
     @PostMapping("/generate")
     public ResponseEntity<ApiResponse<List<Card>>> generateCard(@Valid @RequestBody GenerateCardRequest request) throws Exception {
         int count = request.getCount() != null ? request.getCount() : 1;
-        List<Card> cards = new java.util.ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            Card card = cardService.generateCard(request.getCardType(), request.getDuration(), request.getTotalCount(),
-                    request.getCreatorType(), request.getCreatorId(), request.getCreatorName(),
-                    request.getVerifyMethod(), request.getDays(), request.getApiKeyId());
-            cards.add(card);
-        }
+        // 安全修复：使用批量生成减少数据库往返，避免循环内逐个调用 generateCard
+        List<Card> cards = cardService.generateCardsBatch(
+                request.getCardType(), request.getDuration(), request.getTotalCount(),
+                request.getCreatorType(), request.getCreatorId(), request.getCreatorName(),
+                request.getVerifyMethod(), request.getDays(), request.getApiKeyId(), count);
         return ResponseEntity.ok(ApiResponse.ok("卡密生成成功，共 " + count + " 张", cards));
     }
 
@@ -90,10 +96,8 @@ public class CardController {
     public ResponseEntity<ApiResponse<Page<CardResponse>>> adminAllCards(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "100") int size) {
-        size = Math.min(size, 500); // Cap result size to prevent OOM
-        Page<Card> cardPage = cardService.getCardsByCreator("admin", null, PageRequest.of(page, size));
-        Page<CardResponse> responsePage = cardPage.map(CardResponse::fromEntity);
-        return ResponseEntity.ok(ApiResponse.ok(responsePage));
+        // 安全修复：合并 /admin/all 和 /admin 功能，/admin/all 保留兼容但统一调用 getAdminCards 逻辑
+        return getAdminCards(page, Math.min(size, 500));
     }
 
     @GetMapping("/admin")

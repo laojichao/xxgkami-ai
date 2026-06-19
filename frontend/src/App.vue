@@ -43,10 +43,11 @@ const checkLoginStatus = async () => {
           // Cookie 有效，使用后端返回的最新用户信息
           isLoggedIn.value = true;
           userInfo.value = res.data;
+          // 仅保留非敏感信息到 localStorage，role 字段不存储，避免被篡改
+          // 权限判断统一通过后端 /auth/user-info 接口实时获取
           const minimalInfo = {
             id: res.data.id,
             username: res.data.username,
-            role: res.data.role,
             nickname: res.data.nickname
           }
           localStorage.setItem('userInfo', JSON.stringify(minimalInfo));
@@ -109,10 +110,11 @@ const handleLoginSuccess = (data) => {
   userInfo.value = data.userInfo
   // 持久化登录状态到 localStorage
   localStorage.setItem('isLoggedIn', 'true')
+  // 仅保留非敏感信息到 localStorage，role 字段不存储，避免被篡改
+  // 权限判断统一通过后端 /auth/user-info 接口实时获取
   const minimalInfo = {
     id: data.userInfo.id,
     username: data.userInfo.username,
-    role: data.userInfo.role,
     nickname: data.userInfo.nickname
   }
   localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
@@ -121,6 +123,13 @@ const handleLoginSuccess = (data) => {
     currentPage.value = 'dashboard'
   } else {
     currentPage.value = 'user'
+  }
+}
+
+// 处理 TOTP 状态更新（由子组件通过 emit 通知，避免直接修改 props）
+const handleTotpEnabledUpdate = (enabled) => {
+  if (userInfo.value) {
+    userInfo.value = { ...userInfo.value, totpEnabled: enabled }
   }
 }
 
@@ -190,11 +199,16 @@ const handleOAuthCallback = async () => {
 
   // If still not found, check if it's in the path (some routers might do this)
 
+  // 安全措施：获取到 token 后立即清除 URL 参数，避免通过浏览器历史、Referer、日志泄露
+  // 注意：必须在任何网络请求之前执行，防止在等待响应期间 token 暴露在 URL 中
+  if (token && refreshToken) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   if (token && refreshToken) {
     if (isBinding) {
         ElMessage.warning('该社交账号已被其他用户绑定！');
         sessionStorage.removeItem('binding_mode');
-        window.history.replaceState({}, document.title, window.location.pathname);
         return true;
     }
 
@@ -218,15 +232,13 @@ const handleOAuthCallback = async () => {
         userInfo.value = res.data
         isLoggedIn.value = true
         localStorage.setItem('isLoggedIn', 'true')
+        // 仅保留非敏感信息到 localStorage，role 字段不存储，避免被篡改
         const minimalInfo = {
           id: res.data.id,
           username: res.data.username,
-          role: res.data.role,
           nickname: res.data.nickname
         }
         localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
         currentPage.value = 'user'
       } else {
           logger.error('OAuth login failed:', res);
@@ -386,6 +398,7 @@ onUnmounted(() => {
       v-else-if="currentPage === 'dashboard'"
       :user-info="userInfo"
       @logout="handleLogout"
+      @update:totp-enabled="handleTotpEnabledUpdate"
     />
 
     <!-- 普通用户界面 -->

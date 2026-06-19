@@ -61,6 +61,7 @@ actual class PlatformTokenStore actual constructor() {
      *
      * @param key 条目名称（如 "access_token"）
      * @param value 要存储的字符串值
+     * @throws IllegalStateException 当 Keychain 写入失败时抛出
      */
     private fun saveToKeychain(key: String, value: String) {
         // 先删除已有的同名条目，避免 SecItemAdd 返回 errSecDuplicateItem
@@ -79,8 +80,8 @@ actual class PlatformTokenStore actual constructor() {
 
         val status: OSStatus = SecItemAdd(query as NSDictionary, null)
         if (status != errSecSuccess) {
-            // TODO: Replace with a proper logging framework; remove println in production builds
-            println("[PlatformTokenStore] Failed to save keychain item '$key', status: $status")
+            // Keychain 写入失败时抛出异常，避免静默失败导致数据丢失
+            throw IllegalStateException("Failed to save keychain item '$key', status: $status")
         }
     }
 
@@ -118,25 +119,27 @@ actual class PlatformTokenStore actual constructor() {
                 }
 
                 val cfData = resultPtr.value!!
+                // 使用 try-finally 确保 CFRelease 一定被调用，避免 CoreFoundation 对象泄漏
+                try {
+                    // 使用 CFData API 提取字节，避免 CF->NS 桥接问题
+                    val bytePtr = CFDataGetBytePtr(cfData)
+                    val length = CFDataGetLength(cfData)
+                    if (bytePtr == null || length <= 0L) {
+                        return null
+                    }
 
-                // 使用 CFData API 提取字节，避免 CF->NS 桥接问题
-                val bytePtr = CFDataGetBytePtr(cfData)
-                val length = CFDataGetLength(cfData)
-                if (bytePtr == null || length <= 0L) {
+                    // 从 C 指针读取字节数组
+                    val bytes = bytePtr.readBytes(length.toInt())
+
+                    // 将字节数组转换为 UTF-8 字符串
+                    String(bytes, Charsets.UTF_8)
+                } finally {
+                    // 无论读取成功与否都释放 CFData，避免内存泄漏
                     CFRelease(cfData)
-                    return null
                 }
-
-                // 从 C 指针读取字节数组
-                val bytes = bytePtr.readBytes(length.toInt())
-                CFRelease(cfData)
-
-                // 将字节数组转换为 UTF-8 字符串
-                String(bytes, Charsets.UTF_8)
             }
-        } catch (e: Exception) {
-            // TODO: Replace with a proper logging framework; remove println in production builds
-            println("[PlatformTokenStore] Failed to read keychain item '$key': ${e.message}")
+        } catch (_: Exception) {
+            // Keychain 读取失败时静默返回 null，调用方会据此判断未登录状态
             null
         }
     }

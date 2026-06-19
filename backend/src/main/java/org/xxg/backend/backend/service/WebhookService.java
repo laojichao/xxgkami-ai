@@ -74,7 +74,10 @@ public class WebhookService {
             if (url == null || url.isEmpty()) return;
 
             // SSRF protection: validate URL is not internal/loopback
-            if (isInternalUrl(url)) {
+            // 安全修复：解析 IP 后使用解析到的 IP 直接发起请求，设置 Host 头，防止 DNS rebinding
+            URI originalUri = URI.create(url);
+            String resolvedIp = resolveAndValidateHost(originalUri);
+            if (resolvedIp == null) {
                 log.warn("[WEBHOOK] Blocked internal URL: {}", url);
                 return;
             }
@@ -94,9 +97,17 @@ public class WebhookService {
 
             String jsonBody = objectMapper.writeValueAsString(payload);
 
+            // 构建使用解析后 IP 的 URI，并保留原始端口和路径
+            int port = originalUri.getPort();
+            String scheme = originalUri.getScheme();
+            String path = originalUri.getRawPath() + (originalUri.getRawQuery() != null ? "?" + originalUri.getRawQuery() : "");
+            String ipUriStr = scheme + "://" + resolvedIp + (port != -1 ? ":" + port : "") + path;
+
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json");
+                    .uri(URI.create(ipUriStr))
+                    .header("Content-Type", "application/json")
+                    // 设置 Host 头为原始主机名，保证服务端虚拟主机路由正常
+                    .header("Host", originalUri.getHost());
 
             if ("POST".equalsIgnoreCase(method)) {
                 requestBuilder.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
@@ -119,55 +130,55 @@ public class WebhookService {
     }
 
     /**
-     * 检测 URL 是否指向内网/回环地址（SSRF 防护）。
-     * <p>检查项包括：回环地址、站点本地地址、链路本地地址、
-     * 常见内网网段（10.x、172.16-31.x、192.168.x、169.254.x）。</p>
+     * 解析 URL 主机并校验是否为内网/回环地址，返回解析后的 IP 字符串。
+     * <p>安全修复：解析 IP 后返回 IP 字符串供调用方直接使用，避免二次 DNS 解析导致 DNS rebinding 攻击。
+     * 调用方应使用返回的 IP 构建请求 URI，并设置 Host 头为原始主机名。</p>
      *
-     * @param url 待检测的 URL
-     * @return true 表示为内网地址，应阻止请求
+     * @param uri 待校验的 URI
+     * @return 解析后的 IP 字符串（内网地址返回 null 表示阻止）
      */
-    private boolean isInternalUrl(String url) {
+    private String resolveAndValidateHost(URI uri) {
         try {
-            URI uri = URI.create(url);
             // 仅允许 http/https 协议，阻止 file:/gopher:/ftp: 等协议的 SSRF
             String scheme = uri.getScheme();
             if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
-                return true;
+                return null;
             }
             String host = uri.getHost();
-            if (host == null) return true;
+            if (host == null) return null;
 
             // 阻止明确的内部主机名
             String lowerHost = host.toLowerCase();
             if (lowerHost.equals("localhost") || lowerHost.equals("0.0.0.0")) {
-                return true;
-            }
-
-            // 解析 IP 地址（包括 IPv6）
-            InetAddress addr = InetAddress.getByName(host);
-            // 使用已解析的 IP 重新检查，防止 DNS rebinding
-            String resolvedIp = addr.getHostAddress();
-            InetAddress resolvedAddr = InetAddress.getByName(resolvedIp);
-
-            // Check CGNAT range (100.64.0.0/10)
-            if (resolvedAddr.getAddress().length == 4) {
-                int firstOctet = resolvedAddr.getAddress()[0] & 0xFF;
-                int secondOctet = resolvedAddr.getAddress()[1] & 0xFF;
-                if (firstOctet == 100 && (secondOctet >= 64 && secondOctet <= 127)) {
-                    return true;
-                }
+                return null;
             }
 
             // Check cloud metadata hostnames
             if (lowerHost.equals("metadata.google.internal") || lowerHost.equals("metadata.google.com") ||
                 lowerHost.equals("instance-data") || lowerHost.equals("169.254.169.254")) {
-                return true;
+                return null;
             }
 
-            return resolvedAddr.isLoopbackAddress() || resolvedAddr.isSiteLocalAddress()
-                    || resolvedAddr.isLinkLocalAddress() || resolvedAddr.isAnyLocalAddress();
+            // 解析 IP 地址（包括 IPv6），仅解析一次，避免 DNS rebinding
+            InetAddress addr = InetAddress.getByName(host);
+            String resolvedIp = addr.getHostAddress();
+
+            // Check CGNAT range (100.64.0.0/10)
+            if (addr.getAddress().length == 4) {
+                int firstOctet = addr.getAddress()[0] & 0xFF;
+                int secondOctet = addr.getAddress()[1] & 0xFF;
+                if (firstOctet == 100 && (secondOctet >= 64 && secondOctet <= 127)) {
+                    return null;
+                }
+            }
+
+            if (addr.isLoopbackAddress() || addr.isSiteLocalAddress()
+                    || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()) {
+                return null;
+            }
+            return resolvedIp;
         } catch (Exception e) {
-            return true; // 解析失败时阻止请求
+            return null; // 解析失败时阻止请求
         }
     }
 }

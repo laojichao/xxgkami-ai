@@ -121,20 +121,20 @@ public class ApiKeyController {
     @PostMapping("/{id}/users")
     @Transactional
     public ResponseEntity<ApiResponse<Void>> assignUser(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
-        Long userId = body.get("userId") != null ? Long.valueOf(body.get("userId").toString()) : null;
+        Integer userId = body.get("userId") != null ? Integer.valueOf(body.get("userId").toString()) : null;
         if (userId == null) {
             throw new BusinessException("用户ID不能为空");
         }
         // 检查 API Key 是否存在
         apiKeyService.getApiKeyById(id);
         // 检查是否已分配
-        Optional<UserApiKey> existing = userApiKeyRepository.findByUserIdAndApiKeyId(userId, id.longValue());
+        Optional<UserApiKey> existing = userApiKeyRepository.findByUserIdAndApiKeyId(userId, id);
         if (existing.isPresent()) {
             throw new BusinessException("该用户已分配此 API Key");
         }
         UserApiKey userApiKey = new UserApiKey();
         userApiKey.setUserId(userId);
-        userApiKey.setApiKeyId(id.longValue());
+        userApiKey.setApiKeyId(id);
         userApiKey.setAssignTime(LocalDateTime.now());
         userApiKeyRepository.save(userApiKey);
         return ResponseEntity.ok(ApiResponse.ok("用户分配成功"));
@@ -151,7 +151,7 @@ public class ApiKeyController {
     @DeleteMapping("/{id}/users/{userId}")
     @Transactional
     public ResponseEntity<ApiResponse<Void>> unassignUser(@PathVariable Integer id, @PathVariable Integer userId) {
-        userApiKeyRepository.findByUserIdAndApiKeyId(userId.longValue(), id.longValue())
+        userApiKeyRepository.findByUserIdAndApiKeyId(userId, id)
                 .ifPresent(userApiKeyRepository::delete);
         return ResponseEntity.ok(ApiResponse.ok("用户取消分配成功"));
     }

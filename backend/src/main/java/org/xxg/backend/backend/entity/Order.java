@@ -48,7 +48,8 @@ public class Order {
     private BigDecimal totalPrice; // 总价(元)
 
     @Column(nullable = false, length = 20)
-    private String status = "pending"; // 订单状态: pending=待支付, paid=已支付, cancelled=已取消
+    private String status = "pending"; // 订单状态: pending=待支付, completed=已完成, failed=已失败, cancelled=已取消
+    // 注意：status 保持 String 类型以兼容数据库现有数据，业务代码应参考 OrderStatus 枚举进行状态比较
 
     @Column(name = "payment_method", length = 20)
     private String paymentMethod = "wechat"; // 支付方式: wechat=微信, alipay=支付宝

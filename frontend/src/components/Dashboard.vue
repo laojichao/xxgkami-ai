@@ -180,7 +180,7 @@ const props = defineProps({
   userInfo: Object
 })
 
-const emit = defineEmits(['logout'])
+const emit = defineEmits(['logout', 'update:totp-enabled'])
 
 // 响应式数据
 const activeTab = ref('overview')
@@ -463,11 +463,9 @@ const handleCreateBackup = async () => {
   }
 }
 
-/** TOTP 状态变更后同步更新 userInfo */
+/** TOTP 状态变更后通过 emit 通知父组件更新 userInfo，避免直接修改 props 违反单向数据流 */
 const handleTotpEnabledChange = (enabled) => {
-  if (props.userInfo) {
-    props.userInfo.totpEnabled = enabled
-  }
+  emit('update:totp-enabled', enabled)
 }
 
 

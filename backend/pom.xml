@@ -128,6 +128,13 @@
             <version>2.6.0</version>
         </dependency>
 
+        <!-- Jsoup：用于 HTML 安全净化（替代正则表达式，防止 XSS 绕过） -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.1</version>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -1,9 +1,9 @@
 <!-- 编辑API密钥弹窗：修改名称/描述/加密/机器码/同机同规格配置 -->
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('update:visible', false)">
-    <div class="modal-content" @click.stop>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="edit-api-key-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>编辑API密钥</h3>
+        <h3 id="edit-api-key-dialog-title">编辑API密钥</h3>
         <button class="close-btn" @click="$emit('update:visible', false)">
           <i class="fas fa-times"></i>
         </button>

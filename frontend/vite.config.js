@@ -14,6 +14,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+        // secure: false 仅限开发环境使用，允许代理到自签名证书的 HTTPS 后端
+        // 生产环境应通过反向代理（如 Nginx）处理，并使用有效证书
         secure: false
       }
     }

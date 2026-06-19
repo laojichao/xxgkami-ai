@@ -22,7 +22,7 @@ public class OnlineUserController {
     /**
      * 获取当前在线用户列表
      * <p>GET /online-users 或 /online/list</p>
-     * <p>权限：公开访问</p>
+     * <p>权限：管理员</p>
      * @return 包含 count（在线人数）和 users（用户列表）的信息
      */
     @GetMapping({"/online-users", "/online/list"})
@@ -89,7 +89,7 @@ public class OnlineUserController {
     /**
      * 检查指定用户是否在线
      * <p>GET /online/check/{userId}</p>
-     * <p>权限：公开访问</p>
+     * <p>权限：管理员</p>
      * @param userId 用户ID
      * @return 包含 online 布尔值的查询结果
      */

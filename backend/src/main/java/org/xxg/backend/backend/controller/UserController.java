@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.dto.ApiResponse;
 import org.xxg.backend.backend.dto.ChangePasswordRequest;
+import org.xxg.backend.backend.dto.CreateUserRequest;
+import org.xxg.backend.backend.dto.UpdateUserRequest;
 import org.xxg.backend.backend.entity.SocialUser;
 import org.xxg.backend.backend.entity.User;
 import org.xxg.backend.backend.mapper.SocialUserRepository;
@@ -89,6 +91,39 @@ public class UserController {
 
     private static final java.util.Set<String> ALLOWED_AVATAR_EXTENSIONS = java.util.Set.of("jpg", "jpeg", "png", "gif", "webp");
 
+    /**
+     * 校验文件头（magic number）是否为真实图片格式，防止伪造扩展名上传恶意文件。
+     * @param bytes 文件前若干字节
+     *param ext 文件扩展名（小写）
+     * @return true 如果文件头与扩展名匹配
+     */
+    private boolean isValidImageHeader(byte[] bytes, String ext) {
+        if (bytes == null || bytes.length < 4) return false;
+        // JPEG: FF D8 FF
+        if (("jpg".equals(ext) || "jpeg".equals(ext))
+                && (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF) {
+            return true;
+        }
+        // PNG: 89 50 4E 47
+        if ("png".equals(ext) && (bytes[0] & 0xFF) == 0x89 && (bytes[1] & 0xFF) == 0x50
+                && (bytes[2] & 0xFF) == 0x4E && (bytes[3] & 0xFF) == 0x47) {
+            return true;
+        }
+        // GIF: 47 49 46 38
+        if ("gif".equals(ext) && (bytes[0] & 0xFF) == 0x47 && (bytes[1] & 0xFF) == 0x49
+                && (bytes[2] & 0xFF) == 0x46 && (bytes[3] & 0xFF) == 0x38) {
+            return true;
+        }
+        // WebP: 52 49 46 46 ?? ?? ?? ?? 57 45 42 50
+        if ("webp".equals(ext) && (bytes[0] & 0xFF) == 0x52 && (bytes[1] & 0xFF) == 0x49
+                && (bytes[2] & 0xFF) == 0x46 && (bytes[3] & 0xFF) == 0x46
+                && bytes.length >= 12 && (bytes[8] & 0xFF) == 0x57 && (bytes[9] & 0xFF) == 0x45
+                && (bytes[10] & 0xFF) == 0x42 && (bytes[11] & 0xFF) == 0x50) {
+            return true;
+        }
+        return false;
+    }
+
     @PostMapping("/user/avatar")
     public ResponseEntity<ApiResponse<Map<String, String>>> uploadAvatar(Authentication auth,
                                                                            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
@@ -106,6 +141,18 @@ public class UserController {
         String ext = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
         if (!ALLOWED_AVATAR_EXTENSIONS.contains(ext)) {
             return ResponseEntity.badRequest().body(ApiResponse.error("仅支持 jpg/jpeg/png/gif/webp 格式"));
+        }
+        // 安全修复：校验文件头（magic number）防止伪造扩展名上传恶意文件
+        try {
+            byte[] header = new byte[12];
+            try (java.io.InputStream is = file.getInputStream()) {
+                int read = is.read(header);
+                if (read < 4 || !isValidImageHeader(header, ext)) {
+                    return ResponseEntity.badRequest().body(ApiResponse.error("文件内容与扩展名不匹配"));
+                }
+            }
+        } catch (java.io.IOException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("文件读取失败"));
         }
         try {
             User user = userService.getUserByUsername(auth.getName());
@@ -176,7 +223,7 @@ public class UserController {
 
     @GetMapping("/admin/users")
     public ResponseEntity<ApiResponse<Page<User>>> adminListUsers(
-            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "1") @jakarta.validation.constraints.Min(1) int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword) {
         size = Math.min(size, 100); // 防止过大的分页请求导致 OOM
@@ -184,19 +231,19 @@ public class UserController {
     }
 
     @PostMapping("/admin/users")
-    public ResponseEntity<ApiResponse<User>> createUser(@RequestBody Map<String, String> body) {
+    public ResponseEntity<ApiResponse<User>> createUser(@Valid @RequestBody CreateUserRequest body) {
         User user = userService.createUser(
-                body.get("username"),
-                body.get("password"),
-                body.get("email"),
-                body.get("nickname")
+                body.getUsername(),
+                body.getPassword(),
+                body.getEmail(),
+                body.getNickname()
         );
         return ResponseEntity.ok(ApiResponse.ok("用户创建成功", user));
     }
 
     @PutMapping("/admin/users/{id}")
-    public ResponseEntity<ApiResponse<Void>> updateUser(@PathVariable Integer id, @RequestBody Map<String, String> body) {
-        userService.updateProfile(id, body.get("nickname"), body.get("email"), body.get("phone"));
+    public ResponseEntity<ApiResponse<Void>> updateUser(@PathVariable Integer id, @Valid @RequestBody UpdateUserRequest body) {
+        userService.updateProfile(id, body.getNickname(), body.getEmail(), body.getPhone());
         return ResponseEntity.ok(ApiResponse.ok("用户已更新"));
     }
 

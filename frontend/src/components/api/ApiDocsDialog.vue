@@ -1,9 +1,9 @@
 <!-- API接口文档弹窗：展示接口参数和响应说明 -->
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('update:visible', false)">
-    <div class="modal-content large-modal" @click.stop>
+    <div class="modal-content large-modal" role="dialog" aria-modal="true" aria-labelledby="api-docs-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>API 接口文档</h3>
+        <h3 id="api-docs-dialog-title">API 接口文档</h3>
         <button class="close-btn" @click="$emit('update:visible', false)">
           <i class="fas fa-times"></i>
         </button>

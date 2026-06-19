@@ -21,6 +21,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
@@ -50,6 +51,7 @@ class CardServiceTest {
 
     private Card testCard;
     private CardStatus testCardStatus;
+    private CardCipher testCardCipher;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -69,13 +71,22 @@ class CardServiceTest {
         testCardStatus.setIsValid(true);
         testCardStatus.setExpireTime(LocalDateTime.now().plusDays(7));
 
-        // Mock 加密工具
-        when(obfuscator.generateCardKey()).thenReturn("TEST-XXXX-YYYY-ZZZZ");
-        when(obfuscator.generateEncryptedKey("TEST-XXXX-YYYY-ZZZZ")).thenReturn("encrypted-key-123");
-        when(cryptoUtil.generateAesKey()).thenReturn("aes-key");
-        when(cryptoUtil.generateIv()).thenReturn("iv-value");
-        when(cryptoUtil.encrypt(anyString(), anyString(), anyString())).thenReturn("cipher-data");
-        when(cryptoUtil.hmacSign(anyString(), anyString())).thenReturn("sign-data");
+        // 准备测试卡密加密数据（用于 validateCardCipher 签名校验）
+        testCardCipher = new CardCipher();
+        testCardCipher.setCardHash("encrypted-key-123");
+        testCardCipher.setSalt("global");
+        testCardCipher.setSignData("sign-data");
+
+        // Mock 加密工具（使用 lenient 避免不必要的 stub 报错，因为不是所有测试都用得到）
+        lenient().when(obfuscator.generateCardKey()).thenReturn("TEST-XXXX-YYYY-ZZZZ");
+        lenient().when(obfuscator.generateEncryptedKey("TEST-XXXX-YYYY-ZZZZ")).thenReturn("encrypted-key-123");
+        lenient().when(cryptoUtil.generateAesKey()).thenReturn("aes-key");
+        lenient().when(cryptoUtil.generateIv()).thenReturn("iv-value");
+        lenient().when(cryptoUtil.encrypt(anyString(), anyString(), anyString())).thenReturn("cipher-data");
+        // 安全修复后改用 hmacSignWithStringKey（字符串密钥），替代原 hmacSign
+        lenient().when(cryptoUtil.hmacSignWithStringKey(anyString(), anyString())).thenReturn("sign-data");
+        // validateCardCipher 签名校验需要的 mock
+        lenient().when(cardCipherRepository.findByCardHash("encrypted-key-123")).thenReturn(Optional.of(testCardCipher));
     }
 
     @Test
@@ -307,7 +318,7 @@ class CardServiceTest {
     void selfUnbindMachineCode_Success() {
         testCard.setAllowSelfUnbind(true);
         testCard.setMachineCode("machine-001");
-        when(cardRepository.findByCardKey("TEST-XXXX-YYYY-ZZZZ"))
+        when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
                 .thenReturn(Optional.of(testCard));
         when(cardRepository.save(any(Card.class))).thenReturn(testCard);
 
@@ -320,7 +331,7 @@ class CardServiceTest {
     void selfUnbindMachineCode_NotAllowed_ThrowsException() {
         testCard.setAllowSelfUnbind(false);
         testCard.setMachineCode("machine-001");
-        when(cardRepository.findByCardKey("TEST-XXXX-YYYY-ZZZZ"))
+        when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
                 .thenReturn(Optional.of(testCard));
 
         assertThrows(BusinessException.class,
@@ -332,7 +343,7 @@ class CardServiceTest {
     void selfUnbindMachineCode_MachineCodeMismatch_ThrowsException() {
         testCard.setAllowSelfUnbind(true);
         testCard.setMachineCode("machine-001");
-        when(cardRepository.findByCardKey("TEST-XXXX-YYYY-ZZZZ"))
+        when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
                 .thenReturn(Optional.of(testCard));
 
         assertThrows(BusinessException.class,

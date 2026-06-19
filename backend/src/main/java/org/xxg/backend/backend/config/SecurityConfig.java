@@ -90,7 +90,17 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .headers(headers -> headers.frameOptions(frame -> frame.deny()))
+            .headers(headers -> headers
+                .frameOptions(frame -> frame.deny())
+                // 安全响应头：防止 MIME 嗅探、强制 HTTPS、控制 Referrer 泄露
+                .contentTypeOptions(contentType -> {}) // X-Content-Type-Options: nosniff
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31536000)) // Strict-Transport-Security
+                .referrerPolicy(referrer -> referrer
+                    .policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                .cacheControl(cache -> {}) // 禁止缓存敏感响应
+            )
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
@@ -101,20 +111,17 @@ public class SecurityConfig {
                     "/auth/email-code", "/auth/reset-code", "/auth/reset-password",
                     "/auth/bind/validate", "/auth/refresh",
                     "/auth/oauth/state", "/auth/oauth/set-cookies",
+                    "/auth/totp/disable-by-recovery",
                     "/public/**",
                     "/payment/notify", "/payment/return",
                     "/system/health", "/error",
-                    "/cards/use", "/cards/verify",
-                    "/custom/**", "/open/**",
-                    // Swagger UI / OpenAPI (仅开发环境公开，生产环境可通过环境变量关闭)
-                    "/swagger-ui/**", "/swagger-ui.html",
-                    "/v3/api-docs/**", "/v3/api-docs"
+                    "/cards/use", "/cards/verify"
                 ).permitAll()
                 // === Pricing：GET 公开，写操作仅管理员 ===
                 .requestMatchers(HttpMethod.GET, "/pricing", "/pricing/**").permitAll()
                 .requestMatchers("/pricing", "/pricing/**").hasRole("ADMIN")
                 // === 卡密管理：查询/删除/启停用/解绑 仅管理员 ===
-                .requestMatchers("/cards/query", "/cards/user/**").hasRole("ADMIN")
+                .requestMatchers("/cards/query", "/cards/user/**", "/cards/apikey/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/cards/*").hasRole("ADMIN")
                 .requestMatchers("/cards/*/disable", "/cards/*/enable", "/cards/*/unbind").hasRole("ADMIN")
                 // === 管理员专属接口 ===
@@ -123,9 +130,14 @@ public class SecurityConfig {
                         "/settings/**", "/stats/**", "/monitor/**",
                         "/maintenance/**", "/backup/**", "/security/**",
                         "/online-users/**", "/online/list", "/online/check/**", "/card-pricing/admin/**",
-                        "/system/**", "/orders/admin/**",
+                        "/system/**", "/orders/admin/**", "/orders/stats",
                         "/user/admin/**", "/user/stats",
-                        "/actuator/**", "/webhook-test").hasRole("ADMIN")
+                        "/actuator/**", "/webhook-test",
+                        // 钱包充值仅管理员可操作（防止用户直接充值绕过支付）
+                        "/wallet/recharge",
+                        // Swagger UI / OpenAPI 仅管理员可访问（生产环境不应公开）
+                        "/swagger-ui/**", "/swagger-ui.html",
+                        "/v3/api-docs/**", "/v3/api-docs").hasRole("ADMIN")
                 // === 在线用户接口：需认证（防止未登录用户伪造上线状态） ===
                 .requestMatchers("/online/login", "/online/logout", "/online/heartbeat").authenticated()
                 // === 用户接口 ===

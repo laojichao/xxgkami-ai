@@ -176,6 +176,24 @@ public class AdvancedCryptoUtil {
     }
 
     /**
+     * HMAC-SHA256 签名，使用原始字符串作为密钥（适用于 salt 等非 Base64 密钥场景）。
+     * 用于卡密签名校验场景，密钥直接取字符串字节，不进行 Base64 解码。
+     *
+     * @param data      待签名数据
+     * @param stringKey 字符串密钥（如 salt）
+     * @return Base64 编码的签名值
+     * @throws Exception 签名异常
+     */
+    public String hmacSignWithStringKey(String data, String stringKey) throws Exception {
+        SecretKeySpec keySpec = new SecretKeySpec(
+                stringKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(keySpec);
+        byte[] result = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+        return Base64.getEncoder().encodeToString(result);
+    }
+
+    /**
      * HMAC-SHA256 验签（常量时间比较，防止时序攻击）。
      */
     public boolean hmacVerify(String data, String base64Signature, String base64AesKey) throws Exception {

@@ -88,6 +88,15 @@ public class AuthController {
     @PreDestroy
     public void destroy() {
         stateCleanup.shutdownNow();
+        try {
+            // 安全修复：等待终止，确保所有进行中的清理任务完成
+            if (!stateCleanup.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("OAuth state 清理线程未在 5 秒内终止");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("OAuth state 清理线程终止等待被中断");
+        }
     }
 
     /** 清理过期的 OAuth state 记录 */
@@ -95,7 +104,8 @@ public class AuthController {
         try {
             oauthStateRepository.deleteByExpireTimeBefore(LocalDateTime.now());
         } catch (Exception e) {
-            // 清理失败不影响正常业务，忽略
+            // 安全修复：清理失败记录 warn 日志，便于排查问题
+            log.warn("OAuth state 清理失败: {}", e.getMessage());
         }
     }
 
@@ -160,10 +170,10 @@ public class AuthController {
 
     /**
      * 注册并绑定（客户端绑定场景）。
-     *
-     * @param request 注册请求
-     * @return 操作结果
+     * @deprecated 此接口与 /auth/register 功能完全相同，请使用 /auth/register 替代。
+     * 保留此接口仅为兼容旧版客户端，后续版本将移除。
      */
+    @Deprecated(since = "1.0.2", forRemoval = true)
     @PostMapping("/register-bind")
     public ResponseEntity<ApiResponse<Void>> registerBind(@Valid @RequestBody RegisterRequest request) {
         authService.register(request);
@@ -481,15 +491,23 @@ public class AuthController {
         admin.setTotpRecoveryCodes(String.join(",", hashedCodes));
         adminRepository.save(admin);
         // 通过邮件发送恢复码
+        boolean emailSent = false;
         try {
             emailService.sendVerificationCodeSync(admin.getEmail(),
                     String.join("\n", codes), "recovery");
+            emailSent = true;
         } catch (Exception e) {
             log.warn("恢复码邮件发送失败: {}", e.getMessage());
         }
         Map<String, Object> result = new HashMap<>();
-        result.put("recoveryCodes", codes);
-        result.put("message", "恢复码已生成，请妥善保管。每个恢复码只能使用一次。");
+        // 安全修复：邮件发送成功时不在响应体返回恢复码，仅返回成功提示
+        // 邮件发送失败时才在响应体返回恢复码，避免管理员丢失恢复码
+        if (emailSent) {
+            result.put("message", "恢复码已通过邮件发送至管理员邮箱，请查收。每个恢复码只能使用一次。");
+        } else {
+            result.put("recoveryCodes", codes);
+            result.put("message", "恢复码邮件发送失败，请妥善保管以下恢复码。每个恢复码只能使用一次。");
+        }
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
@@ -517,13 +535,24 @@ public class AuthController {
         if (storedCodes == null || storedCodes.isBlank()) {
             throw new BusinessException("恢复码不存在，请联系系统管理员");
         }
-        // 验证恢复码
+        // 验证恢复码（使用常量时间比较防止时序攻击）
         String hashedInput = hashRecoveryCode(recoveryCode.trim());
         List<String> hashedCodes = new ArrayList<>(Arrays.asList(storedCodes.split(",")));
-        boolean matched = hashedCodes.removeIf(hashed -> hashed.equals(hashedInput));
+        boolean matched = false;
+        String matchedCode = null;
+        for (String hashed : hashedCodes) {
+            if (MessageDigest.isEqual(
+                    hashed.getBytes(StandardCharsets.UTF_8),
+                    hashedInput.getBytes(StandardCharsets.UTF_8))) {
+                matched = true;
+                matchedCode = hashed;
+                break;
+            }
+        }
         if (!matched) {
             throw new BusinessException("恢复码无效或已使用");
         }
+        hashedCodes.remove(matchedCode);
         // 禁用 TOTP 并更新剩余恢复码
         admin.setTotpEnabled(false);
         admin.setTotpSecret(null);

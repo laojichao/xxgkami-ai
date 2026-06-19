@@ -75,6 +75,11 @@ public class OrderService {
         CardPricing pricing = cardPricingRepository.findById(request.getPricingId())
                 .orElseThrow(() -> new BusinessException("价格配置不存在"));
 
+        // 安全修复：校验 pricingId 对应的卡密类型与请求的 cardType 一致，防止价格混淆攻击
+        if (pricing.getType() == null || !pricing.getType().equals(request.getCardType())) {
+            throw new BusinessException("价格配置与卡密类型不匹配");
+        }
+
         Order order = new Order();
         order.setOrderNo(paymentUtil.generateOrderNo());
         order.setUserId(request.getUserId());
@@ -95,7 +100,7 @@ public class OrderService {
      * 完成订单（支付成功后调用）。
      *
      * @param orderNo  订单号
-     * @param cardKeys 生成的卡密明文（多个以逗号分隔）
+     * @param cardKeys 生成的卡密明文（多个以逗号分隔），为 null 时自动生成
      */
     @Transactional
     public void completeOrder(String orderNo, String cardKeys) {
@@ -110,7 +115,12 @@ public class OrderService {
         }
         order.setStatus("completed");
         order.setPayTime(LocalDateTime.now());
-        order.setCardKeys(cardKeys);
+        // 安全修复：cardKeys 为 null 时自动生成卡密，防止管理员手动完成订单导致卡密缺失
+        String finalCardKeys = cardKeys;
+        if (finalCardKeys == null || finalCardKeys.isBlank()) {
+            finalCardKeys = cardService.generateCardsForOrder(order);
+        }
+        order.setCardKeys(finalCardKeys);
         orderRepository.save(order);
     }
 

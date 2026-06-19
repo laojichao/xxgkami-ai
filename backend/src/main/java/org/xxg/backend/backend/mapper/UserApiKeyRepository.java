@@ -11,7 +11,7 @@ import java.util.Optional;
  */
 public interface UserApiKeyRepository extends JpaRepository<UserApiKey, Long> {
     /** 根据用户ID查询其绑定的API密钥列表 */
-    List<UserApiKey> findByUserId(Long userId);
+    List<UserApiKey> findByUserId(Integer userId);
     /** 根据用户ID和API密钥ID查询绑定记录 */
-    Optional<UserApiKey> findByUserIdAndApiKeyId(Long userId, Long apiKeyId);
+    Optional<UserApiKey> findByUserIdAndApiKeyId(Integer userId, Integer apiKeyId);
 }

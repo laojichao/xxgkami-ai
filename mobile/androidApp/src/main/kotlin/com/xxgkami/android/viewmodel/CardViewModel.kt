@@ -37,9 +37,16 @@ class CardViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    // 解绑加载状态，独立于 [_isLoading]，避免与列表加载状态冲突
+    private val _unbindLoading = MutableStateFlow(false)
+    val unbindLoading: StateFlow<Boolean> = _unbindLoading
+
+    // 解绑结果反馈，UI 据此显示成功/失败提示
+    private val _unbindResult = MutableStateFlow<String?>(null)
+    val unbindResult: StateFlow<String?> = _unbindResult
+
     // 数据缓存标记：避免页面切换时重复请求
     private var cardsLoaded = false
-    private var cardsUserId: Int? = null
 
     /**
      * 验证卡密
@@ -55,8 +62,10 @@ class CardViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = ErrorMapper.mapError(e)
-                _verifyResult.value = CardVerifyResponse(false, ErrorMapper.mapError(e))
+                // 复用已映射的错误信息，避免重复调用 ErrorMapper.mapError
+                val errorMsg = ErrorMapper.mapError(e)
+                _error.value = errorMsg
+                _verifyResult.value = CardVerifyResponse(false, errorMsg)
             } finally {
                 _isLoading.value = false
             }
@@ -64,20 +73,22 @@ class CardViewModel : ViewModel() {
     }
 
     /**
-     * 加载指定用户的卡密列表
-     * @param userId 用户ID
+     * 加载当前登录用户的卡密列表。
+     *
+     * 安全说明：userId 由服务端从 Token 中提取，客户端不再传递 userId 参数，
+     * 避免 IDOR 漏洞。
+     *
      * @param forceRefresh 是否强制刷新，忽略缓存
      */
-    fun loadUserCards(userId: Int, forceRefresh: Boolean = false) {
-        if (cardsLoaded && cardsUserId == userId && !forceRefresh) return
+    fun loadUserCards(forceRefresh: Boolean = false) {
+        if (cardsLoaded && !forceRefresh) return
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             try {
-                val response = cardApi.getUserCards(userId)
+                val response = cardApi.getUserCards()
                 _cards.value = response.data ?: emptyList()
                 cardsLoaded = true
-                cardsUserId = userId
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -94,16 +105,7 @@ class CardViewModel : ViewModel() {
      * @param machineCode 要解绑的机器码
      */
     fun unbindMachineCode(cardKey: String, machineCode: String) {
-        viewModelScope.launch {
-            _error.value = null
-            try {
-                cardApi.machineUnbind(cardKey, machineCode)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _error.value = ErrorMapper.mapError(e)
-            }
-        }
+        unbindMachineCodeInternal(cardKey, machineCode)
     }
 
     /**
@@ -111,18 +113,47 @@ class CardViewModel : ViewModel() {
      * @param cardKey 卡密字符串
      */
     fun unbindMachineCode(cardKey: String) {
+        unbindMachineCodeInternal(cardKey, null)
+    }
+
+    /**
+     * 解绑机器码的内部实现，统一处理加载状态和结果反馈。
+     *
+     * @param cardKey 卡密字符串
+     * @param machineCode 机器码，null 表示自助解绑
+     */
+    private fun unbindMachineCodeInternal(cardKey: String, machineCode: String?) {
         viewModelScope.launch {
+            _unbindLoading.value = true
+            _unbindResult.value = null
             _error.value = null
             try {
-                cardApi.machineUnbind(cardKey)
-                // 解绑成功后刷新卡密列表
-                cardsUserId?.let { loadUserCards(it, forceRefresh = true) }
+                val response = cardApi.machineUnbind(cardKey, machineCode)
+                if (response.success) {
+                    _unbindResult.value = response.message ?: "解绑成功"
+                    // 解绑成功后刷新卡密列表
+                    loadUserCards(forceRefresh = true)
+                } else {
+                    _unbindResult.value = response.message ?: "解绑失败"
+                    _error.value = response.message
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = ErrorMapper.mapError(e)
+                val errorMsg = ErrorMapper.mapError(e)
+                _unbindResult.value = errorMsg
+                _error.value = errorMsg
+            } finally {
+                _unbindLoading.value = false
             }
         }
+    }
+
+    /**
+     * 清除解绑结果反馈，UI 展示完提示后应调用此方法。
+     */
+    fun clearUnbindResult() {
+        _unbindResult.value = null
     }
 
     /**
@@ -131,9 +162,10 @@ class CardViewModel : ViewModel() {
      */
     fun resetCache() {
         cardsLoaded = false
-        cardsUserId = null
         _cards.value = emptyList()
         _verifyResult.value = null
         _error.value = null
+        _unbindResult.value = null
+        _unbindLoading.value = false
     }
 }

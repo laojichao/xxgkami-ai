@@ -39,9 +39,11 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
             authViewModel.getUserInfo()
         }
     }
-    // 用户信息加载完成后，自动加载该用户的卡密列表（使用 id 避免不必要的重复触发）
+    // 用户信息加载完成后，自动加载该用户的卡密列表（userId 由服务端从 Token 提取）
     LaunchedEffect(userInfo?.id) {
-        userInfo?.id?.let { viewModel.loadUserCards(it) }
+        if (userInfo?.id != null) {
+            viewModel.loadUserCards()
+        }
     }
 
     // 监听加载状态，加载完成后关闭下拉刷新指示器
@@ -61,7 +63,7 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
             error != null -> {
                 CardErrorState(
                     message = error ?: "加载失败",
-                    onRetry = { userInfo?.id?.let { viewModel.loadUserCards(it, forceRefresh = true) } },
+                    onRetry = { viewModel.loadUserCards(forceRefresh = true) },
                     modifier = Modifier.padding(padding)
                 )
             }
@@ -70,7 +72,7 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
                     isRefreshing = isRefreshing,
                     onRefresh = {
                         isRefreshing = true
-                        userInfo?.id?.let { viewModel.loadUserCards(it, forceRefresh = true) }
+                        viewModel.loadUserCards(forceRefresh = true)
                     },
                     modifier = Modifier.fillMaxSize().padding(padding)
                 ) {

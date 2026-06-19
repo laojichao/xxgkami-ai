@@ -152,7 +152,7 @@ public class MonitorController {
      * 检查系统更新
      * <p>GET /monitor/check-update</p>
      * <p>权限：管理员</p>
-     * @return 当前版本号、仓库地址及更新脚本
+     * @return 当前版本号和仓库地址（安全修复：不再返回可执行 shell 命令，防止命令注入）
      */
     @GetMapping("/check-update")
     public ResponseEntity<Map<String, Object>> checkUpdate() {
@@ -160,10 +160,8 @@ public class MonitorController {
         result.put("success", true);
         result.put("version", appVersion);
         result.put("repoUrl", repoUrl);
-        Map<String, String> scripts = new HashMap<>();
-        scripts.put("cn", "curl -sSL " + repoUrl + "/raw/main/install.sh | bash");
-        scripts.put("global", "curl -sSL " + repoUrl + "/raw/main/install.sh | bash");
-        result.put("updateScripts", scripts);
+        // 安全修复：仅返回更新地址，不返回可执行命令，防止命令注入风险
+        result.put("updateUrl", repoUrl + "/releases/latest");
         return ResponseEntity.ok(result);
     }
 }

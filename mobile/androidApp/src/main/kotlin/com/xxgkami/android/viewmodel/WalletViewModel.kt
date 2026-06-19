@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
 
 /**
  * 钱包业务ViewModel
@@ -34,6 +35,8 @@ class WalletViewModel : ViewModel() {
     val transactions: StateFlow<List<WalletTransaction>> = _transactions
 
     // 加载状态（使用计数器支持并发操作，如同时加载钱包和交易记录）
+    // 说明：采用计数器方案而非布尔值，是为了支持多个并发加载操作（如同时加载钱包和交易记录），
+    // 只有所有操作都完成后才隐藏加载指示器。暂不统一为布尔值方案。
     private val _loadingCount = MutableStateFlow(0)
     val isLoading: StateFlow<Boolean> = _loadingCount.map { it > 0 }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), false)
 
@@ -74,20 +77,10 @@ class WalletViewModel : ViewModel() {
      * @param amount 充值金额（字符串格式）
      */
     fun recharge(amount: String) {
-        // 客户端校验充值金额
-        val parsedAmount = amount.toDoubleOrNull()
-        if (parsedAmount == null || parsedAmount <= 0 || parsedAmount.isNaN() || parsedAmount.isInfinite()) {
-            _error.value = "请输入有效的充值金额"
-            return
-        }
-        if (parsedAmount > 100000) {
-            _error.value = "单次充值金额不能超过100,000元"
-            return
-        }
-        // 校验小数位数不超过2位
-        val decimalPart = amount.substringAfter(".", "")
-        if (decimalPart.length > 2) {
-            _error.value = "充值金额最多支持2位小数"
+        // 使用统一的校验函数，确保 UI 与 ViewModel 校验逻辑一致
+        val validation = validateRechargeAmount(amount)
+        if (validation != null) {
+            _error.value = validation
             return
         }
         viewModelScope.launch {
@@ -140,5 +133,44 @@ class WalletViewModel : ViewModel() {
         _wallet.value = null
         _transactions.value = emptyList()
         _error.value = null
+    }
+
+    companion object {
+        /** 单次充值金额上限（元） */
+        const val MAX_RECHARGE_AMOUNT = 100000.0
+
+        /** 最大小数位数 */
+        const val MAX_DECIMAL_PLACES = 2
+
+        /**
+         * 统一的充值金额校验函数，供 ViewModel 和 UI 共用，确保校验逻辑一致。
+         *
+         * 使用 BigDecimal 严格解析金额，避免 Double 解析的精度问题。
+         *
+         * @param amount 充值金额字符串
+         * @return 校验失败返回错误信息，校验通过返回 null
+         */
+        fun validateRechargeAmount(amount: String): String? {
+            // 使用 BigDecimal 严格解析，避免 Double 解析的精度问题（如 "0.1" + "0.2" != "0.3"）
+            val parsedAmount = try {
+                BigDecimal(amount.trim())
+            } catch (e: NumberFormatException) {
+                return "请输入有效的充值金额"
+            }
+            // 校验金额为正数
+            if (parsedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                return "请输入有效的充值金额"
+            }
+            // 校验金额上限
+            if (parsedAmount > BigDecimal.valueOf(MAX_RECHARGE_AMOUNT)) {
+                return "单次充值金额不能超过${MAX_RECHARGE_AMOUNT.toInt()}元"
+            }
+            // 校验小数位数
+            val scale = parsedAmount.stripTrailingZeros().scale()
+            if (scale > MAX_DECIMAL_PLACES) {
+                return "充值金额最多支持${MAX_DECIMAL_PLACES}位小数"
+            }
+            return null
+        }
     }
 }

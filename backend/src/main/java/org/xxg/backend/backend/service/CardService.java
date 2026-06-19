@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.security.MessageDigest;
 
 /**
  * 卡密业务服务。
@@ -60,12 +61,11 @@ public class CardService {
      * @param days         有效天数（时长卡）
      * @param apiKeyId     关联的 API Key ID
      * @return 生成的卡密实体
-     * @throws Exception 加密过程中的异常
      */
     @Transactional
     public Card generateCard(String cardType, Integer duration, Integer totalCount,
                              String creatorType, Integer creatorId, String creatorName,
-                             String verifyMethod, Integer days, Integer apiKeyId) throws Exception {
+                             String verifyMethod, Integer days, Integer apiKeyId) {
         // 校验枚举参数
         Card.CardType type;
         Card.CreatorType creator;
@@ -80,61 +80,172 @@ public class CardService {
             throw new BusinessException("无效的创建者类型: " + creatorType);
         }
 
-        String cardKey = obfuscator.generateCardKey();
-        String encryptedKey = obfuscator.generateEncryptedKey(cardKey);
+        try {
+            String cardKey = obfuscator.generateCardKey();
+            String encryptedKey = obfuscator.generateEncryptedKey(cardKey);
 
-        // Create cipher data
-        String aesKey = cryptoUtil.generateAesKey();
-        String iv = cryptoUtil.generateIv();
-        String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
-        String signData = cryptoUtil.hmacSign(cardKey, aesKey);
-        String cardHash = encryptedKey;
+            // 创建加密数据：cipherData 仅用于存储，aesKey 不持久化（无需解密）
+            // 签名使用持久化的 salt 作为 HMAC 密钥派生源，保证后续可验证
+            String aesKey = cryptoUtil.generateAesKey();
+            String iv = cryptoUtil.generateIv();
+            String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
+            String signData = cryptoUtil.hmacSignWithStringKey(cardKey, "global");
+            String cardHash = encryptedKey;
 
-        CardCipher cipher = new CardCipher();
-        cipher.setCardHash(cardHash);
-        cipher.setCipherData(cipherData);
-        cipher.setSignData(signData);
-        cipher.setSalt("global");
-        cipher.setIv(iv);
-        cardCipherRepository.save(cipher);
+            CardCipher cipher = new CardCipher();
+            cipher.setCardHash(cardHash);
+            cipher.setCipherData(cipherData);
+            cipher.setSignData(signData);
+            cipher.setSalt("global");
+            cipher.setIv(iv);
+            cardCipherRepository.save(cipher);
 
-        // Create card status
-        CardStatus status = new CardStatus();
-        status.setCardHash(cardHash);
-        status.setIsValid(true);
-        if ("time".equals(cardType) && days != null) {
-            status.setExpireTime(LocalDateTime.now().plusDays(days));
+            // Create card status
+            CardStatus status = new CardStatus();
+            status.setCardHash(cardHash);
+            status.setIsValid(true);
+            if ("time".equals(cardType) && days != null) {
+                status.setExpireTime(LocalDateTime.now().plusDays(days));
+            }
+            if ("count".equals(cardType) && totalCount != null) {
+                status.setTotalCount(totalCount);
+                status.setRemainCount(totalCount);
+            }
+            cardStatusRepository.save(status);
+
+            // Create card
+            Card card = new Card();
+            card.setCardKey(cardKey);
+            card.setEncryptedKey(encryptedKey);
+            card.setStatus(0); // unused
+            card.setCreateTime(LocalDateTime.now());
+            card.setCardType(type);
+            card.setDuration(duration != null ? duration : 0);
+            card.setTotalCount(totalCount != null ? totalCount : 0);
+            card.setRemainingCount(totalCount != null ? totalCount : 0);
+            card.setCreatorType(creator);
+            card.setCreatorId(creatorId);
+            card.setCreatorName(creatorName);
+            card.setApiKeyId(apiKeyId);
+            if (verifyMethod != null) {
+                try {
+                    card.setVerifyMethod(Card.VerifyMethod.valueOf(verifyMethod));
+                } catch (IllegalArgumentException e) {
+                    throw new BusinessException("无效的验证方式: " + verifyMethod);
+                }
+            }
+            card.setEncryptionType("advanced");
+
+            return cardRepository.save(card);
+        } catch (BusinessException e) {
+            throw e; // 业务异常直接抛出
+        } catch (Exception e) {
+            // 安全修复：捕获具体异常并转换为 BusinessException，移除 throws Exception
+            log.error("卡密生成失败: {}", e.getMessage(), e);
+            throw new BusinessException("卡密生成失败，请联系管理员");
         }
-        if ("count".equals(cardType) && totalCount != null) {
-            status.setTotalCount(totalCount);
-            status.setRemainCount(totalCount);
-        }
-        cardStatusRepository.save(status);
+    }
 
-        // Create card
-        Card card = new Card();
-        card.setCardKey(cardKey);
-        card.setEncryptedKey(encryptedKey);
-        card.setStatus(0); // unused
-        card.setCreateTime(LocalDateTime.now());
-        card.setCardType(type);
-        card.setDuration(duration != null ? duration : 0);
-        card.setTotalCount(totalCount != null ? totalCount : 0);
-        card.setRemainingCount(totalCount != null ? totalCount : 0);
-        card.setCreatorType(creator);
-        card.setCreatorId(creatorId);
-        card.setCreatorName(creatorName);
-        card.setApiKeyId(apiKeyId);
-        if (verifyMethod != null) {
+    /**
+     * 批量生成卡密（减少数据库往返次数）。
+     * <p>使用 saveAll 批量插入卡密、加密数据和状态记录，替代循环内逐个 save。</p>
+     *
+     * @param cardType     卡密类型（time/count）
+     * @param duration     时长（分钟）
+     * @param totalCount   总次数（次数卡）
+     * @param creatorType  创建者类型（admin/user/system）
+     * @param creatorId    创建者 ID
+     * @param creatorName  创建者名称
+     * @param verifyMethod 验证方式
+     * @param days         有效天数（时长卡）
+     * @param apiKeyId     关联的 API Key ID
+     * @param count        生成数量
+     * @return 生成的卡密列表
+     */
+    @Transactional
+    public List<Card> generateCardsBatch(String cardType, Integer duration, Integer totalCount,
+                                          String creatorType, Integer creatorId, String creatorName,
+                                          String verifyMethod, Integer days, Integer apiKeyId, int count) {
+        // 校验枚举参数
+        Card.CardType type;
+        Card.CreatorType creator;
+        try {
+            type = Card.CardType.valueOf(cardType);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("无效的卡密类型: " + cardType);
+        }
+        try {
+            creator = Card.CreatorType.valueOf(creatorType);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("无效的创建者类型: " + creatorType);
+        }
+
+        List<Card> cards = new ArrayList<>(count);
+        List<CardCipher> ciphers = new ArrayList<>(count);
+        List<CardStatus> statuses = new ArrayList<>(count);
+
+        for (int i = 0; i < count; i++) {
             try {
-                card.setVerifyMethod(Card.VerifyMethod.valueOf(verifyMethod));
-            } catch (IllegalArgumentException e) {
-                throw new BusinessException("无效的验证方式: " + verifyMethod);
+                String cardKey = obfuscator.generateCardKey();
+                String encryptedKey = obfuscator.generateEncryptedKey(cardKey);
+
+                String aesKey = cryptoUtil.generateAesKey();
+                String iv = cryptoUtil.generateIv();
+                String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
+                String signData = cryptoUtil.hmacSignWithStringKey(cardKey, "global");
+
+                CardCipher cipher = new CardCipher();
+                cipher.setCardHash(encryptedKey);
+                cipher.setCipherData(cipherData);
+                cipher.setSignData(signData);
+                cipher.setSalt("global");
+                cipher.setIv(iv);
+                ciphers.add(cipher);
+
+                CardStatus status = new CardStatus();
+                status.setCardHash(encryptedKey);
+                status.setIsValid(true);
+                if ("time".equals(cardType) && days != null) {
+                    status.setExpireTime(LocalDateTime.now().plusDays(days));
+                }
+                if ("count".equals(cardType) && totalCount != null) {
+                    status.setTotalCount(totalCount);
+                    status.setRemainCount(totalCount);
+                }
+                statuses.add(status);
+
+                Card card = new Card();
+                card.setCardKey(cardKey);
+                card.setEncryptedKey(encryptedKey);
+                card.setStatus(0);
+                card.setCreateTime(LocalDateTime.now());
+                card.setCardType(type);
+                card.setDuration(duration != null ? duration : 0);
+                card.setTotalCount(totalCount != null ? totalCount : 0);
+                card.setRemainingCount(totalCount != null ? totalCount : 0);
+                card.setCreatorType(creator);
+                card.setCreatorId(creatorId);
+                card.setCreatorName(creatorName);
+                card.setApiKeyId(apiKeyId);
+                if (verifyMethod != null) {
+                    try {
+                        card.setVerifyMethod(Card.VerifyMethod.valueOf(verifyMethod));
+                    } catch (IllegalArgumentException e) {
+                        throw new BusinessException("无效的验证方式: " + verifyMethod);
+                    }
+                }
+                card.setEncryptionType("advanced");
+                cards.add(card);
+            } catch (Exception e) {
+                log.error("批量生成卡密失败: {}", e.getMessage(), e);
+                throw new BusinessException("卡密生成失败，请联系管理员");
             }
         }
-        card.setEncryptionType("advanced");
 
-        return cardRepository.save(card);
+        // 批量插入，减少数据库往返次数
+        cardCipherRepository.saveAll(ciphers);
+        cardStatusRepository.saveAll(statuses);
+        return cardRepository.saveAll(cards);
     }
 
     /**
@@ -163,13 +274,24 @@ public class CardService {
             return buildErrorResponse("卡密无效", 400);
         }
 
-        // 3. 校验/绑定机器码
+        // 3. 校验 CardCipher 签名（防止卡密被篡改）
+        String cipherError = validateCardCipher(card);
+        if (cipherError != null) {
+            return buildErrorResponse(cipherError, 400);
+        }
+
+        // 4. 校验是否允许重复验证（allowReverify=false 且卡密已使用时拒绝）
+        if (Boolean.FALSE.equals(card.getAllowReverify()) && card.getStatus() == 1) {
+            return buildErrorResponse("此卡密不允许重复验证", 403);
+        }
+
+        // 5. 校验/绑定机器码
         String machineCodeError = validateOrBindMachineCode(card, machineCode);
         if (machineCodeError != null) {
             return buildErrorResponse(machineCodeError, 400);
         }
 
-        // 4. 按卡密类型验证
+        // 6. 按卡密类型验证
         if (card.getCardType() == Card.CardType.time) {
             String timeError = verifyTimeCard(cardStatus, result);
             if (timeError != null) {
@@ -182,17 +304,44 @@ public class CardService {
             }
         }
 
-        // 5. 更新卡密使用状态
+        // 7. 更新卡密使用状态
         finalizeCardUsage(card);
 
         result.put("success", true);
         result.put("message", "验证成功");
         result.put("statusCode", 200);
 
-        // 6. 触发 Webhook
+        // 8. 触发 Webhook
         triggerWebhookSafely(apiKeyId, card);
 
         return result;
+    }
+
+    /**
+     * 校验 CardCipher 签名是否匹配，防止卡密数据被篡改。
+     * <p>注意：由于历史原因 aesKey 未持久化，此处使用 salt 作为 HMAC 密钥派生源进行签名校验。
+     * 生成卡密时也使用相同方式签名，保证一致性。</p>
+     * @param card 卡密实体
+     * @return 错误消息（无错误返回 null）
+     */
+    private String validateCardCipher(Card card) {
+        CardCipher cipher = cardCipherRepository.findByCardHash(card.getEncryptedKey()).orElse(null);
+        if (cipher == null) {
+            return "卡密加密数据缺失";
+        }
+        // 使用持久化的 salt 重新计算签名并比对（常量时间比较防止时序攻击）
+        try {
+            String expectedSign = cryptoUtil.hmacSignWithStringKey(card.getCardKey(), cipher.getSalt());
+            if (expectedSign == null || !MessageDigest.isEqual(
+                    expectedSign.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    cipher.getSignData().getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+                return "卡密签名校验失败";
+            }
+        } catch (Exception e) {
+            log.warn("卡密签名计算失败 cardId={}: {}", card.getId(), e.getMessage());
+            return "卡密签名校验失败";
+        }
+        return null;
     }
 
     /** 构建错误响应 */
@@ -242,6 +391,8 @@ public class CardService {
         lockedStatus.setRemainCount(lockedStatus.getRemainCount() - 1);
         lockedStatus.setLastUseTime(LocalDateTime.now());
         cardStatusRepository.save(lockedStatus);
+        // 同步更新 Card.remainingCount，保持主表与状态表一致
+        card.setRemainingCount(lockedStatus.getRemainCount());
         result.put("remaining_count", lockedStatus.getRemainCount());
         return null;
     }
@@ -479,7 +630,7 @@ public class CardService {
                 String aesKey = cryptoUtil.generateAesKey();
                 String iv = cryptoUtil.generateIv();
                 String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
-                String signData = cryptoUtil.hmacSign(cardKey, aesKey);
+                String signData = cryptoUtil.hmacSignWithStringKey(cardKey, "global");
 
                 CardCipher cipher = new CardCipher();
                 cipher.setCardHash(encryptedKey);
@@ -541,11 +692,19 @@ public class CardService {
      * @return 天数，默认7天
      */
     private Integer parseDaysFromSpec(String spec) {
-        if (spec == null || spec.isBlank()) return 7;
+        if (spec == null || spec.isBlank()) {
+            log.warn("parseDaysFromSpec: spec 为空，使用默认值 7 天");
+            return 7;
+        }
         try {
             String num = spec.replaceAll("[^0-9]", "");
-            return num.isEmpty() ? 7 : Integer.parseInt(num);
+            if (num.isEmpty()) {
+                log.warn("parseDaysFromSpec: spec={} 无法解析出数字，使用默认值 7 天", spec);
+                return 7;
+            }
+            return Integer.parseInt(num);
         } catch (NumberFormatException e) {
+            log.warn("parseDaysFromSpec: spec={} 解析失败，使用默认值 7 天", spec);
             return 7;
         }
     }
@@ -556,11 +715,19 @@ public class CardService {
      * @return 次数，默认100次
      */
     private Integer parseCountFromSpec(String spec) {
-        if (spec == null || spec.isBlank()) return 100;
+        if (spec == null || spec.isBlank()) {
+            log.warn("parseCountFromSpec: spec 为空，使用默认值 100 次");
+            return 100;
+        }
         try {
             String num = spec.replaceAll("[^0-9]", "");
-            return num.isEmpty() ? 100 : Integer.parseInt(num);
+            if (num.isEmpty()) {
+                log.warn("parseCountFromSpec: spec={} 无法解析出数字，使用默认值 100 次", spec);
+                return 100;
+            }
+            return Integer.parseInt(num);
         } catch (NumberFormatException e) {
+            log.warn("parseCountFromSpec: spec={} 解析失败，使用默认值 100 次", spec);
             return 100;
         }
     }
@@ -595,6 +762,7 @@ public class CardService {
     public Card updateCard(Integer cardId, Map<String, Object> updates) {
         Card card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new BusinessException("卡密不存在"));
+        boolean needSyncStatus = false;
         if (updates.containsKey("cardType")) {
             try {
                 card.setCardType(Card.CardType.valueOf(updates.get("cardType").toString()));
@@ -612,6 +780,7 @@ public class CardService {
         if (updates.containsKey("totalCount")) {
             try {
                 card.setTotalCount(((Number) updates.get("totalCount")).intValue());
+                needSyncStatus = true;
             } catch (ClassCastException | NullPointerException e) {
                 throw new BusinessException("totalCount 字段格式无效");
             }
@@ -619,6 +788,7 @@ public class CardService {
         if (updates.containsKey("remainingCount")) {
             try {
                 card.setRemainingCount(((Number) updates.get("remainingCount")).intValue());
+                needSyncStatus = true;
             } catch (ClassCastException | NullPointerException e) {
                 throw new BusinessException("remainingCount 字段格式无效");
             }
@@ -639,7 +809,20 @@ public class CardService {
         if (updates.containsKey("allowReverify")) {
             card.setAllowReverify(Boolean.parseBoolean(updates.get("allowReverify").toString()));
         }
-        return cardRepository.save(card);
+        Card saved = cardRepository.save(card);
+        // 同步更新 CardStatus 表对应字段，保持主表与状态表一致
+        if (needSyncStatus) {
+            cardStatusRepository.findByCardHash(card.getEncryptedKey()).ifPresent(status -> {
+                if (card.getTotalCount() != null) {
+                    status.setTotalCount(card.getTotalCount());
+                }
+                if (card.getRemainingCount() != null) {
+                    status.setRemainCount(card.getRemainingCount());
+                }
+                cardStatusRepository.save(status);
+            });
+        }
+        return saved;
     }
 
     /**

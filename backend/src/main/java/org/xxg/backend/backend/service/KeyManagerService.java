@@ -19,7 +19,8 @@ import java.util.Base64;
  * 负责ECC密钥对的生成、存储和读取，用于数据加密和签名验证。
  * <p>私钥采用 AES-256-GCM 加密后存储到磁盘（.enc 文件），加密密钥从环境变量
  * {@code KEY_ENCRYPTION_KEY}（Base64 编码的 256 位密钥）获取。
- * 若未配置该环境变量，将在首次生成密钥时自动创建一个随机密钥并输出警告日志。</p>
+ * <p><b>安全要求：</b>必须配置环境变量 {@code KEY_ENCRYPTION_KEY}，否则服务启动时将抛出异常拒绝启动。
+ * 这样保证加密密钥可持久化，避免重启后无法解密私钥。</p>
  */
 @Service
 public class KeyManagerService {
@@ -37,10 +38,25 @@ public class KeyManagerService {
     /** GCM 初始向量长度（字节） */
     private static final int GCM_IV_LENGTH = 12;
 
-    /** 内存中缓存的加密密钥（Base64），仅在未配置环境变量时使用 */
-    private volatile String fallbackEncryptionKey;
+    /** 缓存从环境变量读取的加密密钥（Base64），启动时校验一次 */
+    private final String cachedEncryptionKey;
 
-    public KeyManagerService(AdvancedCryptoUtil cryptoUtil) { this.cryptoUtil = cryptoUtil; }
+    public KeyManagerService(AdvancedCryptoUtil cryptoUtil) {
+        this.cryptoUtil = cryptoUtil;
+        // 安全修复：启动时强制校验 KEY_ENCRYPTION_KEY 环境变量，未配置则拒绝启动
+        String envKey = System.getenv("KEY_ENCRYPTION_KEY");
+        if (envKey == null || envKey.isBlank()) {
+            throw new IllegalStateException(
+                    "============================================================\n"
+                    + "安全配置缺失：必须配置环境变量 KEY_ENCRYPTION_KEY\n"
+                    + "该变量为 Base64 编码的 256 位 AES 密钥，用于加密 ECC 私钥。\n"
+                    + "未配置将导致重启后无法解密私钥，存在密钥丢失风险。\n"
+                    + "生成方法：使用任意编程语言生成 32 字节随机数并 Base64 编码。\n"
+                    + "============================================================");
+        }
+        this.cachedEncryptionKey = envKey.trim();
+        log.info("已从环境变量 KEY_ENCRYPTION_KEY 加载私钥加密密钥");
+    }
 
     /**
      * 生成ECC密钥对并保存到文件。
@@ -108,32 +124,13 @@ public class KeyManagerService {
 
     /**
      * 获取用于加密私钥的 AES 密钥。
-     * <p>优先从环境变量 {@code KEY_ENCRYPTION_KEY} 读取（Base64 编码的 256 位密钥）；
-     * 若未配置，则在首次调用时生成一个随机密钥并缓存在内存中，同时输出警告。</p>
+     * <p>密钥在服务启动时从环境变量 {@code KEY_ENCRYPTION_KEY} 读取并缓存，
+     * 未配置时启动阶段即抛出异常，因此此处直接返回缓存值。</p>
      *
      * @return Base64 编码的 AES-256 密钥
-     * @throws Exception 密钥生成异常
      */
-    private String getEncryptionKey() throws Exception {
-        String envKey = System.getenv("KEY_ENCRYPTION_KEY");
-        if (envKey != null && !envKey.isBlank()) {
-            return envKey.trim();
-        }
-
-        // 环境变量未配置，使用内存中的 fallback 密钥
-        if (fallbackEncryptionKey == null) {
-            synchronized (this) {
-                if (fallbackEncryptionKey == null) {
-                    fallbackEncryptionKey = cryptoUtil.generateAesKey();
-                    log.warn("============================================================");
-                    log.warn("未配置环境变量 KEY_ENCRYPTION_KEY，已生成随机加密密钥");
-                    log.warn("该密钥仅在本次运行期间有效，重启后将丢失，届时将无法解密私钥");
-                    log.warn("请在启动前设置环境变量: KEY_ENCRYPTION_KEY=<Base64编码的256位密钥>");
-                    log.warn("============================================================");
-                }
-            }
-        }
-        return fallbackEncryptionKey;
+    private String getEncryptionKey() {
+        return cachedEncryptionKey;
     }
 
     /**

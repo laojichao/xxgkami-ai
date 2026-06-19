@@ -1,9 +1,9 @@
 <!-- 用户管理弹窗：为API密钥分配/移除用户 -->
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('update:visible', false)">
-    <div class="modal-content large-modal" @click.stop>
+    <div class="modal-content large-modal" role="dialog" aria-modal="true" aria-labelledby="user-manage-dialog-title" @click.stop>
       <div class="modal-header">
-        <h3>{{ apiKeyName }} - 用户管理</h3>
+        <h3 id="user-manage-dialog-title">{{ apiKeyName }} - 用户管理</h3>
         <button class="close-btn" @click="$emit('update:visible', false)">
           <i class="fas fa-times"></i>
         </button>

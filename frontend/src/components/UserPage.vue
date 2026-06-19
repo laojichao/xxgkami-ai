@@ -1,3 +1,13 @@
+<!--
+  TODO: UserPage.vue 单文件已超过 1700 行，未来需拆分为多个子组件以提升可维护性
+  建议拆分方向：
+  1. UserProfileCard - 用户信息卡片
+  2. UserSettingsPanel - 用户设置面板
+  3. UserSecurityPanel - 安全设置（密码/TOTP）
+  4. UserOrdersList - 订单列表
+  5. UserKeysList - 卡密列表
+  当前仅添加 TODO 标记，暂不拆分以避免引入回归风险
+-->
 <template>
   <div class="user-page">
     <!-- 顶部导航栏 -->

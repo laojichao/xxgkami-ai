@@ -1,18 +1,19 @@
 package org.xxg.backend.backend.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 import org.hibernate.annotations.UpdateTimestamp;
 
 /**
  * 钱包实体 - 用户账户余额及资金统计
  */
-@Data
-@EqualsAndHashCode(of = "id")
+@Getter
+@Setter
 @Entity
 @Table(name = "wallets")
 public class Wallet {
@@ -38,4 +39,17 @@ public class Wallet {
     @Column(name = "update_time")
     @UpdateTimestamp
     private LocalDateTime updateTime;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Wallet that = (Wallet) o;
+        return id != null && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }
