@@ -122,18 +122,26 @@ public class MonitorController {
         Map<String, Object> db = new HashMap<>();
         db.put("status", "UP");
         db.put("type", "MySQL");
+        // 以下指标尚未采集（需要连接池/数据库侧埋点），显式标记为不可用，
+        // 避免前端把固定值 0 当作真实监控数据展示。
+        db.put("metricsAvailable", false);
         return db;
     }
 
     /**
-     * 构建API监控数据（私有方法）
-     * @return API状态、总请求数、错误率
+     * 构建API监控数据（私有方法）。
+     * <p>注意：请求总数、错误率等指标尚未接入埋点采集，返回
+     * {@code metricsAvailable=false} 供前端区分「无数据」与「真实为 0」，
+     * 防止把硬编码的 0 展示成「成功率 100%」这类误导性结论。</p>
+     *
+     * @return API状态与指标可用性标记
      */
     private Map<String, Object> getApiData() {
         Map<String, Object> api = new HashMap<>();
         api.put("status", "UP");
         api.put("totalRequests", 0);
         api.put("errorRate", 0);
+        api.put("metricsAvailable", false);
         return api;
     }
 

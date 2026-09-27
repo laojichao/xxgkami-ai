@@ -41,13 +41,21 @@ services:
       db:
         condition: service_healthy
     environment:
-      DB_URL: jdbc:mysql://db:3306/kami?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      # 安全说明：不要添加 allowPublicKeyRetrieval=true（允许向服务端索取 RSA 公钥，
+      # 中间人可借此解密认证握手）。application.properties 已刻意移除该参数。
+      DB_URL: jdbc:mysql://db:3306/kami?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
       DB_USERNAME: root
       DB_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-5}
-      DDL_AUTO: ${DDL_AUTO:-update}
+      # 默认 validate（与 application.properties 及 .env.example 保持一致）：
+      # 生产环境禁止 Hibernate 自动改表，避免误删列/改类型导致数据丢失。
+      # 首次部署空库时请显式设置 DDL_AUTO=update 完成建表，随后改回 validate。
+      DDL_AUTO: ${DDL_AUTO:-validate}
       JWT_SECRET: ${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}
+      # KeyManagerService 启动时会强制校验该变量，未配置将直接拒绝启动。
+      # 必须是 Base64 编码的 32 字节随机密钥，生成方式：openssl rand -base64 32
+      KEY_ENCRYPTION_KEY: ${KEY_ENCRYPTION_KEY:?请在 .env 中设置 KEY_ENCRYPTION_KEY（openssl rand -base64 32）}
       JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION:-3600000}
       JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
       MAIL_HOST: ${MAIL_HOST:-smtp.qq.com}
@@ -58,6 +66,8 @@ services:
       MAIL_STARTTLS_ENABLE: ${MAIL_STARTTLS_ENABLE:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
       RATE_LIMIT_TRUSTED_PROXIES: ${RATE_LIMIT_TRUSTED_PROXIES:-172.20.0.3,127.0.0.1}
+      # 备份目录（容器内相对工作目录 /app），与 backup_data 卷挂载点对应
+      BACKUP_DIR: ${BACKUP_DIR:-backups}
       APP_VERSION: ${APP_VERSION:-1.0.2}
       APP_REPO_URL: ${APP_REPO_URL:-https://github.com/laojichao/xxgkami-ai}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -67,7 +77,15 @@ services:
     volumes:
       - backup_data:/app/backups
       - log_data:/app/logs
+      # 前端构建产物共享卷：镜像内 /app/static 已包含构建结果，
+      # 命名卷首次创建时会从镜像复制内容，nginx 再从该卷读取并提供静态页面。
       - frontend_dist:/app/static
+      # 用户上传文件（头像等）持久化：后端写入 /app/uploads，
+      # 不挂载卷时容器重建会导致所有已上传文件丢失（数据库仍保留 URL，形成死链）。
+      - upload_data:/app/uploads
+      # ECC 密钥对持久化：私钥（AES-GCM 加密）存放在 /app/keys，
+      # 不挂载卷时容器重建会导致私钥丢失，已加密数据将永久无法解密。
+      - key_data:/app/keys
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/system/health"]
       interval: 30s
@@ -100,6 +118,10 @@ volumes:
   backup_data:
     driver: local
   log_data:
+    driver: local
+  upload_data:
+    driver: local
+  key_data:
     driver: local
   nginx_logs:
     driver: local

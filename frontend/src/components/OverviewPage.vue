@@ -66,15 +66,15 @@
         <!-- 用户活跃度图表 -->
         <div class="chart-card">
           <div class="chart-header">
-            <h3>用户活跃度</h3>
+            <h3>用户构成</h3>
             <div class="chart-legend">
               <span class="legend-item">
                 <span class="legend-color active"></span>
-                活跃用户
+                总用户数
               </span>
               <span class="legend-item">
                 <span class="legend-color inactive"></span>
-                非活跃用户
+                近{{ chartPeriodLabel }}新增
               </span>
             </div>
           </div>
@@ -101,23 +101,25 @@
             <div class="metric-item">
               <span class="metric-label">CPU使用率</span>
               <div class="metric-bar">
-                <div class="metric-fill" :style="{ width: systemStatus.cpu + '%' }"></div>
+                <div class="metric-fill" :style="{ width: (systemStatus.cpu || 0) + '%' }"></div>
               </div>
-              <span class="metric-value">{{ systemStatus.cpu }}%</span>
+              <!-- 后端未采集 CPU，显示 -- 而不是伪造数值 -->
+              <span class="metric-value">{{ systemStatus.cpuAvailable ? systemStatus.cpu + '%' : '--' }}</span>
             </div>
             <div class="metric-item">
               <span class="metric-label">内存使用率</span>
               <div class="metric-bar">
-                <div class="metric-fill" :style="{ width: systemStatus.memory + '%' }"></div>
+                <div class="metric-fill" :style="{ width: (systemStatus.memory || 0) + '%' }"></div>
               </div>
               <span class="metric-value">{{ systemStatus.memory }}%</span>
             </div>
             <div class="metric-item">
               <span class="metric-label">磁盘使用率</span>
               <div class="metric-bar">
-                <div class="metric-fill" :style="{ width: systemStatus.disk + '%' }"></div>
+                <div class="metric-fill" :style="{ width: (systemStatus.disk || 0) + '%' }"></div>
               </div>
-              <span class="metric-value">{{ systemStatus.disk }}%</span>
+              <!-- 后端未采集磁盘，显示 -- 而不是伪造数值 -->
+              <span class="metric-value">{{ systemStatus.diskAvailable ? systemStatus.disk + '%' : '--' }}</span>
             </div>
           </div>
         </div>
@@ -133,19 +135,19 @@
           <div class="status-info">
             <div class="info-item">
               <span class="info-label">连接数</span>
-              <span class="info-value">{{ databaseStatus.connections }}</span>
+              <span class="info-value">{{ databaseStatus.connections ?? '--' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">查询/秒</span>
-              <span class="info-value">{{ databaseStatus.qps }}</span>
+              <span class="info-value">{{ databaseStatus.qps ?? '--' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">响应时间</span>
-              <span class="info-value">{{ databaseStatus.responseTime }}ms</span>
+              <span class="info-value">{{ databaseStatus.responseTime !== null && databaseStatus.responseTime !== undefined ? databaseStatus.responseTime + 'ms' : '--' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">数据库大小</span>
-              <span class="info-value">{{ databaseStatus.size }}</span>
+              <span class="info-value">{{ databaseStatus.size || '--' }}</span>
             </div>
           </div>
         </div>
@@ -161,19 +163,19 @@
           <div class="status-info">
             <div class="info-item">
               <span class="info-label">请求总数</span>
-              <span class="info-value">{{ apiStatus.totalRequests }}</span>
+              <span class="info-value">{{ apiStatus.totalRequests ?? '--' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">成功率</span>
-              <span class="info-value">{{ apiStatus.successRate }}%</span>
+              <span class="info-value">{{ apiStatus.successRate !== null && apiStatus.successRate !== undefined ? apiStatus.successRate + '%' : '--' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">平均响应时间</span>
-              <span class="info-value">{{ apiStatus.avgResponseTime }}ms</span>
+              <span class="info-value">{{ apiStatus.avgResponseTime !== null && apiStatus.avgResponseTime !== undefined ? apiStatus.avgResponseTime + 'ms' : '--' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">错误数</span>
-              <span class="info-value">{{ apiStatus.errorCount }}</span>
+              <span class="info-value">{{ apiStatus.errorCount ?? '--' }}</span>
             </div>
           </div>
         </div>
@@ -185,7 +187,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { monitorApi, statsApi } from '../services/api.js'
 import logger from '../utils/logger'
 
@@ -244,27 +246,32 @@ const handleVisibilityChange = () => {
 // 服务器状态数据
 const systemStatus = ref({
   status: 'loading',
-  cpu: 0,
+  cpu: null,
+  cpuAvailable: false,   // 后端未提供 CPU 指标
   memory: 0,
-  disk: 0,
+  memoryAvailable: true,
+  disk: null,
+  diskAvailable: false,  // 后端未提供磁盘指标
   loading: true
 })
 
 const databaseStatus = ref({
   status: 'loading',
-  connections: 0,
-  qps: 0,
-  responseTime: 0,
-  size: '检测中...',
+  connections: null,
+  qps: null,
+  responseTime: null,
+  size: null,
+  metricsAvailable: false,
   loading: true
 })
 
 const apiStatus = ref({
   status: 'loading',
-  totalRequests: 0,
-  successRate: 0,
-  avgResponseTime: 0,
-  errorCount: 0,
+  totalRequests: null,
+  successRate: null,
+  avgResponseTime: null,
+  errorCount: null,
+  metricsAvailable: false,
   loading: true
 })
 
@@ -280,6 +287,12 @@ const chartData = ref({
     active: 65,
     inactive: 35
   }
+})
+
+/** 图表周期标签（如 "7天"），用于图例文案 */
+const chartPeriodLabel = computed(() => {
+  const p = String(chartPeriod.value || '7')
+  return p.endsWith('d') ? p.slice(0, -1) + '天' : p + '天'
 })
 
 // 绘制使用趋势图
@@ -408,11 +421,27 @@ const drawActivityChart = () => {
   const centerY = height / 2
   const radius = Math.min(width, height) / 3
   
-  const active = chartData.value.activity.active
-  const inactive = chartData.value.activity.inactive
+  const active = Number(chartData.value.activity.active) || 0
+  const inactive = Number(chartData.value.activity.inactive) || 0
   const total = active + inactive
-  
-  // 绘制活跃用户部分
+
+  // 数据为空时直接绘制占位圆环：避免 total=0 导致 active/total 为 NaN，
+  // 使 ctx.arc 收到非法角度而抛错或画出错乱图形。
+  if (total <= 0) {
+    ctx.fillStyle = '#f3f4f6'
+    ctx.beginPath()
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = 'bold 16px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('暂无数据', centerX, centerY)
+    return
+  }
+
+  // 绘制总量部分
   const activeAngle = (active / total) * 2 * Math.PI
   ctx.fillStyle = '#10b981'
   ctx.beginPath()
@@ -420,27 +449,30 @@ const drawActivityChart = () => {
   ctx.arc(centerX, centerY, radius, 0, activeAngle)
   ctx.closePath()
   ctx.fill()
-  
-  // 绘制非活跃用户部分
+
+  // 绘制新增部分
   ctx.fillStyle = '#f3f4f6'
   ctx.beginPath()
   ctx.moveTo(centerX, centerY)
   ctx.arc(centerX, centerY, radius, activeAngle, 2 * Math.PI)
   ctx.closePath()
   ctx.fill()
-  
+
   // 绘制中心圆
   ctx.fillStyle = '#ffffff'
   ctx.beginPath()
   ctx.arc(centerX, centerY, radius * 0.6, 0, 2 * Math.PI)
   ctx.fill()
-  
-  // 绘制百分比文字
+
+  // 绘制中心文字：显示占比百分比。
+  // 历史缺陷：此处直接输出 `${active}%`，而 active 是用户数量而非百分比，
+  // 会把「100 个用户」渲染成「100%」。
+  const activePercent = Math.round((active / total) * 100)
   ctx.fillStyle = '#374151'
   ctx.font = 'bold 24px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`${active}%`, centerX, centerY)
+  ctx.fillText(`${activePercent}%`, centerX, centerY)
 }
 
 // 加载图表数据
@@ -465,7 +497,10 @@ const loadChartData = async () => {
       chartData.value.usage.data = usageData.counts
     }
 
-    // 用户活跃度：后端返回 { activeUsers, newRegistrations, loginCount }
+    // 用户构成：后端返回 { activeUsers, activeUsersApproximate, newRegistrations, loginCount }
+    // 注意：后端 activeUsers 目前以总用户数近似（activeUsersApproximate=true），
+    // 且 loginCount 恒为 0（缺少登录日志表）。因此图表展示「总用户数 vs 新增用户」，
+    // 而不是名义上的「活跃 / 非活跃」——后者会把新增注册数错当成非活跃用户数。
     if (activityData) {
       chartData.value.activity.active = activityData.activeUsers || activityData.active || 0
       chartData.value.activity.inactive = activityData.newRegistrations || activityData.inactive || 0
@@ -505,11 +540,17 @@ const loadServerStatus = async () => {
     const memoryPercent = Math.round((usedMemory / totalMemory) * 100)
 
     // 更新系统状态
+    // 注意：后端 /monitor/system 只提供 JVM 内存与运行时长，未提供 CPU 使用率与磁盘使用率。
+    // 历史缺陷：CPU 用 availableProcessors * 10 伪造（4 核永远显示 40%），
+    // 把估算值当作真实监控数据展示会误导运维判断，故标记为不可用并置为 null。
     systemStatus.value = {
       status: 'online',
-      cpu: systemData.availableProcessors ? Math.min(systemData.availableProcessors * 10, 100) : 0,
+      cpu: null,           // 后端未提供，UI 显示为「--」
+      cpuAvailable: false,
       memory: memoryPercent,
-      disk: 0, // 后端暂未提供磁盘数据
+      memoryAvailable: true,
+      disk: null,          // 后端未提供
+      diskAvailable: false,
       javaVersion: systemData.javaVersion || 'N/A',
       osName: systemData.osName || 'N/A',
       uptime: systemData.uptime || 0,
@@ -517,37 +558,71 @@ const loadServerStatus = async () => {
     }
 
     // 更新数据库状态
+    // 后端 /monitor/database 仅返回 status 与 type，连接数/QPS/响应时间/大小均未采集，
+    // 统一置为 null 由模板渲染为「--」，避免显示硬编码的 0 造成误判。
+    const dbMetricsAvailable = databaseData.metricsAvailable === true
     databaseStatus.value = {
       status: databaseData.status || 'offline',
-      connections: databaseData.activeConnections || 0,
-      qps: databaseData.qps || 0,
-      responseTime: databaseData.responseTime || 0,
-      size: databaseData.databaseSize || 'N/A',
+      connections: dbMetricsAvailable ? (databaseData.activeConnections ?? 0) : null,
+      qps: dbMetricsAvailable ? (databaseData.qps ?? 0) : null,
+      responseTime: dbMetricsAvailable ? (databaseData.responseTime ?? 0) : null,
+      size: dbMetricsAvailable ? (databaseData.databaseSize || '--') : null,
       type: databaseData.type || 'MySQL',
+      metricsAvailable: dbMetricsAvailable,
       loading: false
     }
 
     // 更新API状态
+    // 后端尚未采集请求数/错误率埋点（metricsAvailable=false）。
+    // 此时不能回退到「100 - errorRate」——errorRate 恒为 0 会得出
+    // 「成功率 100%」的假象，必须显式标记为无数据。
+    const apiMetricsAvailable = apiData.metricsAvailable === true
     apiStatus.value = {
       status: apiData.status || 'offline',
-      totalRequests: apiData.totalRequests || 0,
-      successRate: apiData.successRate ?? (100 - (apiData.errorRate || 0)),
-      avgResponseTime: apiData.avgResponseTime || 0,
-      errorCount: apiData.errorCount || 0,
+      totalRequests: apiMetricsAvailable ? (apiData.totalRequests || 0) : null,
+      successRate: apiMetricsAvailable
+        ? (apiData.successRate ?? (100 - (apiData.errorRate || 0)))
+        : null,
+      avgResponseTime: apiData.avgResponseTime ?? null,
+      errorCount: apiMetricsAvailable ? (apiData.errorCount || 0) : null,
+      metricsAvailable: apiMetricsAvailable,
       loading: false
     }
 
   } catch (error) {
     logger.error('加载服务器状态失败:', error)
 
-    // 设置错误状态
-    systemStatus.value.loading = false
-    databaseStatus.value.loading = false
-    apiStatus.value.loading = false
-
-    systemStatus.value.status = 'offline'
-    databaseStatus.value.status = 'offline'
-    apiStatus.value.status = 'offline'
+    // 设置错误状态：同时清空指标值，避免失败时残留上一次的旧数据被误读为当前状态
+    systemStatus.value = {
+      ...systemStatus.value,
+      status: 'offline',
+      cpu: null,
+      cpuAvailable: false,
+      memory: 0,
+      disk: null,
+      diskAvailable: false,
+      loading: false
+    }
+    databaseStatus.value = {
+      ...databaseStatus.value,
+      status: 'offline',
+      connections: null,
+      qps: null,
+      responseTime: null,
+      size: null,
+      metricsAvailable: false,
+      loading: false
+    }
+    apiStatus.value = {
+      ...apiStatus.value,
+      status: 'offline',
+      totalRequests: null,
+      successRate: null,
+      avgResponseTime: null,
+      errorCount: null,
+      metricsAvailable: false,
+      loading: false
+    }
   }
 }
 

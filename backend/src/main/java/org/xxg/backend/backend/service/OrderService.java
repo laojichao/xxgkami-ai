@@ -85,7 +85,11 @@ public class OrderService {
         order.setUserId(request.getUserId());
         order.setUsername(request.getUsername());
         order.setCardType(request.getCardType());
-        order.setCardSpec(request.getCardSpec());
+        // 安全修复：卡密规格必须由服务端根据定价配置推导，绝不能采信客户端传入的值。
+        // 历史缺陷：直接存储 request.getCardSpec()，而该字段随后会被
+        // CardService.generateCardsForOrder 解析为卡密天数/次数，
+        // 攻击者可提交 cardSpec="9999天" 搭配最便宜的定价，花 1 天卡的钱买到 9999 天卡。
+        order.setCardSpec(buildCardSpec(pricing));
         order.setQuantity(request.getQuantity());
         order.setUnitPrice(pricing.getPrice());
         order.setTotalPrice(pricing.getPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
@@ -97,6 +101,23 @@ public class OrderService {
     }
 
     /**
+     * 根据定价配置生成卡密规格字符串（服务端权威数据）。
+     * <p>格式与 {@code CardService.parseDaysFromSpec/parseCountFromSpec} 的解析规则对齐：
+     * 时长卡为「N天」，次数卡为「N次」。前端展示的 {@code CardPricing.description}
+     * 仅用于 UI，不参与任何价格或规格计算。</p>
+     *
+     * @param pricing 已校验的定价配置
+     * @return 规格字符串，例如 "30天" 或 "100次"
+     */
+    private String buildCardSpec(CardPricing pricing) {
+        Integer value = pricing.getValue();
+        if (value == null || value <= 0) {
+            throw new BusinessException("价格配置的规格值无效");
+        }
+        return "time".equals(pricing.getType()) ? value + "天" : value + "次";
+    }
+
+    /**
      * 完成订单（支付成功后调用）。
      *
      * @param orderNo  订单号
@@ -104,7 +125,11 @@ public class OrderService {
      */
     @Transactional
     public void completeOrder(String orderNo, String cardKeys) {
-        Order order = orderRepository.findByOrderNo(orderNo)
+        // 使用悲观锁读取订单：本方法同时被支付回调（/payment/notify）和管理员手动完成
+        // （/orders/admin/updateStatus）调用。若不加锁，两条路径并发执行时可能同时通过
+        // 下方的 pending 状态检查，各自调用 generateCardsForOrder 生成一遍卡密，
+        // 造成卡密重复发放（用户白得一份卡密）。
+        Order order = orderRepository.findByOrderNoWithLock(orderNo)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
         // 幂等性检查：已完成的订单不重复处理，防止支付回调重复发送导致卡密重复生成
         if ("completed".equals(order.getStatus())) {
@@ -122,6 +147,37 @@ public class OrderService {
         }
         order.setCardKeys(finalCardKeys);
         orderRepository.save(order);
+        // 投递卡密到用户邮箱：前端在购买成功提示中明确告知「已发送订单通知邮件」，
+        // 但此前 EmailService 虽已注入却从未调用，用户实际收不到任何邮件。
+        // 邮件为异步发送且失败不抛异常，不影响订单完成这一核心事务。
+        sendCardKeysByEmail(order, finalCardKeys);
+    }
+
+    /**
+     * 将订单卡密发送到用户账号邮箱（异步，失败仅记录日志）。
+     * <p>收件地址从 users 表按订单 userId 实时查询，而非采信下单时客户端传入的
+     * {@code CreateOrderRequest.email}，避免卡密被投递到攻击者指定的邮箱。
+     * 账号未绑定邮箱时跳过，不视为错误。</p>
+     *
+     * @param order    已完成订单
+     * @param cardKeys 卡密明文（多个以逗号分隔）
+     */
+    private void sendCardKeysByEmail(Order order, String cardKeys) {
+        if (cardKeys == null || cardKeys.isBlank() || order.getUserId() == null) {
+            return;
+        }
+        try {
+            String email = userRepository.findById(order.getUserId())
+                    .map(User::getEmail)
+                    .orElse(null);
+            if (email == null || email.isBlank()) {
+                return;
+            }
+            emailService.sendCardKeys(email, cardKeys);
+        } catch (Exception e) {
+            // 邮件投递失败不影响订单状态；用户仍可在「我的订单」中查看卡密
+            log.warn("订单 {} 卡密邮件发送失败: {}", order.getOrderNo(), e.getMessage());
+        }
     }
 
     /**

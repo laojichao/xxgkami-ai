@@ -50,6 +50,8 @@ class AuthServiceTest {
     private EmailService emailService;
     @Mock
     private TotpService totpService;
+    @Mock
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private AuthService authService;
@@ -59,6 +61,11 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 登录失败计数通过 TransactionTemplate 在独立事务中提交。
+        // Mock 事务管理器使其直接执行回调，便于验证失败计数逻辑。
+        lenient().when(transactionManager.getTransaction(any()))
+                .thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
+
         // 准备测试用户
         testUser = new User();
         testUser.setId(1);
@@ -115,6 +122,27 @@ class AuthServiceTest {
                 () -> authService.userLogin(request));
         assertEquals("用户名或密码错误", exception.getMessage());
         verify(userRepository).save(any(User.class)); // 保存失败次数
+        // 失败计数必须实际递增（回归保护：计数写入曾被外层事务回滚，
+        // 导致失败次数永远为 0、账户锁定机制完全失效）
+        assertEquals(1, testUser.getFailedLoginAttempts());
+    }
+
+    @Test
+    @DisplayName("登录失败累计达到阈值 - 账户被锁定")
+    void userLogin_ReachingMaxAttempts_LocksAccount() {
+        // 已有 4 次失败，本次失败后应达到阈值 5 并记录锁定时间
+        testUser.setFailedLoginAttempts(4);
+        LoginRequest request = new LoginRequest();
+        request.setUsername("testuser");
+        request.setPassword("WrongPass");
+
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+        when(passwordUtil.matches("WrongPass", "$2a$10$encodedPassword")).thenReturn(false);
+
+        assertThrows(BusinessException.class, () -> authService.userLogin(request));
+
+        assertEquals(5, testUser.getFailedLoginAttempts());
+        assertNotNull(testUser.getLockTime()); // 达到阈值必须写入锁定时间
     }
 
     @Test
@@ -330,5 +358,70 @@ class AuthServiceTest {
 
         assertDoesNotThrow(() -> authService.userLogin(request));
         assertEquals(1, testUser.getLoginCount());
+    }
+
+    @Test
+    @DisplayName("绑定令牌校验 - 令牌无归属用户时拒绝（fail-closed，防止任意用户消费）")
+    void validateBindToken_NullOwner_Rejected() {
+        org.xxg.backend.backend.entity.BindToken token = new org.xxg.backend.backend.entity.BindToken();
+        token.setToken("orphan-token");
+        token.setUserId(null); // 历史缺陷：无归属令牌曾被任意用户接受
+        token.setExpireTime(LocalDateTime.now().plusMinutes(5));
+        token.setUsed(false);
+
+        when(bindTokenRepository.findByTokenAndUsedFalse("orphan-token")).thenReturn(Optional.of(token));
+
+        assertFalse(authService.validateBindToken(1, "orphan-token"));
+        // 未被消费，仍保持未使用状态
+        assertFalse(Boolean.TRUE.equals(token.getUsed()));
+    }
+
+    @Test
+    @DisplayName("绑定令牌校验 - 调用方未提供 userId 时拒绝")
+    void validateBindToken_NullCallerId_Rejected() {
+        org.xxg.backend.backend.entity.BindToken token = new org.xxg.backend.backend.entity.BindToken();
+        token.setToken("owned-token");
+        token.setUserId(1);
+        token.setExpireTime(LocalDateTime.now().plusMinutes(5));
+        token.setUsed(false);
+
+        when(bindTokenRepository.findByTokenAndUsedFalse("owned-token")).thenReturn(Optional.of(token));
+
+        assertFalse(authService.validateBindToken(null, "owned-token"));
+    }
+
+    @Test
+    @DisplayName("绑定令牌校验 - 归属用户不匹配时拒绝")
+    void validateBindToken_WrongOwner_Rejected() {
+        org.xxg.backend.backend.entity.BindToken token = new org.xxg.backend.backend.entity.BindToken();
+        token.setToken("owned-token");
+        token.setUserId(1);
+        token.setExpireTime(LocalDateTime.now().plusMinutes(5));
+        token.setUsed(false);
+
+        when(bindTokenRepository.findByTokenAndUsedFalse("owned-token")).thenReturn(Optional.of(token));
+
+        assertFalse(authService.validateBindToken(2, "owned-token"));
+    }
+
+    @Test
+    @DisplayName("绑定令牌校验 - 归属匹配时通过并标记为已使用")
+    void validateBindToken_MatchingOwner_Accepted() {
+        org.xxg.backend.backend.entity.BindToken token = new org.xxg.backend.backend.entity.BindToken();
+        token.setToken("owned-token");
+        token.setUserId(1);
+        token.setExpireTime(LocalDateTime.now().plusMinutes(5));
+        token.setUsed(false);
+
+        when(bindTokenRepository.findByTokenAndUsedFalse("owned-token")).thenReturn(Optional.of(token));
+
+        assertTrue(authService.validateBindToken(1, "owned-token"));
+        assertTrue(Boolean.TRUE.equals(token.getUsed())); // 一次性令牌应被消费
+    }
+
+    @Test
+    @DisplayName("生成绑定令牌 - 无归属用户时抛出异常（禁止生成孤儿令牌）")
+    void getBindToken_NullUserId_ThrowsException() {
+        assertThrows(BusinessException.class, () -> authService.getBindToken(null));
     }
 }

@@ -31,6 +31,14 @@ public class ApiKeyService {
      */
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
+    /**
+     * API 密钥随机字节数。
+     * <p>固定为 16 字节（32 个十六进制字符），受 {@code api_keys.api_key} 列
+     * 长度限制（VARCHAR(32)）。两个密钥字段存储相同的值，保证返回给管理员的
+     * 密钥与库中用于认证的密钥完全一致。</p>
+     */
+    private static final int API_KEY_BYTES = 16;
+
     @Transactional
     public ApiKey createApiKey(String name, String description) {
         return createApiKey(name, description, null, null, null, null);
@@ -52,11 +60,15 @@ public class ApiKeyService {
         ApiKey apiKey = new ApiKey();
         apiKey.setKeyName(name);
         apiKey.setName(name);
-        // 安全修复：统一使用一个密钥值，避免 apiKeyValue 与 keyValue 不一致导致认证混乱
-        // keyValue 字段长度更大（255），作为主存储；apiKeyValue 字段（32）存储其前缀用于快速查找
-        String unifiedKey = generateSecureKey(32);
+        // 安全修复：统一使用一个密钥值，避免 apiKeyValue 与 keyValue 不一致导致认证混乱。
+        // 两个字段写入完全相同的值：
+        //   - key_value (255) 作为主存储，供 findByKeyValue 认证查询使用
+        //   - api_key   (32)  受列长度限制，因此密钥长度固定为 32 个十六进制字符（128 bit 熵）
+        // 历史缺陷：曾将 64 字符密钥的前 32 字符写入 api_key 并在创建接口返回，
+        // 导致管理员拿到的密钥与库中存储的完整密钥不一致，任何调用都会认证失败。
+        String unifiedKey = generateSecureKey(API_KEY_BYTES);
         apiKey.setKeyValue(unifiedKey);
-        apiKey.setApiKeyValue(unifiedKey.substring(0, 32));
+        apiKey.setApiKeyValue(unifiedKey);
         apiKey.setDescription(description);
         apiKey.setStatus(true);
         apiKey.setCreateTime(LocalDateTime.now());

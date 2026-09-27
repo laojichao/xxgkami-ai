@@ -84,8 +84,17 @@ public class Card {
     @Column(name = "api_key_id")
     private Integer apiKeyId; // 通过API创建时关联的API密钥ID
 
+    /**
+     * 同机器码重复使用时是否叠加时长（续期）。
+     * <p><b>当前状态：字段已持久化并可在管理后台设置，但验证流程尚未实现叠加逻辑。</b>
+     * {@code CardService.verifyCard} 目前对所有时长卡一律采用「以激活时刻起算到期」的单张语义，
+     * 不会把新卡时长累加到已有到期时间。因此该开关目前不产生任何实际效果。
+     * 若需启用续期，必须在 verifyTimeCard 中实现：
+     * 同机器码且该卡为叠加模式时，将新卡时长累加到当前生效授权的 expireTime，
+     * 并将参与叠加的卡密标记为已使用/已合并。</p>
+     */
     @Column(name = "stack_time_if_same_machine")
-    private Boolean stackTimeIfSameMachine = false; // 同机器码重复使用时是否叠加时长
+    private Boolean stackTimeIfSameMachine = false;
 
     @Column(name = "merged_into_card_id")
     private Integer mergedIntoCardId; // 合并目标卡密ID(本卡密被合并到的目标)

@@ -360,11 +360,14 @@ public class AuthController {
      */
     @GetMapping("/bind/token")
     public ResponseEntity<ApiResponse<?>> getBindToken(Authentication auth) {
-        Integer userId = null;
-        if (auth != null) {
-            userId = userRepository.findByUsername(auth.getName())
-                    .map(User::getId).orElse(null);
+        if (auth == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         }
+        // 令牌必须归属到 users 表中的真实用户；管理员账号不在 users 表中，
+        // 无法生成有效归属令牌，直接拒绝而不是生成无归属令牌。
+        Integer userId = userRepository.findByUsername(auth.getName())
+                .map(User::getId)
+                .orElseThrow(() -> new BusinessException("当前账号未关联用户，无法获取绑定令牌"));
         return ResponseEntity.ok(ApiResponse.ok(authService.getBindToken(userId)));
     }
 

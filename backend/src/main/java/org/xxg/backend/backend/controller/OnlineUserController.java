@@ -3,6 +3,7 @@ package org.xxg.backend.backend.controller;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
@@ -15,6 +16,7 @@ import java.util.*;
  * <p>基础路径：/online-users、/online/*</p>
  */
 @RestController
+@Validated
 public class OnlineUserController {
     private final OnlineUserService service;
     public OnlineUserController(OnlineUserService service) { this.service = service; }

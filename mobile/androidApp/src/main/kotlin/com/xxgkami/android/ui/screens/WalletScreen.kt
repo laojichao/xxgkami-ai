@@ -74,8 +74,7 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
                 ) {
                     WalletContent(
                         wallet = wallet,
-                        transactions = transactions,
-                        onRecharge = { amount -> walletViewModel.recharge(amount) }
+                        transactions = transactions
                     )
                 }
             }
@@ -88,13 +87,12 @@ fun WalletScreen(navController: NavController, walletViewModel: WalletViewModel 
  * 包含余额卡片和交易记录列表
  * @param wallet 钱包信息，可能为null
  * @param transactions 交易记录列表
- * @param onRecharge 充值回调
  */
 @Composable
-private fun WalletContent(wallet: Wallet?, transactions: List<WalletTransaction>, onRecharge: (Double) -> Unit = {}) {
+private fun WalletContent(wallet: Wallet?, transactions: List<WalletTransaction>) {
     LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         item {
-            WalletBalanceCard(wallet = wallet, onRecharge = onRecharge)
+            WalletBalanceCard(wallet = wallet)
             Spacer(Modifier.height(16.dp))
             Text("交易记录", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
@@ -114,14 +112,15 @@ private fun WalletContent(wallet: Wallet?, transactions: List<WalletTransaction>
 
 /**
  * 钱包余额概览卡片
- * 展示当前余额、累计充值和累计消费，支持充值操作
+ * 展示当前余额、累计充值和累计消费
+ *
+ * 说明：不提供自助充值入口。/wallet/recharge 在 SecurityConfig 中限定为
+ * hasRole("ADMIN")，普通用户调用必然返回 403；余额由管理员通过受信任流程调整。
+ *
  * @param wallet 钱包信息，可能为null
- * @param onRecharge 充值回调，传入充值金额
  */
 @Composable
-private fun WalletBalanceCard(wallet: Wallet?, onRecharge: ((Double) -> Unit)? = null) {
-    var showRechargeDialog by remember { mutableStateOf(false) }
-
+private fun WalletBalanceCard(wallet: Wallet?) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("余额", style = MaterialTheme.typography.titleMedium)
@@ -137,56 +136,7 @@ private fun WalletBalanceCard(wallet: Wallet?, onRecharge: ((Double) -> Unit)? =
                     Text("¥${wallet?.totalConsume ?: "0.00"}", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            if (onRecharge != null) {
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = { showRechargeDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("充值")
-                }
-            }
         }
-    }
-
-    // 充值金额输入对话框
-    if (showRechargeDialog) {
-        var amountText by remember { mutableStateOf("") }
-        var amountError by remember { mutableStateOf<String?>(null) }
-        AlertDialog(
-            onDismissRequest = { showRechargeDialog = false },
-            title = { Text("钱包充值") },
-            text = {
-                Column {
-                    Text("请输入充值金额")
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = amountText,
-                        onValueChange = { amountText = it; amountError = null },
-                        label = { Text("金额（元）") },
-                        isError = amountError != null,
-                        supportingText = amountError?.let { { Text(it) } },
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    // 使用 ViewModel 提供的统一校验函数，确保 UI 与 ViewModel 校验逻辑一致
-                    val validation = WalletViewModel.validateRechargeAmount(amountText)
-                    if (validation != null) {
-                        amountError = validation
-                    } else {
-                        // 校验通过后传递原始字符串，由 ViewModel 再次校验并提交
-                        onRecharge?.invoke(amountText.trim().toDouble())
-                        showRechargeDialog = false
-                    }
-                }) { Text("确认充值") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRechargeDialog = false }) { Text("取消") }
-            }
-        )
     }
 }
 

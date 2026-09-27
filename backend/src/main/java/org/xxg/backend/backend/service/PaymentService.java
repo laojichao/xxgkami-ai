@@ -72,8 +72,22 @@ public class PaymentService {
         params.put("sign_type", "MD5");
 
         Map<String, String> result = new HashMap<>();
-        result.put("url", apiUrl + "submit.php?" + buildQueryString(params));
+        String payUrl = apiUrl + "submit.php?" + buildQueryString(params);
+        // 同时返回 url 与 paymentUrl：前端 (UserPage.vue) 读取 paymentUrl，
+        // 旧客户端/文档使用 url。仅返回 url 会导致前端拿不到支付链接、无法跳转支付。
+        result.put("url", payUrl);
+        result.put("paymentUrl", payUrl);
         return result;
+    }
+
+    /**
+     * 构建支付跳转 URL（供控制器包装为统一响应格式）。
+     *
+     * @param orderNo 订单编号
+     * @return 支付平台跳转 URL
+     */
+    public String buildPaymentUrl(String orderNo) {
+        return createPayment(orderNo).get("paymentUrl");
     }
 
     /**
@@ -89,6 +103,13 @@ public class PaymentService {
     @Transactional
     public String handlePaymentCallback(Map<String, String> params) {
         String key = settingsService.getValue("epay_key", "");
+        // 安全修复：支付密钥未配置时一律拒绝回调。
+        // 否则 verifySign 会以空字符串作为密钥计算 MD5，攻击者可自行伪造合法签名，
+        // 从而把任意订单标记为已支付并白嫖卡密。
+        if (key == null || key.isBlank()) {
+            log.error("支付回调被拒绝：epay_key 未配置，无法验证签名");
+            return "fail";
+        }
         if (!paymentUtil.verifySign(params, key)) {
             log.warn("支付回调签名校验失败");
             return "fail";

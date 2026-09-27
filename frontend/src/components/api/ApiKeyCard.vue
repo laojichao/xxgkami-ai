@@ -8,7 +8,12 @@
           {{ apiKey.isActive ? '活跃' : '未使用' }}
         </span>
       </div>
-      <div class="api-key-value-container">
+      <!--
+        密钥值仅在创建时由后端返回一次，列表接口出于安全考虑不再返回（ApiKey.keyValue 标记 @JsonIgnore）。
+        因此此处必须区分「已知密钥」与「不可再次获取」两种状态，
+        否则会展示伪造的掩码并在复制时把 undefined 写入剪贴板。
+      -->
+      <div class="api-key-value-container" v-if="apiKey.key">
         <code class="api-key-value" v-if="showKey">{{ apiKey.key }}</code>
         <code class="api-key-value key-masked" v-else>{{ maskKey(apiKey.key) }}</code>
         <button class="copy-btn" @click.stop="showKey = !showKey" :title="showKey ? '隐藏密钥' : '显示密钥'">
@@ -18,6 +23,9 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
           复制
         </button>
+      </div>
+      <div class="api-key-value-container" v-else>
+        <code class="api-key-value key-masked" title="出于安全考虑，密钥仅在创建时显示一次">密钥仅在创建时显示</code>
       </div>
       <div class="api-key-meta">
         <div class="meta-item">

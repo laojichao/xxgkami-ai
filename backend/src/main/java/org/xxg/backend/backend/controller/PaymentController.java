@@ -39,24 +39,26 @@ public class PaymentController {
      */
     @Deprecated(since = "2026-06-10", forRemoval = false)
     @PostMapping("/pay")
-    public ResponseEntity<Map<String, String>> pay(@RequestBody Map<String, String> body, Authentication auth) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> pay(@RequestBody Map<String, String> body, Authentication auth) {
         String orderNo = body.get("orderNo");
         verifyOrderOwnership(orderNo, auth);
-        return ResponseEntity.ok(paymentService.createPayment(orderNo));
+        return ResponseEntity.ok(ApiResponse.ok("支付链接生成成功", paymentService.createPayment(orderNo)));
     }
 
     /**
      * 创建支付订单（别名接口）
      * <p>POST /payment/create</p>
      * <p>权限：已认证用户</p>
+     * <p>返回统一响应格式 {@code {success, message, data:{url, paymentUrl}}}，
+     * 前端通过 {@code data.paymentUrl} 获取支付跳转地址。</p>
      * @param body 请求体，包含 orderNo（订单号）
      * @return 支付平台返回的支付信息
      */
     @PostMapping("/create")
-    public ResponseEntity<Map<String, String>> createPayment(@RequestBody Map<String, String> body, Authentication auth) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> createPayment(@RequestBody Map<String, String> body, Authentication auth) {
         String orderNo = body.get("orderNo");
         verifyOrderOwnership(orderNo, auth);
-        return ResponseEntity.ok(paymentService.createPayment(orderNo));
+        return ResponseEntity.ok(ApiResponse.ok("支付链接生成成功", paymentService.createPayment(orderNo)));
     }
 
     /** 验证订单归属：只有订单所有者才能发起支付 */

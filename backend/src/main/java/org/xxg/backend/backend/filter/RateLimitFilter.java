@@ -139,10 +139,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         // 敏感认证接口限流：同一IP每分钟最多5次（防止邮箱轰炸和验证码暴力破解）
+        // 注意：/auth/totp/disable-by-recovery 是公开接口（管理员丢失 TOTP 设备时自救），
+        // 必须纳入限流，否则可被用于无限制爆破恢复码。
         if (uri.endsWith("/auth/register") || uri.endsWith("/auth/email-code")
                 || uri.endsWith("/auth/reset-code") || uri.endsWith("/auth/reset-password")
                 || uri.endsWith("/auth/totp/enable") || uri.endsWith("/auth/totp/disable")
-                || uri.endsWith("/auth/totp/setup")) {
+                || uri.endsWith("/auth/totp/setup")
+                || uri.endsWith("/auth/totp/disable-by-recovery")) {
             if (!tryAcquire(sensitiveAttempts, clientIp, SENSITIVE_MAX_REQUESTS, SENSITIVE_WINDOW_SECONDS)) {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setContentType("application/json;charset=UTF-8");

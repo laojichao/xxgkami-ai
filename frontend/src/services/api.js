@@ -371,11 +371,12 @@ export const authApi = {
 
   /**
    * 通过恢复码禁用TOTP
+   * 注意：后端字段名为 recoveryCode，使用 code 会导致参数为空而失败
    */
   async disableTotpByRecovery(username, code) {
     return await apiRequest('/auth/totp/disable-by-recovery', {
       method: 'POST',
-      body: JSON.stringify({ username, code })
+      body: JSON.stringify({ username, recoveryCode: code })
     });
   },
 

@@ -139,6 +139,30 @@ class CardServiceTest {
     }
 
     @Test
+    @DisplayName("生成时长卡失败 - 缺少有效天数（防止生成永不过期的卡密）")
+    void generateCard_TimeCardWithoutDays_ThrowsException() {
+        assertThrows(BusinessException.class,
+                () -> cardService.generateCard("time", 1440, null,
+                        "admin", 1, "admin", "web", null, null));
+    }
+
+    @Test
+    @DisplayName("生成次数卡失败 - 缺少总次数")
+    void generateCard_CountCardWithoutTotalCount_ThrowsException() {
+        assertThrows(BusinessException.class,
+                () -> cardService.generateCard("count", null, null,
+                        "admin", 1, "admin", "web", null, null));
+    }
+
+    @Test
+    @DisplayName("批量生成时长卡失败 - 缺少有效天数")
+    void generateCardsBatch_TimeCardWithoutDays_ThrowsException() {
+        assertThrows(BusinessException.class,
+                () -> cardService.generateCardsBatch("time", 1440, null,
+                        "admin", 1, "admin", "web", null, null, 5));
+    }
+
+    @Test
     @DisplayName("验证时长卡成功 - 首次使用绑定机器码")
     void verifyCard_TimeCard_FirstUse_BindsMachineCode() {
         when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
@@ -205,6 +229,24 @@ class CardServiceTest {
 
         assertFalse((Boolean) result.get("success"));
         assertEquals("卡密无效", result.get("message"));
+    }
+
+    @Test
+    @DisplayName("验证失败的卡密不应绑定机器码（防止脏检查误写库）")
+    void verifyCard_FailedVerification_DoesNotBindMachineCode() {
+        // 卡密已过期：验证必然失败
+        testCardStatus.setExpireTime(LocalDateTime.now().minusDays(1));
+        when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
+                .thenReturn(Optional.of(testCard));
+        when(cardStatusRepository.findByCardHashForUpdate("encrypted-key-123"))
+                .thenReturn(Optional.of(testCardStatus));
+
+        Map<String, Object> result = cardService.verifyCard("TEST-XXXX-YYYY-ZZZZ", "attacker-machine", null);
+
+        assertFalse((Boolean) result.get("success"));
+        // 关键断言：验证失败时机器码不得被写入实体（否则 JPA 脏检查会在提交时落库）
+        assertNull(testCard.getMachineCode());
+        verify(cardRepository, never()).save(any(Card.class));
     }
 
     @Test

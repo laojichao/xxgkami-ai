@@ -223,7 +223,9 @@ import { monitorApi } from '../services/api.js'
 import logger from '../utils/logger'
 
 /** 当前系统版本号 */
-const currentVersion = 'v1.0.6'
+// 与 backend/pom.xml 的 <version> 及 APP_VERSION 配置保持一致。
+// 历史缺陷：此处硬编码 v1.0.6，与后端 1.0.2 不符，导致「检查更新」恒报版本不一致。
+const currentVersion = 'v1.0.2'
 /** 检查更新按钮加载状态 */
 const checking = ref(false)
 /** 更新提示弹窗是否可见 */
@@ -248,12 +250,22 @@ const checkUpdate = async () => {
     const data = await monitorApi.checkUpdate()
     if (!data.success) throw new Error(data.message || '检查更新失败')
 
-    const remoteVersion = data.version
-    if (remoteVersion !== currentVersion.replace('v', '')) {
-      updateInfo.value = data
-      showUpdateDialog.value = true
+    // 说明：/monitor/check-update 返回的是**服务端自身的版本号**（app.version 配置），
+    // 并非远端仓库的最新版本——该接口未接入任何远程发布源查询。
+    // 因此这里的比对只能发现「前端硬编码版本与后端配置不一致」，
+    // 不能用于判断是否存在新版本，避免误报「发现新版本」。
+    const serverVersion = String(data.version || '').replace(/^v/, '')
+    if (!serverVersion) {
+      ElMessage.warning('无法获取服务端版本信息')
+      return
+    }
+    if (serverVersion === currentVersion.replace('v', '')) {
+      ElMessage.success('前后端版本一致')
     } else {
-      ElMessage.success('当前已是最新版本')
+      ElMessage.warning(
+        `版本不一致：前端 ${currentVersion}，服务端 v${serverVersion}。` +
+        '该接口仅比对服务端配置版本，不查询远程发布源。'
+      )
     }
   } catch (error) {
     logger.error(error)

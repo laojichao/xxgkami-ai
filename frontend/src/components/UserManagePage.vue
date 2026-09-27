@@ -350,6 +350,9 @@ const submitForm = async () => {
 /** 切换用户启用/禁用状态（需二次确认） */
 const toggleUserStatus = async (id, currentStatus) => {
   const action = currentStatus ? '禁用' : '启用'
+  // 目标状态是当前状态取反：后端按传入的 status 显式设置，
+  // 若传 currentStatus 则等于不做任何改变（历史缺陷：禁用按钮实际不会禁用用户）
+  const targetStatus = !currentStatus
   try {
     await ElMessageBox.confirm(`确定要${action}该用户吗？`, '确认操作', {
       confirmButtonText: '确定',
@@ -358,7 +361,7 @@ const toggleUserStatus = async (id, currentStatus) => {
     })
   } catch { return }
   try {
-    await userApi.updateUserStatus(id, currentStatus)
+    await userApi.updateUserStatus(id, targetStatus)
     fetchUsers()
     ElMessage.success(`用户已${action}`)
   } catch (error) {

@@ -8,14 +8,18 @@ import java.time.LocalDateTime;
 
 /**
  * 卡密响应 DTO。
- * <p>用于向前端返回卡密信息，包含脱敏后的卡密明文。
+ * <p>用于向前端返回卡密信息，包含卡密明文。
  * 不直接使用 Card 实体序列化，避免 @JsonIgnore 导致 cardKey 缺失。</p>
+ * <p><b>安全边界：</b>所有使用此 DTO 的端点（/cards/admin/**、/cards/user/**、
+ * /cards/apikey/**）在 SecurityConfig 中均要求 ADMIN 角色，因此可以返回卡密明文。
+ * 管理员必须能够复制/导出卡密以交付给客户，脱敏会导致核心业务流程不可用。
+ * 面向普通用户的接口不得使用此 DTO。</p>
  */
 @Getter
 @Setter
 public class CardResponse {
     private Integer id;
-    private String cardKey; // 脱敏后的卡密（前4位****后4位）
+    private String cardKey; // 卡密明文（仅限管理员接口返回）
     private String encryptedKey;
     private Integer status;
     private LocalDateTime createTime;
@@ -37,20 +41,14 @@ public class CardResponse {
     private Boolean allowSelfUnbind;
 
     /**
-     * 从 Card 实体构建 CardResponse，对 cardKey 进行脱敏处理
+     * 从 Card 实体构建 CardResponse。
+     * <p>返回完整卡密明文——调用方必须是管理员接口（见类注释的安全边界说明）。</p>
      */
     public static CardResponse fromEntity(Card card) {
         CardResponse resp = new CardResponse();
         resp.setId(card.getId());
-        // 卡密脱敏：前4位****后4位
-        String key = card.getCardKey();
-        if (key != null && key.length() > 8) {
-            resp.setCardKey(key.substring(0, 4) + "****" + key.substring(key.length() - 4));
-        } else if (key != null) {
-            resp.setCardKey("****");
-        } else {
-            resp.setCardKey(null);
-        }
+        // 返回完整卡密明文：管理员需要复制/导出卡密交付客户，脱敏会使业务不可用
+        resp.setCardKey(card.getCardKey());
         resp.setEncryptedKey(card.getEncryptedKey());
         resp.setStatus(card.getStatus());
         resp.setCreateTime(card.getCreateTime());

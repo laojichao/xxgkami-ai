@@ -62,15 +62,8 @@
         v-if="activeTab === 'orders'"
       />
 
-      <!-- API管理页面 -->
-      <ApiManagePage
-        v-if="activeTab === 'api'"
-        :api-keys="apiKeys"
-        @generate-api-key="handleGenerateApiKey"
-        @delete-api-key="handleDeleteApiKey"
-        @update-api-key="handleUpdateApiKey"
-        @toggle-api-key="handleToggleApiKey"
-      />
+      <!-- API管理页面：组件内部自行拉取数据，无需父组件传入 props -->
+      <ApiManagePage v-if="activeTab === 'api'" />
 
       <!-- 用户管理页面 -->
       <UserManagePage
@@ -109,7 +102,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
-import { cardApi, statsApi, apiKeyApi, publicApi, settingsApi, maintenanceApi } from '../services/api.js'
+import { cardApi, statsApi, publicApi, settingsApi, maintenanceApi } from '../services/api.js'
 import { ElMessage } from 'element-plus'
 import NavigationBar from './NavigationBar.vue'
 import logger from '../utils/logger'
@@ -199,7 +192,6 @@ const stats = reactive({
 
 const features = ref([])
 const keys = ref([])
-const apiKeys = ref([])
 
 const createProgress = reactive({
   visible: false,
@@ -367,59 +359,22 @@ const loadKeys = async () => {
   try {
     const result = await cardApi.getAllCards()
     if (result.success) {
-      keys.value = result.data
+      // 后端 /cards/admin/all 返回 Spring Data Page 对象
+      // （{content:[...], totalElements, ...}），需取 content 才是卡密数组；
+      // 直接把 Page 赋给 keys 会使表格渲染异常（列表长度恒为 undefined）。
+      const page = result.data
+      if (Array.isArray(page)) {
+        keys.value = page
+      } else if (page && Array.isArray(page.content)) {
+        keys.value = page.content
+      } else {
+        keys.value = []
+      }
     }
     // 加载统计数据
     await loadDashboardStats()
   } catch (error) {
     logger.error('加载卡密数据失败:', error)
-  }
-}
-
-const handleGenerateApiKey = async () => {
-  try {
-    const res = await apiKeyApi.createApiKey({ name: `API密钥 ${apiKeys.value.length + 1}` })
-    if (res.success) {
-      apiKeys.value.push(res.data)
-      ElMessage.success('API Key 创建成功')
-    }
-  } catch (error) {
-    ElMessage.error('创建失败: ' + error.message)
-  }
-}
-
-const handleDeleteApiKey = async (keyId) => {
-  try {
-    await apiKeyApi.deleteApiKey(keyId)
-    apiKeys.value = apiKeys.value.filter(key => key.id !== keyId)
-    ElMessage.success('已删除')
-  } catch (error) {
-    ElMessage.error('删除失败: ' + error.message)
-  }
-}
-
-const handleUpdateApiKey = async (updatedKey) => {
-  try {
-    await apiKeyApi.updateApiKey(updatedKey.id, updatedKey)
-    const index = apiKeys.value.findIndex(key => key.id === updatedKey.id)
-    if (index !== -1) {
-      apiKeys.value[index] = { ...apiKeys.value[index], ...updatedKey }
-    }
-    ElMessage.success('更新成功')
-  } catch (error) {
-    ElMessage.error('更新失败: ' + error.message)
-  }
-}
-
-const handleToggleApiKey = async (keyId) => {
-  const key = apiKeys.value.find(key => key.id === keyId)
-  if (key) {
-    try {
-      await apiKeyApi.updateApiKey(keyId, { status: !key.isActive })
-      key.isActive = !key.isActive
-    } catch (error) {
-      ElMessage.error('操作失败: ' + error.message)
-    }
   }
 }
 
@@ -473,12 +428,8 @@ const handleTotpEnabledChange = (enabled) => {
 onMounted(async () => {
   // 从 API 加载数据
   try {
-    const [featuresRes, apiKeysRes] = await Promise.all([
-      publicApi.getFeatures().catch(() => ({ data: [] })),
-      apiKeyApi.getAllApiKeys().catch(() => ({ data: [] }))
-    ])
+    const featuresRes = await publicApi.getFeatures().catch(() => ({ data: [] }))
     features.value = featuresRes.data || []
-    apiKeys.value = apiKeysRes.data || []
   } catch (e) {
     logger.error('加载初始数据失败:', e)
   }

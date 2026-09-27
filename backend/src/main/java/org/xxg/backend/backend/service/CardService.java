@@ -52,7 +52,7 @@ public class CardService {
      * <p>创建卡密主记录、加密数据（Cipher）和状态信息，支持时长卡和次数卡。</p>
      *
      * @param cardType     卡密类型（time/count）
-     * @param duration     时长（分钟）
+     * @param duration     有效时长（天，时长卡使用）
      * @param totalCount   总次数（次数卡）
      * @param creatorType  创建者类型（admin/user/system）
      * @param creatorId    创建者 ID
@@ -78,6 +78,13 @@ public class CardService {
             creator = Card.CreatorType.valueOf(creatorType);
         } catch (IllegalArgumentException e) {
             throw new BusinessException("无效的创建者类型: " + creatorType);
+        }
+        // 校验业务参数：时长卡必须有有效期，次数卡必须有总次数（防止生成永不过期的卡密）
+        if (type == Card.CardType.time && (days == null || days <= 0)) {
+            throw new BusinessException("时长卡必须指定有效天数（days）");
+        }
+        if (type == Card.CardType.count && (totalCount == null || totalCount <= 0)) {
+            throw new BusinessException("次数卡必须指定总次数（totalCount）");
         }
 
         try {
@@ -135,6 +142,11 @@ public class CardService {
                 }
             }
             card.setEncryptionType("advanced");
+            // 同步写入过期时间：管理后台的剩余时间列直接读取 Card.expireTime，
+            // 此前仅写入 CardStatus.expireTime，导致该列始终显示「未激活」。
+            if (type == Card.CardType.time && days != null) {
+                card.setExpireTime(LocalDateTime.now().plusDays(days));
+            }
 
             return cardRepository.save(card);
         } catch (BusinessException e) {
@@ -151,7 +163,7 @@ public class CardService {
      * <p>使用 saveAll 批量插入卡密、加密数据和状态记录，替代循环内逐个 save。</p>
      *
      * @param cardType     卡密类型（time/count）
-     * @param duration     时长（分钟）
+     * @param duration     有效时长（天，时长卡使用）
      * @param totalCount   总次数（次数卡）
      * @param creatorType  创建者类型（admin/user/system）
      * @param creatorId    创建者 ID
@@ -178,6 +190,15 @@ public class CardService {
             creator = Card.CreatorType.valueOf(creatorType);
         } catch (IllegalArgumentException e) {
             throw new BusinessException("无效的创建者类型: " + creatorType);
+        }
+        // 校验业务参数：时长卡必须有有效期，次数卡必须有总次数。
+        // 缺少 days 会生成永不过期的时长卡（CardStatus.expireTime 为 null），
+        // 属于严重的业务与安全问题，必须在入口拦截。
+        if (type == Card.CardType.time && (days == null || days <= 0)) {
+            throw new BusinessException("时长卡必须指定有效天数（days）");
+        }
+        if (type == Card.CardType.count && (totalCount == null || totalCount <= 0)) {
+            throw new BusinessException("次数卡必须指定总次数（totalCount）");
         }
 
         List<Card> cards = new ArrayList<>(count);
@@ -235,6 +256,10 @@ public class CardService {
                     }
                 }
                 card.setEncryptionType("advanced");
+                // 同步写入过期时间，与管理后台展示保持一致
+                if (type == Card.CardType.time && days != null) {
+                    card.setExpireTime(LocalDateTime.now().plusDays(days));
+                }
                 cards.add(card);
             } catch (Exception e) {
                 log.error("批量生成卡密失败: {}", e.getMessage(), e);
@@ -285,8 +310,8 @@ public class CardService {
             return buildErrorResponse("此卡密不允许重复验证", 403);
         }
 
-        // 5. 校验/绑定机器码
-        String machineCodeError = validateOrBindMachineCode(card, machineCode);
+        // 5. 校验机器码（绑定在全部校验通过后执行）
+        String machineCodeError = validateMachineCode(card, machineCode);
         if (machineCodeError != null) {
             return buildErrorResponse(machineCodeError, 400);
         }
@@ -304,8 +329,8 @@ public class CardService {
             }
         }
 
-        // 7. 更新卡密使用状态
-        finalizeCardUsage(card);
+        // 7. 更新卡密使用状态并绑定机器码
+        finalizeCardUsage(card, machineCode);
 
         result.put("success", true);
         result.put("message", "验证成功");
@@ -353,14 +378,22 @@ public class CardService {
         return result;
     }
 
-    /** 校验或绑定机器码，返回错误消息（无错误返回 null） */
-    private String validateOrBindMachineCode(Card card, String machineCode) {
+    /**
+     * 校验机器码是否匹配（仅校验，不写入）。
+     * <p>绑定动作延迟到 {@link #finalizeCardUsage}，与「首次使用」状态一起持久化。
+     * 若在此处直接赋值，由于 card 是受管实体（findByCardKeyForUpdate 加载），
+     * 即使后续校验失败（已过期、次数用尽）并提前返回，事务提交时 JPA 脏检查
+     * 仍会把机器码刷入数据库，导致验证失败的卡密被错误绑定。</p>
+     *
+     * @param card        卡密实体
+     * @param machineCode 待校验的机器码
+     * @return 错误消息（无错误返回 null）
+     */
+    private String validateMachineCode(Card card, String machineCode) {
         if (card.getMachineCode() != null && !card.getMachineCode().isEmpty()) {
             if (machineCode == null || !card.getMachineCode().equals(machineCode)) {
                 return "卡密无效或机器码不匹配";
             }
-        } else if (machineCode != null && !machineCode.isEmpty()) {
-            card.setMachineCode(machineCode);
         }
         return null;
     }
@@ -397,11 +430,21 @@ public class CardService {
         return null;
     }
 
-    /** 更新卡密首次使用状态 */
-    private void finalizeCardUsage(Card card) {
+    /**
+     * 更新卡密使用状态并绑定机器码（仅在全部校验通过后调用）。
+     *
+     * @param card        卡密实体
+     * @param machineCode 待绑定的机器码（可为 null，表示未提供）
+     */
+    private void finalizeCardUsage(Card card, String machineCode) {
         if (card.getStatus() == 0) {
             card.setStatus(1);
             card.setUseTime(LocalDateTime.now());
+        }
+        // 首次绑定时写入机器码；已绑定的卡密在校验阶段已确认一致，无需重复写入
+        if ((card.getMachineCode() == null || card.getMachineCode().isEmpty())
+                && machineCode != null && !machineCode.isEmpty()) {
+            card.setMachineCode(machineCode);
         }
         cardRepository.save(card);
     }
@@ -610,7 +653,10 @@ public class CardService {
         Integer days = null;
         if ("time".equals(order.getCardType())) {
             days = parseDaysFromSpec(order.getCardSpec());
-            duration = days * 24 * 60;
+            // 单位统一为「天」：Card.duration 字段定义为天数，前端也按「N 天」展示。
+            // 历史缺陷：此处曾写入 days*24*60（分钟），导致订单生成的时长卡
+            // 在后台/客户端显示为「10080 天」等错误数值。
+            duration = days;
         } else if ("count".equals(order.getCardType())) {
             totalCount = parseCountFromSpec(order.getCardSpec());
         }
@@ -669,6 +715,10 @@ public class CardService {
                 card.setApiKeyId(null);
                 card.setVerifyMethod(Card.VerifyMethod.web);
                 card.setEncryptionType("advanced");
+                // 同步写入过期时间，与管理后台展示保持一致
+                if (Card.CardType.time.name().equals(order.getCardType()) && days != null) {
+                    card.setExpireTime(LocalDateTime.now().plusDays(days));
+                }
                 cards.add(card);
 
                 cardKeys.add(cardKey);
@@ -800,14 +850,17 @@ public class CardService {
                 throw new BusinessException("无效的验证方式: " + updates.get("verifyMethod"));
             }
         }
+        // 布尔字段使用 parseBooleanFlexible 解析：
+        // 前端 <select> 提交的是字符串 "1"/"0"，Boolean.parseBoolean("1") 恒为 false，
+        // 会导致「允许重复验证」等开关无法开启，必须显式识别 1/0/true/false。
         if (updates.containsKey("allowSelfUnbind")) {
-            card.setAllowSelfUnbind(Boolean.parseBoolean(updates.get("allowSelfUnbind").toString()));
+            card.setAllowSelfUnbind(parseBooleanFlexible(updates.get("allowSelfUnbind")));
         }
         if (updates.containsKey("stackTimeIfSameMachine")) {
-            card.setStackTimeIfSameMachine(Boolean.parseBoolean(updates.get("stackTimeIfSameMachine").toString()));
+            card.setStackTimeIfSameMachine(parseBooleanFlexible(updates.get("stackTimeIfSameMachine")));
         }
         if (updates.containsKey("allowReverify")) {
-            card.setAllowReverify(Boolean.parseBoolean(updates.get("allowReverify").toString()));
+            card.setAllowReverify(parseBooleanFlexible(updates.get("allowReverify")));
         }
         Card saved = cardRepository.save(card);
         // 同步更新 CardStatus 表对应字段，保持主表与状态表一致
@@ -823,6 +876,23 @@ public class CardService {
             });
         }
         return saved;
+    }
+
+    /**
+     * 宽松解析布尔值，兼容前端传来的多种表示形式。
+     * <p>支持：Boolean 真值、数字 1/0、字符串 "1"/"0"/"true"/"false"（忽略大小写）。</p>
+     *
+     * @param value 原始值
+     * @return 解析后的布尔值，无法识别时返回 false
+     */
+    private boolean parseBooleanFlexible(Object value) {
+        if (value == null) return false;
+        if (value instanceof Boolean b) return b;
+        if (value instanceof Number n) return n.intValue() != 0;
+        String str = value.toString().trim();
+        if ("1".equals(str)) return true;
+        if ("0".equals(str)) return false;
+        return Boolean.parseBoolean(str);
     }
 
     /**

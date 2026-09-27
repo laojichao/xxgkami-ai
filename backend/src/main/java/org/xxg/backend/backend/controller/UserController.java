@@ -258,10 +258,38 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("用户已删除"));
     }
 
+    /**
+     * 更新用户启用/禁用状态。
+     * <p>请求体可携带 {@code status}（true/false 或 1/0）显式指定目标状态；
+     * 未携带时退化为翻转当前状态（兼容旧客户端）。</p>
+     *
+     * @param id   用户ID
+     * @param body 请求体
+     * @return 操作结果
+     */
     @PutMapping("/admin/users/{id}/status")
-    public ResponseEntity<ApiResponse<Void>> updateUserStatus(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
-        userService.toggleUserStatus(id);
+    public ResponseEntity<ApiResponse<Void>> updateUserStatus(@PathVariable Integer id,
+                                                               @RequestBody(required = false) Map<String, Object> body) {
+        Object statusObj = body != null ? body.get("status") : null;
+        if (statusObj == null) {
+            // 兼容未传 status 的旧客户端：翻转当前状态
+            userService.toggleUserStatus(id);
+        } else {
+            // 显式设置目标状态，避免翻转语义在并发/陈旧 UI 下产生相反结果
+            userService.setUserStatus(id, parseBooleanFlexible(statusObj));
+        }
         return ResponseEntity.ok(ApiResponse.ok("用户状态已更新"));
+    }
+
+    /** 宽松解析布尔值，兼容 true/false、1/0 及其字符串形式 */
+    private boolean parseBooleanFlexible(Object value) {
+        if (value == null) return false;
+        if (value instanceof Boolean b) return b;
+        if (value instanceof Number n) return n.intValue() != 0;
+        String str = value.toString().trim();
+        if ("1".equals(str)) return true;
+        if ("0".equals(str)) return false;
+        return Boolean.parseBoolean(str);
     }
 
     // --- Legacy endpoints ---

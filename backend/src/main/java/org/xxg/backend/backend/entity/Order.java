@@ -1,6 +1,5 @@
 package org.xxg.backend.backend.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -63,9 +62,13 @@ public class Order {
     @Column(name = "pay_time")
     private LocalDateTime payTime; // 支付完成时间
 
-    @JsonIgnore
+    // 购买的卡密内容（支付成功后填充，多个以逗号分隔）。
+    // 必须序列化返回：前端订单详情页（OrdersManagePage/UserPage）依赖此字段
+    // 向用户展示并复制其购买的卡密。访问控制由接口层保证——
+    // /orders 仅返回当前用户自己的订单，/orders/{orderNo} 校验订单归属，
+    // /orders/admin/** 要求 ADMIN 角色。
     @Column(name = "card_keys", columnDefinition = "TEXT")
-    private String cardKeys; // 购买的卡密内容(支付成功后填充, JSON格式)
+    private String cardKeys;
 
     @Override
     public boolean equals(Object o) {

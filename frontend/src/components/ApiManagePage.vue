@@ -101,7 +101,6 @@ import { apiKeyApi, cardApi } from '../services/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
-import { obfuscateCardKey } from '../utils/cardKey.js'
 import ApiKeyCard from './api/ApiKeyCard.vue'
 import CreateApiKeyDialog from './api/CreateApiKeyDialog.vue'
 import EditApiKeyDialog from './api/EditApiKeyDialog.vue'
@@ -158,8 +157,12 @@ const editingKeyData = computed(() => {
 /** 从后端获取所有API密钥及其关联的卡密和用户数据 */
 const fetchApiKeys = async () => {
   try {
-    const data = await apiKeyApi.getAllApiKeys()
-    apiKeys.value = await Promise.all(data.map(async key => {
+    const res = await apiKeyApi.getAllApiKeys()
+    // 后端返回统一响应格式 {success, message, data:[...]}，
+    // 必须取 res.data 后再 map；直接对响应体调用 map 会因缺少该方法而抛错，
+    // 导致 API 密钥列表始终为空。
+    const list = res && Array.isArray(res.data) ? res.data : []
+    apiKeys.value = await Promise.all(list.map(async key => {
       let cardCodes = [];
       try {
         const cardsRes = await cardApi.getApiKeyCards(key.id);
@@ -167,6 +170,8 @@ const fetchApiKeys = async () => {
           cardCodes = cardsRes.data.map(c => ({
             id: c.id,
             code: c.cardKey || c.card_key,
+            // 后端返回的真实 SHA-256 值，用于「复制加密卡密」功能
+            encryptedKey: c.encryptedKey || c.encrypted_key || '',
             status: c.status === 0 ? 'unused' : (c.status === 4 ? 'merged' : 'used'),
             expiryDate: c.expireTime || c.expire_time,
             type: (c.cardType || c.card_type) === 'time' ? '时间卡' : '次数卡',
@@ -183,7 +188,9 @@ const fetchApiKeys = async () => {
         name: key.keyName,
         key: key.apiKey,
         description: key.description,
-        isActive: key.status === 1,
+        // 后端 ApiKey.status 是 Boolean（true=启用），JSON 中为 true/false；
+        // 兼容历史数据可能出现的 1/0 数字形式，避免密钥状态永远显示为「未使用」
+        isActive: key.status === true || key.status === 1,
         createdAt: key.createTime,
         lastUsed: null,
         requestCount: 0,
@@ -204,8 +211,18 @@ const fetchApiKeys = async () => {
 /** 获取所有用户列表 */
 const fetchUsers = async () => {
   try {
-    const data = await apiKeyApi.getAllUsers()
-    allUsers.value = data?.users || data || []
+    const res = await apiKeyApi.getAllUsers()
+    // 后端 /admin/users 返回统一响应格式，data 为 Spring Data Page 对象
+    // （{content:[...], totalElements, ...}）。此前读取 res.users 恒为 undefined，
+    // 导致「用户管理」弹窗中可选用户列表始终为空。
+    const page = res && res.data ? res.data : null
+    if (Array.isArray(page)) {
+      allUsers.value = page
+    } else if (page && Array.isArray(page.content)) {
+      allUsers.value = page.content
+    } else {
+      allUsers.value = []
+    }
   } catch (error) {
     logger.error('Failed to fetch users:', error)
     allUsers.value = []
@@ -216,14 +233,36 @@ const fetchUsers = async () => {
 const handleCreateApiKey = async ({ name, description, enableCardEncryption }) => {
   if (!name.trim()) return
   try {
-    await apiKeyApi.createApiKey({
+    const result = await apiKeyApi.createApiKey({
       name: name,
       description: description,
-      enable_card_encryption: enableCardEncryption
+      // 后端 DTO 字段为 camelCase（enableCardEncryption），
+      // 使用 snake_case 会被 Jackson 静默忽略，导致「卡密加密传输」开关不生效
+      enableCardEncryption: enableCardEncryption
     })
-    ElMessage.success('创建成功')
+    // 密钥值仅在创建时返回一次，列表接口不会返回（后端 @JsonIgnore）。
+    // 必须在此处提示管理员立即保存，否则关闭弹窗后无法再次获取。
+    const createdKey = result?.data?.apiKey
     showCreateModal.value = false
-    fetchApiKeys()
+    await fetchApiKeys()
+    if (createdKey) {
+      // 使用纯文本展示，避免 dangerouslyUseHTMLString 引入 XSS 风险
+      try {
+        await ElMessageBox.alert(
+          `请立即保存以下 API 密钥，关闭后将无法再次查看：\n\n${createdKey}`,
+          'API 密钥创建成功',
+          {
+            confirmButtonText: '复制并关闭',
+            showClose: false
+          }
+        )
+        copyApiKey(createdKey)
+      } catch (e) {
+        // 用户关闭弹窗，忽略
+      }
+    } else {
+      ElMessage.success('创建成功')
+    }
   } catch (error) {
     logger.error('Create failed:', error)
     ElMessage.error('创建失败')
@@ -236,10 +275,11 @@ const handleSaveApiKey = async (formData) => {
     await apiKeyApi.updateApiKey(formData.id, {
       name: formData.name,
       description: formData.description,
-      status: formData.isActive ? 1 : 0,
-      enable_card_encryption: formData.enableCardEncryption,
-      require_machine_code: formData.requireMachineCode,
-      machine_spec_once_config: formData.machineSpecOnceConfig || ''
+      status: formData.isActive,
+      // 必须使用后端 DTO 的 camelCase 字段名，snake_case 会被静默忽略
+      enableCardEncryption: formData.enableCardEncryption,
+      requireMachineCode: formData.requireMachineCode,
+      machineSpecOnceConfig: formData.machineSpecOnceConfig || ''
     })
     ElMessage.success('保存成功')
 
@@ -283,11 +323,12 @@ const deleteApiKey = async (id) => {
 const toggleApiKey = async (apiKey) => {
   try {
     const newStatus = !apiKey.isActive
+    // 后端 status 为 Boolean，直接传布尔值，避免 1/0 与 Boolean 的反序列化歧义
     await apiKeyApi.updateApiKey(apiKey.id, {
       name: apiKey.name,
       description: apiKey.description,
-      status: newStatus ? 1 : 0,
-      enable_card_encryption: apiKey.enableCardEncryption
+      status: newStatus,
+      enableCardEncryption: apiKey.enableCardEncryption
     })
     apiKey.isActive = newStatus
     ElMessage.success(newStatus ? '已启用' : '已禁用')
@@ -341,6 +382,8 @@ const fetchCardCodes = async (apiKeyId) => {
     const cards = res.data.map(c => ({
       id: c.id,
       code: c.cardKey || c.card_key,
+      // 后端返回的真实 SHA-256 值，用于「复制加密卡密」功能
+      encryptedKey: c.encryptedKey || c.encrypted_key || '',
       status: c.status === 0 ? 'unused' : 'used',
       expiryDate: c.expireTime || c.expire_time,
       type: (c.cardType || c.card_type) === 'time' ? '时间卡' : '次数卡',
@@ -419,12 +462,21 @@ const copyCardCode = async (code) => {
 }
 
 /**
- * 卡密混淆函数已抽取到 src/utils/cardKey.js，统一由工具模块导入使用
+ * 复制加密卡密到剪贴板。
+ * <p>使用后端返回的 encryptedKey（SHA-256 + Base64）原值，
+ * 不再前端重新计算：前端 obfuscateCardKey 的算法与后端不一致，
+ * 计算出的值与数据库中存储的加密卡密不同，复制结果无实际用途。</p>
+ *
+ * @param {Object} cardCode 卡密对象（含 encryptedKey 字段）
  */
-
-/** 复制混淆后的加密卡密到剪贴板 */
-const copyEncryptedCardCode = async (code) => {
-  const encrypted = obfuscateCardKey(code)
+const copyEncryptedCardCode = async (cardCode) => {
+  const encrypted = typeof cardCode === 'object' && cardCode !== null
+    ? (cardCode.encryptedKey || '')
+    : ''
+  if (!encrypted) {
+    ElMessage.warning('该卡密没有可用的加密值')
+    return
+  }
   const success = await copyToClipboard(encrypted)
   if (success) {
     ElMessage.success('加密卡密已复制')
@@ -476,8 +528,8 @@ const handleSaveInterfaceConfig = async (configData) => {
     await apiKeyApi.updateApiKey(currentApiKey.value.id, {
       name: currentApiKey.value.name,
       description: currentApiKey.value.description,
-      status: currentApiKey.value.isActive ? 1 : 0,
-      webhook_config: configStr
+      status: currentApiKey.value.isActive,
+      webhookConfig: configStr
     })
 
     currentApiKey.value.webhookConfig = JSON.parse(configStr)
@@ -536,6 +588,11 @@ const manageCardCodes = (apiKey) => {
 
 /** 复制API密钥 */
 const copyApiKey = async (key) => {
+  // 列表接口不返回密钥值，key 可能为 undefined，此时给出明确提示而不是静默失败
+  if (!key) {
+    ElMessage.warning('密钥仅在创建时显示一次，无法再次复制')
+    return
+  }
   const success = await copyToClipboard(key)
   if (success) {
     ElMessage.success('API密钥已复制')

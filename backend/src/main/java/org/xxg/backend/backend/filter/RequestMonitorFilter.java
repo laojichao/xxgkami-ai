@@ -23,6 +23,10 @@ import java.util.Set;
 public class RequestMonitorFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RequestMonitorFilter.class);
+
+    /** User-Agent 最大记录长度（实体字段为 TEXT，此处限制避免异常超长头部写入） */
+    private static final int MAX_USER_AGENT_LENGTH = 500;
+
     private final SecurityService securityService;
 
     @Value("${rate-limit.trusted-proxies:127.0.0.1,0:0:0:0:0:0:0:1}")
@@ -69,7 +73,59 @@ public class RequestMonitorFilter extends OncePerRequestFilter {
                 log.warn("[SLOW REQUEST] {} | {} {} | IP: {} | Duration: {}ms | Status: {}",
                         java.time.LocalDateTime.now(), method, uri, clientIp, duration, status);
             }
+
+            // 持久化访问日志，供管理后台「访问日志」页面查询。
+            // 此前 SecurityService.logAccess 从未被调用，导致该功能始终返回空列表。
+            // 使用 @Async 异步写入：日志落库不应给每个请求增加数据库往返延迟，
+            // 失败也只记录 debug 日志，不影响业务响应。
+            if (shouldRecordAccessLog(uri)) {
+                try {
+                    securityService.logAccessAsync(clientIp, method, uri,
+                            truncate(request.getHeader("User-Agent"), MAX_USER_AGENT_LENGTH),
+                            status, duration, resolveUsername());
+                } catch (Exception e) {
+                    log.debug("访问日志提交失败: {}", e.getMessage());
+                }
+            }
         }
+    }
+
+    /**
+     * 判断是否需要记录访问日志。
+     * <p>排除健康检查、静态资源等高频无审计价值的请求，避免日志表膨胀。</p>
+     *
+     * @param uri 请求路径
+     * @return true 表示需要记录
+     */
+    private boolean shouldRecordAccessLog(String uri) {
+        if (uri == null) return false;
+        return !uri.contains("/system/health")
+                && !uri.contains("/actuator/")
+                && !uri.contains("/uploads/")
+                && !uri.contains("/favicon");
+    }
+
+    /**
+     * 获取当前请求已认证的用户名（未认证返回 null）。
+     * <p>本方法在 {@code filterChain.doFilter()} 返回后的 finally 块中调用，
+     * 此时 JwtRequestFilter（注册顺序在本过滤器之后、更靠近
+     * UsernamePasswordAuthenticationFilter）已完成认证并填充 SecurityContext，
+     * 因此可以读取到用户名；匿名请求返回 null。</p>
+     */
+    private String resolveUsername() {
+        try {
+            var authentication = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            return authentication != null ? authentication.getName() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 截断过长字符串，防止超出数据库列长度 */
+    private String truncate(String value, int maxLength) {
+        if (value == null) return null;
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     /**

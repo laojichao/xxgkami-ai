@@ -1019,8 +1019,16 @@ const fetchOrders = async () => {
             cardApi.getUserCards(userId)
         ]);
 
-        if (Array.isArray(ordersResult)) {
-            purchaseHistory.value = ordersResult.map(order => ({
+        // /orders 返回统一响应格式，data 为 Spring Data Page 对象
+        // （{content:[...], totalElements, ...}）。此前直接判断 Array.isArray(ordersResult)，
+        // 恒为 false，导致「购买记录」列表永远为空。
+        const ordersData = ordersResult && ordersResult.success ? ordersResult.data : null;
+        const ordersList = Array.isArray(ordersData)
+            ? ordersData
+            : (ordersData && Array.isArray(ordersData.content) ? ordersData.content : null);
+
+        if (ordersList) {
+            purchaseHistory.value = ordersList.map(order => ({
                 orderNo: order.orderNo || order.order_id,
                 cardType: order.cardType || order.card_type,
                 specification: order.cardSpec || order.card_spec,
@@ -1059,7 +1067,13 @@ const fetchOrders = async () => {
             stats.totalCards = cardsResult.data.length;
             stats.usedCards = usedCardsList.length;
             stats.unusedCards = cardsResult.data.filter(card => card.status === 0).length;
-            stats.expiredCards = cardsResult.data.filter(card => card.status === 2).length;
+            // 卡密状态定义：0=未使用，1=已使用，2=已停用（无独立「已过期」状态）。
+            // 历史缺陷：此处用 status===2 统计「已过期」，实际把「已停用」数量显示为过期数。
+            // 真正的过期判定基于 expireTime 是否早于当前时间。
+            stats.expiredCards = cardsResult.data.filter(card => {
+                const expire = card.expireTime || card.expire_time;
+                return expire != null && new Date(expire).getTime() < Date.now();
+            }).length;
 
             recentRecords.value = usageRecords.value.slice(0, RECENT_RECORDS_LIMIT);
         } else {
@@ -1356,14 +1370,21 @@ const purchaseCard = async (cardType) => {
         const paymentResult = await paymentApi.createPayment({
           orderNo: result.data.order_no || result.data.orderNo
         });
-        if (paymentResult.success && paymentResult.paymentUrl) {
-          const url = paymentResult.paymentUrl;
+        // 后端返回统一响应格式 {success, message, data:{url, paymentUrl}}
+        const payUrl = paymentResult?.data?.paymentUrl || paymentResult?.data?.url;
+        if (paymentResult.success && payUrl) {
+          const url = payUrl;
+          // 支付网关通常是外部域名（易支付等），不能要求与本站同源，
+          // 否则支付跳转永远被拦截。此处仅校验协议安全性：
+          // 允许相对路径或 http/https 绝对地址，拒绝 javascript:/data: 等危险协议。
+          let isTrustedUrl = false;
           const isRelativeUrl = url.startsWith('/') && !url.startsWith('//');
-          let isTrustedUrl = isRelativeUrl;
-          if (!isRelativeUrl) {
+          if (isRelativeUrl) {
+            isTrustedUrl = true;
+          } else {
             try {
               const parsed = new URL(url);
-              isTrustedUrl = parsed.origin === window.location.origin;
+              isTrustedUrl = parsed.protocol === 'https:' || parsed.protocol === 'http:';
             } catch (e) {
               isTrustedUrl = false;
             }

@@ -75,6 +75,20 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理方法级参数校验异常（@Validated + @Min/@Max 等约束触发）。
+     * <p>若不单独处理，会落入兜底 handler 返回 500，
+     * 使客户端参数错误被误报为服务端故障。</p>
+     */
+    @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(jakarta.validation.ConstraintViolationException e) {
+        String message = e.getConstraintViolations().stream()
+                .findFirst()
+                .map(jakarta.validation.ConstraintViolation::getMessage)
+                .orElse("参数校验失败");
+        return ResponseEntity.badRequest().body(ApiResponse.error(message));
+    }
+
+    /**
      * 处理请求方法不支持异常（如用 POST 访问 GET 接口）
      * 返回 405 状态码
      */

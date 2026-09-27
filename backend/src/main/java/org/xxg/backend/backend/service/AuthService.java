@@ -4,7 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.xxg.backend.backend.dto.*;
 import org.xxg.backend.backend.entity.*;
 import org.xxg.backend.backend.exception.BusinessException;
@@ -52,12 +54,14 @@ public class AuthService {
     private final PasswordUtil passwordUtil;
     private final EmailService emailService;
     private final TotpService totpService;
+    /** 用于在独立事务中记录登录失败次数（避免被登录失败异常回滚） */
+    private final TransactionTemplate transactionTemplate;
 
     public AuthService(AdminRepository adminRepository, UserRepository userRepository,
                        VerificationCodeRepository verificationCodeRepository,
                        BindTokenRepository bindTokenRepository,
                        JwtUtil jwtUtil, PasswordUtil passwordUtil, EmailService emailService,
-                       TotpService totpService) {
+                       TotpService totpService, PlatformTransactionManager transactionManager) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
         this.verificationCodeRepository = verificationCodeRepository;
@@ -66,6 +70,13 @@ public class AuthService {
         this.passwordUtil = passwordUtil;
         this.emailService = emailService;
         this.totpService = totpService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        // 必须使用 REQUIRES_NEW：TransactionTemplate 默认传播行为是 REQUIRED，
+        // 会加入 adminLogin/userLogin 已有的外层事务，登录失败时抛出的异常
+        // 依然会把失败计数一起回滚，锁定机制失效。REQUIRES_NEW 挂起外层事务、
+        // 独立提交计数更新，不受外层回滚影响。
+        this.transactionTemplate.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Transactional
@@ -78,9 +89,10 @@ public class AuthService {
                 () -> adminRepository.save(admin));
 
         if (!passwordUtil.matches(request.getPassword(), admin.getPassword())) {
-            recordLoginFailure(admin.getFailedLoginAttempts(), admin.getLockTime(),
-                    (attempts, lockTime) -> { admin.setFailedLoginAttempts(attempts); admin.setLockTime(lockTime); },
-                    () -> adminRepository.save(admin));
+            // 安全修复：失败计数必须在独立事务中提交。
+            // 本方法由 @Transactional 包裹，随后抛出的 BusinessException 会回滚整个事务，
+            // 导致失败次数永远不会累加、账户锁定机制完全失效（可无限次暴力破解）。
+            recordLoginFailureInNewTransaction(admin, "admin");
             throw new BusinessException("用户名或密码错误");
         }
 
@@ -119,9 +131,8 @@ public class AuthService {
                 () -> userRepository.save(user));
 
         if (!passwordUtil.matches(request.getPassword(), user.getPassword())) {
-            recordLoginFailure(user.getFailedLoginAttempts(), user.getLockTime(),
-                    (attempts, lockTime) -> { user.setFailedLoginAttempts(attempts); user.setLockTime(lockTime); },
-                    () -> userRepository.save(user));
+            // 安全修复：同 adminLogin，失败计数需独立事务提交，否则抛出异常时被回滚
+            recordLoginFailureInNewTransaction(user, "user");
             throw new BusinessException("用户名或密码错误");
         }
 
@@ -170,13 +181,31 @@ public class AuthService {
         }
     }
 
-    /** 记录登录失败，达到阈值时锁定账户 */
-    private void recordLoginFailure(Integer failedAttempts, LocalDateTime lockTime,
-                                     java.util.function.BiConsumer<Integer, LocalDateTime> setter,
-                                     Runnable saver) {
-        int attempts = (failedAttempts == null ? 0 : failedAttempts) + 1;
-        setter.accept(attempts, attempts >= MAX_FAILED_ATTEMPTS ? LocalDateTime.now() : lockTime);
-        saver.run();
+    /**
+     * 记录登录失败并在独立事务中提交，达到阈值时锁定账户。
+     * <p>必须使用独立事务：登录方法本身是 {@code @Transactional}，
+     * 校验失败后抛出的 {@link BusinessException} 会回滚同一事务内的所有写操作，
+     * 使失败计数无法持久化、账户锁定形同虚设。</p>
+     *
+     * @param account 管理员或用户实体
+     * @param role    {@code "admin"} 或 {@code "user"}
+     */
+    private void recordLoginFailureInNewTransaction(Object account, String role) {
+        transactionTemplate.executeWithoutResult(status -> {
+            if ("admin".equals(role)) {
+                Admin admin = (Admin) account;
+                int attempts = (admin.getFailedLoginAttempts() == null ? 0 : admin.getFailedLoginAttempts()) + 1;
+                admin.setFailedLoginAttempts(attempts);
+                admin.setLockTime(attempts >= MAX_FAILED_ATTEMPTS ? LocalDateTime.now() : admin.getLockTime());
+                adminRepository.save(admin);
+            } else {
+                User user = (User) account;
+                int attempts = (user.getFailedLoginAttempts() == null ? 0 : user.getFailedLoginAttempts()) + 1;
+                user.setFailedLoginAttempts(attempts);
+                user.setLockTime(attempts >= MAX_FAILED_ATTEMPTS ? LocalDateTime.now() : user.getLockTime());
+                userRepository.save(user);
+            }
+        });
     }
 
     /** 登录成功后重置失败计数 */
@@ -355,7 +384,20 @@ public class AuthService {
         }
     }
 
+    /**
+     * 生成一次性绑定令牌（有效期 10 分钟，使用后失效）。
+     *
+     * @param userId 令牌归属的用户 ID，不能为空
+     * @return 包含 token 的 Map
+     * @throws BusinessException userId 为空时抛出（禁止生成无归属令牌）
+     */
     private Map<String, Object> generateBindToken(Integer userId) {
+        // 安全约束：令牌必须绑定到具体用户。
+        // 生成无归属令牌（userId=null）会使 validateBindToken 的归属校验失去依据，
+        // 该令牌可被任意用户消费。
+        if (userId == null) {
+            throw new BusinessException("无法生成绑定令牌：当前账号未关联用户");
+        }
         String token = UUID.randomUUID().toString();
 
         BindToken bindToken = new BindToken();
@@ -389,9 +431,13 @@ public class AuthService {
             return false;
         }
 
-        // 验证 token 归属：只有生成该 token 的用户才能使用
-        if (bindToken.getUserId() != null && userId != null
-                && !bindToken.getUserId().equals(userId)) {
+        // 验证 token 归属：只有生成该 token 的用户才能使用。
+        // 采用 fail-closed 策略——任一侧缺失都视为不匹配。
+        // 历史缺陷：条件为 `bindToken.getUserId() != null && userId != null && !equals`，
+        // 只要 token 未绑定 userId（如管理员或未登录状态调用 /auth/bind/token 时生成）
+        // 或调用方未传 userId，归属校验即被完全跳过，任何人都能消费该 token。
+        if (bindToken.getUserId() == null || userId == null
+                || !bindToken.getUserId().equals(userId)) {
             return false;
         }
 

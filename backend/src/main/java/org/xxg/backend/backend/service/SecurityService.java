@@ -1,7 +1,10 @@
 package org.xxg.backend.backend.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +23,9 @@ import java.util.List;
  */
 @Service
 public class SecurityService {
+
+    private static final Logger log = LoggerFactory.getLogger(SecurityService.class);
+
     private final IpBlacklistRepository blacklistRepository;
     private final AccessLogRepository accessLogRepository;
 
@@ -118,6 +124,30 @@ public class SecurityService {
         log.setDurationMs(durationMs);
         log.setUsername(username);
         return accessLogRepository.save(log);
+    }
+
+    /**
+     * 异步记录访问日志（供 {@code RequestMonitorFilter} 调用）。
+     * <p>访问日志属于审计旁路数据，不应阻塞或影响业务请求：
+     * 使用独立线程池异步落库，任何异常仅记录日志，不向调用方抛出。</p>
+     *
+     * @param ip         客户端 IP
+     * @param method     HTTP 方法
+     * @param uri        请求路径
+     * @param userAgent  User-Agent（已截断）
+     * @param status     HTTP 状态码
+     * @param durationMs 请求耗时（毫秒）
+     * @param username   用户名（可为 null）
+     */
+    @Async
+    public void logAccessAsync(String ip, String method, String uri, String userAgent,
+                               Integer status, Long durationMs, String username) {
+        try {
+            logAccess(ip, method, uri, userAgent, status, durationMs, username);
+        } catch (Exception e) {
+            // 审计日志写入失败不得影响业务，仅记录警告便于排查
+            log.warn("访问日志异步写入失败: {}", e.getMessage());
+        }
     }
 
     /**

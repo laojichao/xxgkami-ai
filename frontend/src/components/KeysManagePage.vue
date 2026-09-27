@@ -308,7 +308,8 @@
                     <span v-if="newKey.stack_time_if_same_machine" class="stack-toggle-pill">已开启</span>
                   </span>
                   <span class="stack-toggle-desc">
-                    同一机器码上若已有未过期时间卡，激活本卡时将天数累加到原卡到期时间（本卡标记为「已合并」）；关闭则每次仍从激活时刻重新起算。
+                    ⚠ 后端暂未实现时长叠加逻辑，当前所有时间卡均按「激活时刻起算到期」处理，此开关暂不生效。
+                    原设计意图：同一机器码上若已有未过期时间卡，激活本卡时将天数累加到原卡到期时间（本卡标记为「已合并」）。
                   </span>
                 </span>
               </label>
@@ -361,7 +362,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { cardApi } from '../services/api.js'
 import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
-import { obfuscateCardKey } from '../utils/cardKey.js'
 import { trapFocus } from '../utils/trapFocus.js'
 import BatchActions from './keys/BatchActions.vue'
 import KeyFilters from './keys/KeyFilters.vue'
@@ -424,8 +424,6 @@ const getColumnLabel = (key) => {
   return col ? col.label : key
 }
 
-/** 卡密混淆函数已抽取到 src/utils/cardKey.js，统一由工具模块导入使用 */
-
 /** 处理导出数据：根据选中列映射字段值（兼容 camelCase 和 snake_case） */
 const processExportData = (data) => {
   return data.map(item => {
@@ -435,7 +433,13 @@ const processExportData = (data) => {
 
     if (selectedColumns.value.includes('id')) processed.id = item.id
     if (selectedColumns.value.includes('card_key')) processed.card_key = get('cardKey', 'card_key')
-    if (selectedColumns.value.includes('encrypted_key')) processed.encrypted_key = obfuscateCardKey(get('cardKey', 'card_key'))
+    // 直接使用后端返回的 encryptedKey（SHA-256 + Base64），
+    // 不要在前端重新计算：此前的 obfuscateCardKey 实现（URL编码→反转→Base64）
+    // 与后端 CustomCardObfuscator.generateEncryptedKey 完全不同，
+    // 导出的「加密卡密」列与数据库中真实值不符，无法用于任何比对。
+    if (selectedColumns.value.includes('encrypted_key')) {
+      processed.encrypted_key = get('encryptedKey', 'encrypted_key') || ''
+    }
 
     if (selectedColumns.value.includes('user_info')) {
       const mc = get('machineCode', 'machine_code')
@@ -698,7 +702,11 @@ const createKeys = () => {
   const keyData = {
     cardType: newKey.card_type,
     count: newKey.count,
-    duration: newKey.duration,
+    // duration 与 days 均为「天」，与 Card.duration 字段定义保持一致。
+    // 必须同时提交 days：后端仅依据 days 计算 CardStatus.expireTime，
+    // 缺少该字段会导致时长卡没有过期时间（永不过期）。
+    duration: newKey.card_type === 'time' ? newKey.duration : 0,
+    days: newKey.card_type === 'time' ? newKey.duration : null,
     totalCount: newKey.card_type === 'time' ? 0 : newKey.total_count,
     verifyMethod: newKey.verify_method,
     encryptionType: newKey.encryption_type,

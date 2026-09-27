@@ -3,6 +3,7 @@ package org.xxg.backend.backend.controller;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.xxg.backend.backend.dto.ApiResponse;
 import org.xxg.backend.backend.service.StatsService;
@@ -13,9 +14,12 @@ import java.util.Map;
  * <p>提供仪表盘统计、数据概览及用户活跃度统计功能。</p>
  * <p>基础路径：/stats</p>
  * <p>权限：仅管理员</p>
+ * <p>注意：必须标注 {@code @Validated}，否则方法参数上的 {@code @Min}/{@code @Max}
+ * 约束不会生效（Spring 仅对标注了该注解的 Bean 启用方法级参数校验）。</p>
  */
 @RestController
 @RequestMapping("/stats")
+@Validated
 public class StatsController {
     private final StatsService statsService;
     public StatsController(StatsService statsService) { this.statsService = statsService; }

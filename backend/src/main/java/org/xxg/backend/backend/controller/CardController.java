@@ -28,6 +28,10 @@ import java.util.stream.Collectors;
 @RequestMapping("/cards")
 @Tag(name = "卡密管理", description = "卡密生成、验证、查询、启停用、机器码解绑")
 public class CardController {
+
+    /** 单次批量生成卡密的数量上限，防止超大请求耗尽内存 */
+    private static final int MAX_BATCH_GENERATE_COUNT = 1000;
+
     private final CardService cardService;
     public CardController(CardService cardService) { this.cardService = cardService; }
 
@@ -84,11 +88,18 @@ public class CardController {
     @PostMapping("/generate")
     public ResponseEntity<ApiResponse<List<Card>>> generateCard(@Valid @RequestBody GenerateCardRequest request) throws Exception {
         int count = request.getCount() != null ? request.getCount() : 1;
-        // 安全修复：使用批量生成减少数据库往返，避免循环内逐个调用 generateCard
+        // 安全修复：限制单次批量生成上限。count 来自请求体且无上限校验，
+        // 超大值会一次性构建等量实体并触发 saveAll，导致内存耗尽 / 数据库长时间阻塞。
+        if (count < 1 || count > MAX_BATCH_GENERATE_COUNT) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("单次生成数量必须在 1-" + MAX_BATCH_GENERATE_COUNT + " 之间"));
+        }
+        // 使用批量生成减少数据库往返，避免循环内逐个调用 generateCard。
+        // resolveDays() 兼容只传 duration 的旧客户端，避免漏传 days 导致时长卡永不过期。
         List<Card> cards = cardService.generateCardsBatch(
                 request.getCardType(), request.getDuration(), request.getTotalCount(),
                 request.getCreatorType(), request.getCreatorId(), request.getCreatorName(),
-                request.getVerifyMethod(), request.getDays(), request.getApiKeyId(), count);
+                request.getVerifyMethod(), request.resolveDays(), request.getApiKeyId(), count);
         return ResponseEntity.ok(ApiResponse.ok("卡密生成成功，共 " + count + " 张", cards));
     }
 

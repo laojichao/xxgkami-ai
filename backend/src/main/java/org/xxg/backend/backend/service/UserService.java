@@ -172,16 +172,43 @@ public class UserService {
     }
 
     /**
-     * 切换用户启用/禁用状态
+     * 切换用户启用/禁用状态（翻转当前状态）。
+     *
      * @param userId 用户ID
      */
     @Transactional
     public void toggleUserStatus(Integer userId) {
         User user = getUserById(userId);
-        user.setStatus(!Boolean.TRUE.equals(user.getStatus()));
+        applyUserStatus(user, !Boolean.TRUE.equals(user.getStatus()));
+    }
+
+    /**
+     * 显式设置用户启用/禁用状态（幂等）。
+     * <p>相比 {@link #toggleUserStatus}，本方法依据调用方传入的目标状态设置，
+     * 不受并发操作或前端陈旧数据影响。前端 {@code updateUserStatus(id, currentStatus)}
+     * 语义是「设置为该状态」，使用翻转语义会在状态已被其他管理员改动时产生相反结果
+     * （例如本意禁用，结果反而启用了账号）。</p>
+     *
+     * @param userId 用户ID
+     * @param status 目标状态（true=启用，false=禁用）
+     */
+    @Transactional
+    public void setUserStatus(Integer userId, boolean status) {
+        User user = getUserById(userId);
+        applyUserStatus(user, status);
+    }
+
+    /**
+     * 应用用户状态变更并立即失效认证缓存。
+     *
+     * @param user   用户实体
+     * @param status 目标状态
+     */
+    private void applyUserStatus(User user, boolean status) {
+        user.setStatus(status);
         user.setUpdateTime(LocalDateTime.now());
         userRepository.save(user);
-        // 安全修复：立即失效 JWT 缓存，使禁用立即生效（无需等待 30 秒缓存过期）
+        // 立即失效 JWT 缓存，使禁用/启用立即生效（无需等待 30 秒缓存过期）
         jwtRequestFilter.invalidateAccountCache(user.getUsername(), "user");
     }
 

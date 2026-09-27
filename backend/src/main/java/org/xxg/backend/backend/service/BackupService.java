@@ -26,7 +26,16 @@ public class BackupService {
     private String dbUser;
     @Value("${spring.datasource.password:}")
     private String dbPass;
-    @Value("${backup.dir:${user.home}/backups}")
+    /**
+     * 备份文件存放目录。
+     * <p>默认 {@code ./backups}（相对于应用工作目录，容器内即 /app/backups），
+     * 与 docker-compose.yml 中 {@code backup_data:/app/backups} 卷挂载点保持一致，
+     * 确保容器重建后备份文件仍然保留。</p>
+     * <p>历史缺陷：默认值为 {@code ${user.home}/backups}（容器内为
+     * /home/appuser/backups），与卷挂载点不一致，备份既不会落入持久化卷，
+     * 且把 backup.dir 显式配置为 /app/backups 时又会被下方路径校验拒绝。</p>
+     */
+    @Value("${backup.dir:backups}")
     private String backupDir;
 
     public String backup() throws Exception {
@@ -34,7 +43,11 @@ public class BackupService {
         Path backupPath = Paths.get(backupDir).toAbsolutePath().normalize();
         Path userHome = Paths.get(System.getProperty("user.home")).toAbsolutePath().normalize();
         Path varBackups = Paths.get("/var/backups").toAbsolutePath().normalize();
-        if (!backupPath.startsWith(userHome) && !backupPath.startsWith(varBackups)) {
+        // 应用工作目录（容器内为 /app，对应 compose 的 backup_data 卷挂载点）
+        Path appDir = Paths.get("").toAbsolutePath().normalize();
+        if (!backupPath.startsWith(userHome)
+                && !backupPath.startsWith(varBackups)
+                && !backupPath.startsWith(appDir)) {
             throw new BusinessException("备份目录路径不合法");
         }
 

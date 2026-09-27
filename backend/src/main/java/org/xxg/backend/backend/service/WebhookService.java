@@ -59,9 +59,11 @@ public class WebhookService {
                 return;
             }
 
-            // Security: verify the API key is the one associated with this card,
-            // preventing attackers from triggering webhooks for other users' API keys
-            if (card.getApiKeyId() != null && !card.getApiKeyId().equals(apiKeyId)) {
+            // 安全校验：仅当卡密确实归属于该 API Key 时才触发回调。
+            // 历史缺陷：条件为 `card.apiKeyId != null && !equals(apiKeyId)`，
+            // 当卡密未关联任何 API Key（apiKeyId 为 null，如管理员后台生成的卡密）时，
+            // 该判断被短路，调用方可传入任意 apiKeyId 触发他人配置的 Webhook。
+            if (card.getApiKeyId() == null || !card.getApiKeyId().equals(apiKeyId)) {
                 log.warn("[WEBHOOK] Blocked cross-user webhook: card.apiKeyId={} but request apiKeyId={}",
                         card.getApiKeyId(), apiKeyId);
                 return;

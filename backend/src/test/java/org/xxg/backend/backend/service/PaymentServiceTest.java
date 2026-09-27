@@ -78,6 +78,27 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("支付回调失败 - 支付密钥未配置时一律拒绝（防止空密钥伪造签名）")
+    void handlePaymentCallback_UnconfiguredKey_ReturnsFail() {
+        Map<String, String> params = new HashMap<>();
+        params.put("trade_status", "TRADE_SUCCESS");
+        params.put("out_trade_no", "ORD20260614001");
+        params.put("money", "9.90");
+
+        // epay_key 未配置（返回空字符串）
+        when(settingsService.getValue("epay_key", "")).thenReturn("");
+
+        String result = paymentService.handlePaymentCallback(params);
+
+        assertEquals("fail", result);
+        // 关键：不得进入验签流程，更不得生成卡密
+        // （否则攻击者可用空字符串密钥自行计算合法 MD5 签名，白嫖卡密）
+        verify(paymentUtil, never()).verifySign(any(), any());
+        verify(cardService, never()).generateCardsForOrder(any());
+        verify(orderRepository, never()).findByOrderNoWithLock(any());
+    }
+
+    @Test
     @DisplayName("支付回调失败 - 签名校验不通过")
     void handlePaymentCallback_InvalidSignature_ReturnsFail() {
         Map<String, String> params = new HashMap<>();

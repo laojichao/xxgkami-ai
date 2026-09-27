@@ -1,6 +1,5 @@
 package org.xxg.backend.backend.service;
 
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -36,28 +35,34 @@ public class WalletService {
 
     /**
      * 获取用户钱包，不存在则自动创建。
-     * 使用 @Transactional 保证原子性，并处理并发创建时的唯一约束冲突。
+     * <p>注意：本方法不再捕获 {@code DataIntegrityViolationException}。
+     * 在事务内捕获约束冲突会把事务标记为 rollback-only，随后的查询/提交会抛出
+     * {@code UnexpectedRollbackException}，属于不可恢复状态。并发首次创建钱包是
+     * 极小概率事件，冲突会由 {@code GlobalExceptionHandler} 统一转换为 409，
+     * 不会返回错误数据。</p>
+     *
      * @param userId 用户ID
      * @return 钱包实体
      */
     @Transactional
     public Wallet getOrCreateWallet(Integer userId) {
-        try {
-            return walletRepository.findByUserId(userId).orElseGet(() -> {
-                Wallet wallet = new Wallet();
-                wallet.setUserId(userId);
-                wallet.setBalance(BigDecimal.ZERO);
-                return walletRepository.save(wallet);
-            });
-        } catch (DataIntegrityViolationException e) {
-            // Another thread already created the wallet; query and return it
-            return walletRepository.findByUserId(userId)
-                    .orElseThrow(() -> new BusinessException("钱包创建失败"));
-        }
+        return walletRepository.findByUserId(userId).orElseGet(() -> {
+            Wallet wallet = new Wallet();
+            wallet.setUserId(userId);
+            wallet.setBalance(BigDecimal.ZERO);
+            wallet.setTotalRecharge(BigDecimal.ZERO);
+            wallet.setTotalConsume(BigDecimal.ZERO);
+            return walletRepository.save(wallet);
+        });
     }
 
     /**
-     * 用户钱包充值
+     * 用户钱包充值。
+     * <p><b>安全提示：</b>本方法直接增加余额，不涉及任何支付校验，
+     * 仅供受信任的内部流程（如管理员调账、支付网关回调）调用。
+     * 对外的自助充值必须经过支付网关下单-回调流程，
+     * 严禁将本方法暴露给普通用户直接调用，否则用户可凭空增加余额。</p>
+     *
      * @param userId 用户ID
      * @param amount 充值金额
      * @param description 交易描述
@@ -69,37 +74,38 @@ public class WalletService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("充值金额必须大于0");
         }
-        try {
-            // 先查询钱包，不存在则创建，避免 orElseGet 中 save 与后续 lock 的竞态条件
-            Wallet wallet = walletRepository.findByUserId(userId).orElse(null);
-            if (wallet == null) {
-                wallet = new Wallet();
-                wallet.setUserId(userId);
-                wallet.setBalance(BigDecimal.ZERO);
-                wallet = walletRepository.save(wallet);
-            }
-            return doRecharge(wallet, userId, amount, description, orderNo);
-        } catch (DataIntegrityViolationException e) {
-            // 处理并发创建钱包的极端情况：另一个线程已创建了钱包，重新查询即可
-            Wallet wallet = walletRepository.findByUserId(userId)
-                    .orElseThrow(() -> new BusinessException("钱包创建失败"));
-            return doRecharge(wallet, userId, amount, description, orderNo);
-        }
+        // 直接查询/创建钱包（不使用 getOrCreateWallet，避免同类自调用绕过事务代理）
+        Wallet wallet = walletRepository.findByUserId(userId).orElseGet(() -> {
+            Wallet created = new Wallet();
+            created.setUserId(userId);
+            created.setBalance(BigDecimal.ZERO);
+            created.setTotalRecharge(BigDecimal.ZERO);
+            created.setTotalConsume(BigDecimal.ZERO);
+            return walletRepository.save(created);
+        });
+        return doRecharge(wallet, userId, amount, description, orderNo);
     }
 
     /**
      * 执行充值核心逻辑（加锁、更新余额、记录流水）。
      * 提取此方法消除 recharge 中的重复代码。
+     * <p>余额字段做 null 兜底：历史数据可能因迁移或手工插入而为 NULL，
+     * 直接相加会抛 NullPointerException。</p>
      */
     private Wallet doRecharge(Wallet wallet, Integer userId, BigDecimal amount,
                               String description, String orderNo) {
         entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
-        wallet.setBalance(wallet.getBalance().add(amount));
-        wallet.setTotalRecharge(wallet.getTotalRecharge().add(amount));
+        wallet.setBalance(safeAmount(wallet.getBalance()).add(amount));
+        wallet.setTotalRecharge(safeAmount(wallet.getTotalRecharge()).add(amount));
         wallet.setUpdateTime(LocalDateTime.now());
         walletRepository.save(wallet);
         recordTransaction(userId, "recharge", amount, wallet.getBalance(), description, orderNo);
         return wallet;
+    }
+
+    /** 金额字段 null 兜底，返回零值而非 null */
+    private BigDecimal safeAmount(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
     /**
@@ -123,11 +129,11 @@ public class WalletService {
                 .orElseThrow(() -> new BusinessException("钱包不存在"));
         entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
 
-        if (wallet.getBalance().compareTo(amount) < 0) {
+        if (safeAmount(wallet.getBalance()).compareTo(amount) < 0) {
             throw new BusinessException("余额不足");
         }
-        wallet.setBalance(wallet.getBalance().subtract(amount));
-        wallet.setTotalConsume(wallet.getTotalConsume().add(amount));
+        wallet.setBalance(safeAmount(wallet.getBalance()).subtract(amount));
+        wallet.setTotalConsume(safeAmount(wallet.getTotalConsume()).add(amount));
         wallet.setUpdateTime(LocalDateTime.now());
         walletRepository.save(wallet);
 

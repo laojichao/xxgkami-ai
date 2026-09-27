@@ -24,8 +24,10 @@ FROM eclipse-temurin:17-jre-alpine
 LABEL maintainer="laojichao"
 LABEL description="小小怪卡密验证系统 Pro"
 
-# 安装 tini 用于正确的 PID 1 信号处理
-RUN apk add --no-cache tini
+# 安装 tini 用于正确的 PID 1 信号处理。
+# 同时安装 mysql-client：BackupService 通过 ProcessBuilder 调用 mysqldump 生成备份，
+# 运行镜像若不含该可执行文件，/backup 接口必然失败（退出码 127 command not found）。
+RUN apk add --no-cache tini mysql-client
 
 WORKDIR /app
 
@@ -35,7 +37,10 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 
 # 创建非 root 用户
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-RUN mkdir -p /app/backups /app/logs && chown -R appuser:appgroup /app
+# 预创建所有运行期需要写入的目录（含 docker-compose 挂载的卷挂载点）：
+#   backups — 数据库备份；logs — 日志；uploads — 用户上传文件；keys — ECC 私钥
+# 必须提前创建并授权，否则非 root 用户无法写入挂载卷，应用启动即报权限错误。
+RUN mkdir -p /app/backups /app/logs /app/uploads /app/keys && chown -R appuser:appgroup /app
 USER appuser
 
 # 暴露端口
