@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.xxg.backend.backend.entity.Card;
 import org.xxg.backend.backend.entity.CardCipher;
 import org.xxg.backend.backend.entity.CardStatus;
+import org.xxg.backend.backend.entity.Order;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.*;
 import org.xxg.backend.backend.util.AdvancedCryptoUtil;
@@ -22,6 +23,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -83,6 +85,8 @@ class CardServiceTest {
         lenient().when(cryptoUtil.generateAesKey()).thenReturn("aes-key");
         lenient().when(cryptoUtil.generateIv()).thenReturn("iv-value");
         lenient().when(cryptoUtil.encrypt(anyString(), anyString(), anyString())).thenReturn("cipher-data");
+        // 卡密签名使用每卡随机 salt（安全修复 F3），与 signData 一同落库
+        lenient().when(cryptoUtil.generateSalt()).thenReturn("0123456789abcdef0123456789abcdef");
         // 安全修复后改用 hmacSignWithStringKey（字符串密钥），替代原 hmacSign
         lenient().when(cryptoUtil.hmacSignWithStringKey(anyString(), anyString())).thenReturn("sign-data");
         // validateCardCipher 签名校验需要的 mock
@@ -393,15 +397,10 @@ class CardServiceTest {
     }
 
     @Test
-    @DisplayName("获取卡密统计信息成功")
+    @DisplayName("获取卡密统计信息成功 - 单聚合查询")
     void getStats_Success() {
-        when(cardRepository.count()).thenReturn(100L);
-        when(cardRepository.countByStatus(0)).thenReturn(60L);
-        when(cardRepository.countByStatus(1)).thenReturn(30L);
-        when(cardRepository.countByStatus(2)).thenReturn(10L);
-        when(cardRepository.countByCardType(Card.CardType.time)).thenReturn(70L);
-        when(cardRepository.countByCardType(Card.CardType.count)).thenReturn(30L);
-        when(cardRepository.countByCreateTimeAfter(any(LocalDateTime.class))).thenReturn(5L);
+        when(cardRepository.aggregateStats(any(LocalDateTime.class), eq(Card.CardType.time), eq(Card.CardType.count)))
+                .thenReturn(new Object[]{100L, 60L, 30L, 10L, 70L, 30L, 5L});
 
         Map<String, Object> stats = cardService.getStats();
 
@@ -409,5 +408,79 @@ class CardServiceTest {
         assertEquals(60L, stats.get("unusedCards"));
         assertEquals(30L, stats.get("usedCards"));
         assertEquals(10L, stats.get("disabledCards"));
+        assertEquals(70L, stats.get("timeCards"));
+        assertEquals(30L, stats.get("countCards"));
+        assertEquals(5L, stats.get("todayCards"));
+    }
+
+    @Test
+    @DisplayName("时长卡 CardStatus 缺失 - 回退 Card.expireTime 判定已过期")
+    void verifyCard_TimeCard_MissingStatus_FallsBackToCardExpireTime() {
+        // 回归覆盖：历史上 CardStatus 记录缺失时 verifyTimeCard 直接放行且无过期兜底
+        testCard.setExpireTime(LocalDateTime.now().minusDays(1));
+        when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
+                .thenReturn(Optional.of(testCard));
+        when(cardStatusRepository.findByCardHashForUpdate("encrypted-key-123"))
+                .thenReturn(Optional.empty());
+
+        Map<String, Object> result = cardService.verifyCard("TEST-XXXX-YYYY-ZZZZ", "machine-001", null);
+
+        assertFalse((Boolean) result.get("success"));
+        assertEquals("卡密无效", result.get("message"));
+        verify(cardRepository, never()).save(any(Card.class));
+    }
+
+    @Test
+    @DisplayName("时长卡 CardStatus 缺失且无过期时间 - 保持向后兼容验证通过")
+    void verifyCard_TimeCard_MissingStatus_NoExpireTime_StillPasses() {
+        testCard.setExpireTime(null);
+        when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
+                .thenReturn(Optional.of(testCard));
+        when(cardStatusRepository.findByCardHashForUpdate("encrypted-key-123"))
+                .thenReturn(Optional.empty());
+        when(cardRepository.save(any(Card.class))).thenReturn(testCard);
+
+        Map<String, Object> result = cardService.verifyCard("TEST-XXXX-YYYY-ZZZZ", "machine-001", null);
+
+        assertTrue((Boolean) result.get("success"));
+        assertEquals("验证成功", result.get("message"));
+        assertEquals("machine-001", testCard.getMachineCode());
+    }
+
+    @Test
+    @DisplayName("更新卡密失败 - 剩余次数不能大于总次数")
+    void updateCard_RemainingCountGreaterThanTotalCount_ThrowsException() {
+        when(cardRepository.findById(1)).thenReturn(Optional.of(testCard));
+
+        assertThrows(BusinessException.class,
+                () -> cardService.updateCard(1, Map.of("totalCount", 10, "remainingCount", 20)));
+        verify(cardRepository, never()).save(any(Card.class));
+    }
+
+    @Test
+    @DisplayName("订单发货失败 - cardSpec 无法解析时不静默回退默认规格")
+    void generateCardsForOrder_UnparseableSpec_ThrowsException() {
+        // 回归覆盖：历史上解析失败会静默回退 7 天/100 次，发出与用户购买不符的卡
+        Order order = new Order();
+        order.setCardType("time");
+        order.setCardSpec("三个月");
+        order.setQuantity(1);
+
+        assertThrows(BusinessException.class, () -> cardService.generateCardsForOrder(order));
+        verifyNoInteractions(cardRepository);
+    }
+
+    @Test
+    @DisplayName("验证成功时记录客户端 IP")
+    void verifyCard_Success_RecordsClientIp() {
+        when(cardRepository.findByCardKeyForUpdate("TEST-XXXX-YYYY-ZZZZ"))
+                .thenReturn(Optional.of(testCard));
+        when(cardStatusRepository.findByCardHashForUpdate("encrypted-key-123"))
+                .thenReturn(Optional.of(testCardStatus));
+        when(cardRepository.save(any(Card.class))).thenReturn(testCard);
+
+        cardService.verifyCard("TEST-XXXX-YYYY-ZZZZ", "machine-001", null, "203.0.113.7");
+
+        assertEquals("203.0.113.7", testCard.getIpAddress());
     }
 }

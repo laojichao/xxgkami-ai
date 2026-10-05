@@ -52,4 +52,20 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
     /** 统计指定时间范围内按天分组的卡密使用数量 */
     @Query("SELECT FUNCTION('DATE', c.useTime) as day, COUNT(c) FROM Card c WHERE c.useTime >= :startTime AND c.status = 1 GROUP BY FUNCTION('DATE', c.useTime) ORDER BY day")
     List<Object[]> countUsedCardsGroupByDay(@Param("startTime") LocalDateTime startTime);
+
+    /**
+     * 单查询聚合统计：总数、未使用、已使用、已停用、时长卡、次数卡、今日新增。
+     * 替代 getStats 原先的 7 次独立 count 查询；空表时 SUM 结果为 null，由调用方兜底为 0。
+     */
+    @Query("SELECT COUNT(c), " +
+           "SUM(CASE WHEN c.status = 0 THEN 1 ELSE 0 END), " +
+           "SUM(CASE WHEN c.status = 1 THEN 1 ELSE 0 END), " +
+           "SUM(CASE WHEN c.status = 2 THEN 1 ELSE 0 END), " +
+           "SUM(CASE WHEN c.cardType = :timeType THEN 1 ELSE 0 END), " +
+           "SUM(CASE WHEN c.cardType = :countType THEN 1 ELSE 0 END), " +
+           "SUM(CASE WHEN c.createTime >= :startOfDay THEN 1 ELSE 0 END) " +
+           "FROM Card c")
+    Object[] aggregateStats(@Param("startOfDay") LocalDateTime startOfDay,
+                            @Param("timeType") Card.CardType timeType,
+                            @Param("countType") Card.CardType countType);
 }

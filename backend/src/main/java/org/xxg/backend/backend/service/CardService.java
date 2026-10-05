@@ -4,6 +4,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.xxg.backend.backend.entity.*;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.*;
@@ -91,20 +93,20 @@ public class CardService {
             String cardKey = obfuscator.generateCardKey();
             String encryptedKey = obfuscator.generateEncryptedKey(cardKey);
 
-            // 创建加密数据：cipherData 仅用于存储，aesKey 不持久化（无需解密）
-            // 签名使用持久化的 salt 作为 HMAC 密钥派生源，保证后续可验证
-            String aesKey = cryptoUtil.generateAesKey();
-            String iv = cryptoUtil.generateIv();
-            String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
-            String signData = cryptoUtil.hmacSignWithStringKey(cardKey, "global");
+            // 创建加密数据：cipherData/iv 历史上存 AES 加密结果，但 aesKey 从未持久化、永远无法解密，
+            // 属于误导性死数据，现停止写入。完整性校验依赖 signData = HMAC(cardKey, salt)，
+            // salt 为每卡随机值并与签名一同持久化，验证端(validateCardCipher)以存储的 salt 重算比对，
+            // 历史 salt="global" 的存量卡按其原有 salt 校验，完全兼容。
+            String salt = cryptoUtil.generateSalt();
+            String signData = cryptoUtil.hmacSignWithStringKey(cardKey, salt);
             String cardHash = encryptedKey;
 
             CardCipher cipher = new CardCipher();
             cipher.setCardHash(cardHash);
-            cipher.setCipherData(cipherData);
+            cipher.setCipherData("");
             cipher.setSignData(signData);
-            cipher.setSalt("global");
-            cipher.setIv(iv);
+            cipher.setSalt(salt);
+            cipher.setIv("");
             cardCipherRepository.save(cipher);
 
             // Create card status
@@ -210,17 +212,16 @@ public class CardService {
                 String cardKey = obfuscator.generateCardKey();
                 String encryptedKey = obfuscator.generateEncryptedKey(cardKey);
 
-                String aesKey = cryptoUtil.generateAesKey();
-                String iv = cryptoUtil.generateIv();
-                String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
-                String signData = cryptoUtil.hmacSignWithStringKey(cardKey, "global");
+                // 与 generateCard 一致：不再写 AES 死数据，signData 使用每卡随机 salt 作为 HMAC 密钥
+                String salt = cryptoUtil.generateSalt();
+                String signData = cryptoUtil.hmacSignWithStringKey(cardKey, salt);
 
                 CardCipher cipher = new CardCipher();
                 cipher.setCardHash(encryptedKey);
-                cipher.setCipherData(cipherData);
+                cipher.setCipherData("");
                 cipher.setSignData(signData);
-                cipher.setSalt("global");
-                cipher.setIv(iv);
+                cipher.setSalt(salt);
+                cipher.setIv("");
                 ciphers.add(cipher);
 
                 CardStatus status = new CardStatus();
@@ -285,6 +286,22 @@ public class CardService {
      */
     @Transactional
     public Map<String, Object> verifyCard(String cardKey, String machineCode, Integer apiKeyId) {
+        return verifyCard(cardKey, machineCode, apiKeyId, null);
+    }
+
+    /**
+     * 验证卡密（完整重载，支持记录客户端 IP）。
+     * <p>校验卡密是否存在、是否停用、机器码是否匹配，并根据卡密类型检查有效期或扣减次数。
+     * 首次验证时自动绑定机器码。</p>
+     *
+     * @param cardKey     卡密明文
+     * @param machineCode 机器码（可为 null）
+     * @param apiKeyId    API Key ID（用于触发 Webhook 回调）
+     * @param clientIp    客户端 IP（仅审计用途，可为 null；由控制器从请求中提取）
+     * @return 验证结果 Map，包含 success、message、statusCode 等字段
+     */
+    @Transactional
+    public Map<String, Object> verifyCard(String cardKey, String machineCode, Integer apiKeyId, String clientIp) {
         Map<String, Object> result = new HashMap<>();
 
         // 1. 查询卡密（悲观锁）
@@ -318,7 +335,7 @@ public class CardService {
 
         // 6. 按卡密类型验证
         if (card.getCardType() == Card.CardType.time) {
-            String timeError = verifyTimeCard(cardStatus, result);
+            String timeError = verifyTimeCard(card, cardStatus, result);
             if (timeError != null) {
                 return buildErrorResponse(timeError, 400);
             }
@@ -330,14 +347,24 @@ public class CardService {
         }
 
         // 7. 更新卡密使用状态并绑定机器码
-        finalizeCardUsage(card, machineCode);
+        finalizeCardUsage(card, machineCode, clientIp);
 
         result.put("success", true);
         result.put("message", "验证成功");
         result.put("statusCode", 200);
 
-        // 8. 触发 Webhook
-        triggerWebhookSafely(apiKeyId, card);
+        // 8. 触发 Webhook：注册到事务提交后执行，避免事务回滚时向下游误报"卡密已激活"；
+        // 无事务同步上下文时（如单元测试直接调用）退化为立即触发
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    triggerWebhookSafely(apiKeyId, card);
+                }
+            });
+        } else {
+            triggerWebhookSafely(apiKeyId, card);
+        }
 
         return result;
     }
@@ -398,16 +425,21 @@ public class CardService {
         return null;
     }
 
-    /** 时长卡验证，返回错误消息（无错误返回 null，结果写入 result） */
-    private String verifyTimeCard(CardStatus cardStatus, Map<String, Object> result) {
-        if (cardStatus != null && cardStatus.getExpireTime() != null
-                && cardStatus.getExpireTime().isBefore(LocalDateTime.now())) {
+    /**
+     * 时长卡验证，返回错误消息（无错误返回 null，结果写入 result）。
+     * <p>过期时间优先取 CardStatus.expireTime；CardStatus 记录缺失（历史数据/数据不一致）时
+     * 回退到 Card.expireTime 兜底，避免无状态记录的时长卡跳过过期检查被永久放行。</p>
+     */
+    private String verifyTimeCard(Card card, CardStatus cardStatus, Map<String, Object> result) {
+        LocalDateTime expireTime = cardStatus != null && cardStatus.getExpireTime() != null
+                ? cardStatus.getExpireTime() : card.getExpireTime();
+        if (expireTime != null && expireTime.isBefore(LocalDateTime.now())) {
             return "卡密无效";
         }
-        if (cardStatus != null && cardStatus.getExpireTime() != null) {
-            long remainingSeconds = java.time.Duration.between(LocalDateTime.now(), cardStatus.getExpireTime()).getSeconds();
+        if (expireTime != null) {
+            long remainingSeconds = java.time.Duration.between(LocalDateTime.now(), expireTime).getSeconds();
             result.put("remaining_time", remainingSeconds);
-            result.put("expire_time", cardStatus.getExpireTime().toString());
+            result.put("expire_time", expireTime.toString());
         }
         return null;
     }
@@ -435,8 +467,9 @@ public class CardService {
      *
      * @param card        卡密实体
      * @param machineCode 待绑定的机器码（可为 null，表示未提供）
+     * @param clientIp    客户端 IP（可为 null，表示未提供）
      */
-    private void finalizeCardUsage(Card card, String machineCode) {
+    private void finalizeCardUsage(Card card, String machineCode, String clientIp) {
         if (card.getStatus() == 0) {
             card.setStatus(1);
             card.setUseTime(LocalDateTime.now());
@@ -445,6 +478,10 @@ public class CardService {
         if ((card.getMachineCode() == null || card.getMachineCode().isEmpty())
                 && machineCode != null && !machineCode.isEmpty()) {
             card.setMachineCode(machineCode);
+        }
+        // 记录使用 IP（审计用途：来源为请求头/连接信息，可被伪造，不得作为安全决策依据）
+        if (clientIp != null && !clientIp.isBlank()) {
+            card.setIpAddress(clientIp.length() > 255 ? clientIp.substring(0, 255) : clientIp);
         }
         cardRepository.save(card);
     }
@@ -625,13 +662,17 @@ public class CardService {
     @Transactional(readOnly = true)
     public Map<String, Object> getStats() {
         Map<String, Object> stats = new HashMap<>();
-        stats.put("totalCards", cardRepository.count());
-        stats.put("unusedCards", cardRepository.countByStatus(0));
-        stats.put("usedCards", cardRepository.countByStatus(1));
-        stats.put("disabledCards", cardRepository.countByStatus(2));
-        stats.put("timeCards", cardRepository.countByCardType(Card.CardType.time));
-        stats.put("countCards", cardRepository.countByCardType(Card.CardType.count));
-        stats.put("todayCards", cardRepository.countByCreateTimeAfter(LocalDateTime.now().toLocalDate().atStartOfDay()));
+        // 单条聚合查询替代 7 次独立 count，降低统计接口在高频访问下的数据库往返
+        Object[] row = cardRepository.aggregateStats(
+                LocalDateTime.now().toLocalDate().atStartOfDay(),
+                Card.CardType.time, Card.CardType.count);
+        stats.put("totalCards", row[0] != null ? ((Number) row[0]).longValue() : 0L);
+        stats.put("unusedCards", row[1] != null ? ((Number) row[1]).longValue() : 0L);
+        stats.put("usedCards", row[2] != null ? ((Number) row[2]).longValue() : 0L);
+        stats.put("disabledCards", row[3] != null ? ((Number) row[3]).longValue() : 0L);
+        stats.put("timeCards", row[4] != null ? ((Number) row[4]).longValue() : 0L);
+        stats.put("countCards", row[5] != null ? ((Number) row[5]).longValue() : 0L);
+        stats.put("todayCards", row[6] != null ? ((Number) row[6]).longValue() : 0L);
         return stats;
     }
 
@@ -672,18 +713,16 @@ public class CardService {
                 String cardKey = obfuscator.generateCardKey();
                 String encryptedKey = obfuscator.generateEncryptedKey(cardKey);
 
-                // 创建加密数据
-                String aesKey = cryptoUtil.generateAesKey();
-                String iv = cryptoUtil.generateIv();
-                String cipherData = cryptoUtil.encrypt(cardKey, aesKey, iv);
-                String signData = cryptoUtil.hmacSignWithStringKey(cardKey, "global");
+                // 创建加密数据：与 generateCard 一致，不再写 AES 死数据，使用每卡随机 salt 签名
+                String salt = cryptoUtil.generateSalt();
+                String signData = cryptoUtil.hmacSignWithStringKey(cardKey, salt);
 
                 CardCipher cipher = new CardCipher();
                 cipher.setCardHash(encryptedKey);
-                cipher.setCipherData(cipherData);
+                cipher.setCipherData("");
                 cipher.setSignData(signData);
-                cipher.setSalt("global");
-                cipher.setIv(iv);
+                cipher.setSalt(salt);
+                cipher.setIv("");
                 ciphers.add(cipher);
 
                 // 创建卡密状态
@@ -739,46 +778,43 @@ public class CardService {
     /**
      * 从卡密规格中解析天数
      * @param spec 规格字符串，如 "7天"、"30天"
-     * @return 天数，默认7天
+     * @return 天数
+     * @throws BusinessException spec 为空或无法解析时抛出：
+     *         支付发货场景宁可让订单显式失败等待人工处理，也不能静默回退 7 天发出与用户购买不符的卡
      */
     private Integer parseDaysFromSpec(String spec) {
         if (spec == null || spec.isBlank()) {
-            log.warn("parseDaysFromSpec: spec 为空，使用默认值 7 天");
-            return 7;
+            throw new BusinessException("订单卡密规格(cardSpec)为空，无法确定时长");
+        }
+        String num = spec.replaceAll("[^0-9]", "");
+        if (num.isEmpty()) {
+            throw new BusinessException("订单卡密规格无法解析天数: " + spec);
         }
         try {
-            String num = spec.replaceAll("[^0-9]", "");
-            if (num.isEmpty()) {
-                log.warn("parseDaysFromSpec: spec={} 无法解析出数字，使用默认值 7 天", spec);
-                return 7;
-            }
             return Integer.parseInt(num);
         } catch (NumberFormatException e) {
-            log.warn("parseDaysFromSpec: spec={} 解析失败，使用默认值 7 天", spec);
-            return 7;
+            throw new BusinessException("订单卡密规格天数超出范围: " + spec);
         }
     }
 
     /**
      * 从卡密规格中解析次数
      * @param spec 规格字符串，如 "100次"
-     * @return 次数，默认100次
+     * @return 次数
+     * @throws BusinessException spec 为空或无法解析时抛出（理由同 parseDaysFromSpec）
      */
     private Integer parseCountFromSpec(String spec) {
         if (spec == null || spec.isBlank()) {
-            log.warn("parseCountFromSpec: spec 为空，使用默认值 100 次");
-            return 100;
+            throw new BusinessException("订单卡密规格(cardSpec)为空，无法确定次数");
+        }
+        String num = spec.replaceAll("[^0-9]", "");
+        if (num.isEmpty()) {
+            throw new BusinessException("订单卡密规格无法解析次数: " + spec);
         }
         try {
-            String num = spec.replaceAll("[^0-9]", "");
-            if (num.isEmpty()) {
-                log.warn("parseCountFromSpec: spec={} 无法解析出数字，使用默认值 100 次", spec);
-                return 100;
-            }
             return Integer.parseInt(num);
         } catch (NumberFormatException e) {
-            log.warn("parseCountFromSpec: spec={} 解析失败，使用默认值 100 次", spec);
-            return 100;
+            throw new BusinessException("订单卡密规格次数超出范围: " + spec);
         }
     }
 
@@ -861,6 +897,11 @@ public class CardService {
         }
         if (updates.containsKey("allowReverify")) {
             card.setAllowReverify(parseBooleanFlexible(updates.get("allowReverify")));
+        }
+        // 剩余次数不能超过总次数，防止误操作把已用尽的卡"改出"剩余次数
+        if (card.getRemainingCount() != null && card.getTotalCount() != null
+                && card.getRemainingCount() > card.getTotalCount()) {
+            throw new BusinessException("剩余次数不能大于总次数");
         }
         Card saved = cardRepository.save(card);
         // 同步更新 CardStatus 表对应字段，保持主表与状态表一致

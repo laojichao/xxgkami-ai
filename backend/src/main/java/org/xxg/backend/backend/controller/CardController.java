@@ -2,6 +2,7 @@ package org.xxg.backend.backend.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -39,7 +40,7 @@ public class CardController {
 
     @Operation(summary = "使用卡密", description = "公开接口，验证卡密有效性并绑定机器码。限流：30次/分钟/IP。")
     @PostMapping("/use")
-    public ResponseEntity<Map<String, Object>> useCard(@RequestBody Map<String, String> body) {
+    public ResponseEntity<Map<String, Object>> useCard(@RequestBody Map<String, String> body, HttpServletRequest request) {
         String cardKey = body.get("card_key");
         if (cardKey == null || cardKey.isBlank()) {
             Map<String, Object> error = new java.util.HashMap<>();
@@ -72,21 +73,22 @@ public class CardController {
             error.put("statusCode", 400);
             return ResponseEntity.badRequest().body(error);
         }
-        return ResponseEntity.ok(cardService.verifyCard(cardKey, machineCode, null));
+        return ResponseEntity.ok(cardService.verifyCard(cardKey, machineCode, null, getClientIp(request)));
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<Map<String, Object>> verifyCard(@Valid @RequestBody VerifyCardRequest request) {
-        return ResponseEntity.ok(cardService.verifyCard(request.getCardKey(), request.getMachineCode(), request.getApiKeyId()));
+    public ResponseEntity<Map<String, Object>> verifyCard(@Valid @RequestBody VerifyCardRequest request, HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(cardService.verifyCard(request.getCardKey(), request.getMachineCode(),
+                request.getApiKeyId(), getClientIp(httpRequest)));
     }
 
     @PostMapping("/admin/create")
-    public ResponseEntity<ApiResponse<List<Card>>> adminCreate(@Valid @RequestBody GenerateCardRequest request) throws Exception {
+    public ResponseEntity<ApiResponse<List<Card>>> adminCreate(@Valid @RequestBody GenerateCardRequest request) {
         return generateCard(request);
     }
 
     @PostMapping("/generate")
-    public ResponseEntity<ApiResponse<List<Card>>> generateCard(@Valid @RequestBody GenerateCardRequest request) throws Exception {
+    public ResponseEntity<ApiResponse<List<Card>>> generateCard(@Valid @RequestBody GenerateCardRequest request) {
         int count = request.getCount() != null ? request.getCount() : 1;
         // 安全修复：限制单次批量生成上限。count 来自请求体且无上限校验，
         // 超大值会一次性构建等量实体并触发 saveAll，导致内存耗尽 / 数据库长时间阻塞。
@@ -226,5 +228,17 @@ public class CardController {
         result.put("machineCodeBound", mc != null && !mc.isEmpty());
         result.put("verifyMethod", card.getVerifyMethod() != null ? card.getVerifyMethod().name() : null);
         return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    /**
+     * 提取客户端 IP：优先取 X-Forwarded-For 首个值（反向代理场景），否则取直连地址。
+     * 仅用于审计记录——XFF 可被客户端伪造，不得作为限流/封禁等安全决策的唯一依据。
+     */
+    private String getClientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

@@ -55,6 +55,22 @@ public class AdvancedCryptoUtil {
     }
 
     /**
+     * 生成随机盐值（32 字节，hex 编码后 64 字符，与 card_cipher.salt 列长度一致）。
+     * 用作卡密 HMAC 签名的每卡独立密钥，与签名一同持久化，验证端以存储的 salt 重算比对。
+     *
+     * @return 64 字符的 hex 盐值
+     */
+    public String generateSalt() {
+        byte[] salt = new byte[32];
+        new SecureRandom().nextBytes(salt);
+        StringBuilder sb = new StringBuilder(64);
+        for (byte b : salt) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    /**
      * 使用 AES-GCM 模式加密明文。
      *
      * @param plaintext 明文字符串

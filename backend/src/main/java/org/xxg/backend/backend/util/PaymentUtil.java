@@ -17,6 +17,9 @@ import javax.crypto.spec.SecretKeySpec;
 @Component
 public class PaymentUtil {
 
+    /** 订单号随机数生成器：SecureRandom 线程安全，静态复用避免每次调用重建实例 */
+    private static final SecureRandom ORDER_RANDOM = new SecureRandom();
+
     /**
      * 生成支付签名（MD5，兼容易支付协议）
      * <p>安全说明：MD5 存在已知碰撞攻击，但这是易支付协议的强制要求。
@@ -62,25 +65,29 @@ public class PaymentUtil {
         return sb.toString();
     }
 
-    /** 验证 MD5 签名 */
+    /** 验证 MD5 签名（常量时间比较，防止时序攻击） */
     public boolean verifySign(Map<String, String> params, String key) {
         String sign = params.get("sign");
         if (sign == null) return false;
         String calculated = generateSign(params, key);
-        return sign.equalsIgnoreCase(calculated);
+        return MessageDigest.isEqual(
+                sign.toLowerCase(Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                calculated.toLowerCase(Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    /** 验证 HMAC-SHA256 签名 */
+    /** 验证 HMAC-SHA256 签名（常量时间比较，防止时序攻击） */
     public boolean verifySignHmac(Map<String, String> params, String key) {
         String sign = params.get("sign");
         if (sign == null) return false;
         String calculated = generateSignHmac(params, key);
-        return sign.equalsIgnoreCase(calculated);
+        return MessageDigest.isEqual(
+                sign.toLowerCase(Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                calculated.toLowerCase(Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     public String generateOrderNo() {
         // 使用时间戳+8位随机数，降低并发订单号碰撞风险
-        return "ORD" + System.currentTimeMillis() + String.format("%08d", new SecureRandom().nextInt(100000000));
+        return "ORD" + System.currentTimeMillis() + String.format("%08d", ORDER_RANDOM.nextInt(100000000));
     }
 
     private String md5(String input) {
