@@ -252,17 +252,15 @@ class AuthViewModel : ViewModel() {
     /**
      * 用户登出。
      *
+     * 无需参数：服务端从请求头携带的 Token 中提取用户身份。
      * 先调用服务端登出接口（携带当前 Token），无论成功失败后清除本地 Token 和用户状态。
      * 这样可避免本地 Token 先被清除导致服务端登出请求 401。
-     *
-     * @param userId 用户 ID
-     * @param role 用户角色（"user" 或 "admin"）
      */
-    fun logout(userId: Int, role: String) {
+    fun logout() {
         viewModelScope.launch {
             // 先调用服务端登出接口（携带当前 Token），失败不阻塞本地清理
             try {
-                authApi.logout(userId, role)
+                authApi.logout()
             } catch (e: CancellationException) {
                 // 协程取消异常必须向上传播，不能吞掉
                 throw e

@@ -46,6 +46,9 @@ public class CardPricingService {
      * @return 保存后的定价实体
      * @throws BusinessException 当 type 或 value 非法时抛出
      */
+    /** 单价上限（元），防止误输入天价定价 */
+    private static final java.math.BigDecimal MAX_PRICE = new java.math.BigDecimal("1000000");
+
     @Transactional
     public CardPricing save(CardPricing pricing) {
         String type = pricing.getType();
@@ -62,6 +65,15 @@ public class CardPricingService {
         }
         if ("count".equals(type) && value > MAX_COUNT_CARD_TIMES) {
             throw new BusinessException("次数卡次数不能超过 " + MAX_COUNT_CARD_TIMES + " 次");
+        }
+        // 价格是订单金额的直接来源，必须大于 0 且不超过上限
+        // （写接口已限 ADMIN，此处校验防止误输入 0/负价导致 0 元购）
+        java.math.BigDecimal price = pricing.getPrice();
+        if (price == null || price.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("价格必须大于0");
+        }
+        if (price.compareTo(MAX_PRICE) > 0) {
+            throw new BusinessException("价格不能超过 " + MAX_PRICE.toPlainString() + " 元");
         }
         return repository.save(pricing);
     }

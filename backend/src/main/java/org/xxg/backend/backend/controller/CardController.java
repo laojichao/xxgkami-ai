@@ -13,6 +13,7 @@ import org.xxg.backend.backend.dto.CardResponse;
 import org.xxg.backend.backend.dto.GenerateCardRequest;
 import org.xxg.backend.backend.dto.VerifyCardRequest;
 import org.xxg.backend.backend.entity.Card;
+import org.xxg.backend.backend.mapper.UserRepository;
 import org.xxg.backend.backend.service.CardService;
 
 import java.util.List;
@@ -34,7 +35,11 @@ public class CardController {
     private static final int MAX_BATCH_GENERATE_COUNT = 1000;
 
     private final CardService cardService;
-    public CardController(CardService cardService) { this.cardService = cardService; }
+    private final UserRepository userRepository;
+    public CardController(CardService cardService, UserRepository userRepository) {
+        this.cardService = cardService;
+        this.userRepository = userRepository;
+    }
 
     // --- Frontend-compatible endpoints ---
 
@@ -170,6 +175,27 @@ public class CardController {
     }
 
     // --- Standard endpoints ---
+
+    /**
+     * 获取当前登录用户自己的卡密列表。
+     * <p>userId 从认证 Token 提取（非路径参数），普通用户与管理员均可访问，
+     * 替代 ADMIN-only 的 /cards/user/{userId}（该接口保留给管理端跨用户查询）。</p>
+     *
+     * @param auth 当前认证信息
+     * @return 当前用户的卡密列表（脱敏 DTO）
+     */
+    @GetMapping("/user/me")
+    public ResponseEntity<ApiResponse<List<CardResponse>>> getMyCards(org.springframework.security.core.Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
+        }
+        Integer userId = userRepository.findByUsername(auth.getName())
+                .map(org.xxg.backend.backend.entity.User::getId)
+                .orElseThrow(() -> new org.xxg.backend.backend.exception.BusinessException("当前账号未关联用户"));
+        List<Card> cards = cardService.getCardsByCreator("user", userId);
+        List<CardResponse> responses = cards.stream().map(CardResponse::fromEntity).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(responses));
+    }
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<ApiResponse<List<CardResponse>>> getUserCards(@PathVariable Integer userId) {

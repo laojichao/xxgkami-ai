@@ -43,11 +43,11 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private final UserRepository userRepository;
 
     /**
-     * 账号有效性缓存：key = "username:role", value = 是否有效。
+     * 账号有效性缓存：key = "username:role", value = "token哈希指纹|是否有效"。
      * <p>TTL 30秒：管理员禁用用户后最多 30 秒生效，
-     * 避免每个请求都查数据库。</p>
+     * 避免每个请求都查数据库。值附带 Token 指纹，防止轮换后误用旧比对结果。</p>
      */
-    private final Cache<String, Boolean> accountValidityCache = Caffeine.newBuilder()
+    private final Cache<String, String> accountValidityCache = Caffeine.newBuilder()
             .maximumSize(10_000)
             .expireAfterWrite(30, TimeUnit.SECONDS)
             .build();
@@ -91,9 +91,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     if (role == null || !VALID_ROLES.contains(role.toLowerCase())) {
                         log.warn("JWT 中包含无效角色: {}", role);
                     } else if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                        // 验证用户/管理员在数据库中仍然有效且未被禁用（带缓存）
-                        if (!isAccountValid(username, role)) {
-                            log.debug("账号 {} 角色 {} 已失效或被禁用，拒绝认证", username, role);
+                        // 验证用户/管理员在数据库中仍然有效且未被禁用，且 Token 与库中哈希一致（带缓存）
+                        if (!isAccountValid(username, role, token)) {
+                            log.debug("账号 {} 角色 {} 的 Token 已失效或被禁用，拒绝认证", username, role);
                         } else {
                             SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role.toUpperCase());
                             UsernamePasswordAuthenticationToken authToken =
@@ -119,29 +119,57 @@ public class JwtRequestFilter extends OncePerRequestFilter {
      *   <li>管理员被禁用后，旧 JWT 仍能访问管理接口</li>
      *   <li>用户被降权后，旧 JWT 仍持有高权限角色</li>
      *   <li>账号被删除后，旧 JWT 仍能通过认证</li>
+     *   <li>重新登录/刷新后，被窃取的旧 access token 在自然过期前仍有效</li>
      * </ul>
-     * <p>缓存 TTL 30秒，最多存储 10,000 个条目。</p>
+     * <p>缓存值附带 Token 哈希指纹（"指纹|有效性"）：按用户名缓存会把某次比对结果
+     * 错误地套用到轮换后的新 Token 上（例如旧 Token 校验失败缓存了 false，
+     * 会导致新 Token 被误拒 30 秒），指纹不匹配时强制回库重查。</p>
+     *
+     * @param username 用户名
+     * @param role     角色（admin/user）
+     * @param token    原始 access token（用于哈希比对）
      */
-    private boolean isAccountValid(String username, String role) {
+    private boolean isAccountValid(String username, String role, String token) {
         String cacheKey = username + ":" + role;
-        Boolean cached = accountValidityCache.getIfPresent(cacheKey);
-        if (cached != null) return cached;
-
-        boolean valid = checkAccountInDb(username, role);
-        accountValidityCache.put(cacheKey, valid);
+        String tokenFingerprint = sha256Base64(token).substring(0, 12);
+        String cached = accountValidityCache.getIfPresent(cacheKey);
+        if (cached != null && cached.startsWith(tokenFingerprint + "|")) {
+            return Boolean.parseBoolean(cached.substring(tokenFingerprint.length() + 1));
+        }
+        boolean valid = checkAccountInDb(username, role, token);
+        accountValidityCache.put(cacheKey, tokenFingerprint + "|" + valid);
         return valid;
+    }
+
+    /** SHA-256 哈希（Base64），与 AuthService.hashToken 算法一致 */
+    private String sha256Base64(String input) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.Base64.getEncoder().encodeToString(hash);
+        } catch (Exception e) {
+            throw new IllegalStateException("Token 哈希计算失败", e);
+        }
     }
 
     /**
      * 查询数据库验证账号有效性。
-     * <p>检查条件：账号存在、未被锁定、有活跃的 access token（未注销）。</p>
+     * <p>检查条件：账号存在、未被锁定、有活跃的 access token（未注销），
+     * 且请求携带的 Token 与库中存储的哈希一致（重新登录/刷新后旧 Token 立即失效）。</p>
      */
-    private boolean checkAccountInDb(String username, String role) {
+    private boolean checkAccountInDb(String username, String role, String token) {
+        String presentedHash = sha256Base64(token);
         if ("admin".equals(role)) {
             return adminRepository.findByUsername(username)
                     .map(admin -> {
                         // Account must have an active session (not logged out)
                         if (admin.getAccessToken() == null) return false;
+                        // Token 必须与库中哈希一致（常量时间比较防时序攻击）
+                        if (!java.security.MessageDigest.isEqual(
+                                admin.getAccessToken().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                                presentedHash.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+                            return false;
+                        }
                         // Account must not be locked out
                         if (admin.getFailedLoginAttempts() != null && admin.getFailedLoginAttempts() >= 5
                                 && admin.getLockTime() != null
@@ -158,6 +186,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                         if (!Boolean.TRUE.equals(user.getStatus())) return false;
                         // Account must have an active session (not logged out)
                         if (user.getAccessToken() == null) return false;
+                        // Token 必须与库中哈希一致（常量时间比较防时序攻击）
+                        if (!java.security.MessageDigest.isEqual(
+                                user.getAccessToken().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                                presentedHash.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+                            return false;
+                        }
                         // Account must not be locked out
                         if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() >= 5
                                 && user.getLockTime() != null

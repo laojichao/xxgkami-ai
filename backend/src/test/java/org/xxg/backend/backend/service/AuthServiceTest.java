@@ -51,6 +51,8 @@ class AuthServiceTest {
     @Mock
     private TotpService totpService;
     @Mock
+    private org.xxg.backend.backend.filter.JwtRequestFilter jwtRequestFilter;
+    @Mock
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     @InjectMocks
@@ -83,6 +85,22 @@ class AuthServiceTest {
         testAdmin.setPassword("$2a$10$encodedPassword");
         testAdmin.setEmail("admin@example.com");
         testAdmin.setFailedLoginAttempts(0);
+    }
+
+    /**
+     * 计算验证码的 SHA-256 哈希（十六进制）。
+     * 验证码现已哈希入库，测试数据需以哈希形式构造。
+     */
+    private static String sha256(String input) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test
@@ -220,7 +238,7 @@ class AuthServiceTest {
         request.setCode("123456");
 
         VerificationCode vCode = new VerificationCode();
-        vCode.setCode("123456");
+        vCode.setCode(sha256("123456"));
         vCode.setExpireTime(LocalDateTime.now().plusMinutes(5));
         vCode.setAttempts(0);
 
@@ -307,7 +325,7 @@ class AuthServiceTest {
         request.setCode("123456");
 
         VerificationCode vCode = new VerificationCode();
-        vCode.setCode("123456");
+        vCode.setCode(sha256("123456"));
         vCode.setExpireTime(LocalDateTime.now().plusMinutes(5));
         vCode.setAttempts(0);
 
@@ -330,7 +348,7 @@ class AuthServiceTest {
         request.setCode("123456");
 
         VerificationCode vCode = new VerificationCode();
-        vCode.setCode("123456");
+        vCode.setCode(sha256("123456"));
         vCode.setExpireTime(LocalDateTime.now().plusMinutes(5));
         vCode.setAttempts(0);
 
@@ -405,18 +423,21 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("绑定令牌校验 - 归属匹配时通过并标记为已使用")
+    @DisplayName("绑定令牌校验 - 归属匹配时通过并原子标记为已使用")
     void validateBindToken_MatchingOwner_Accepted() {
         org.xxg.backend.backend.entity.BindToken token = new org.xxg.backend.backend.entity.BindToken();
+        token.setId(9);
         token.setToken("owned-token");
         token.setUserId(1);
         token.setExpireTime(LocalDateTime.now().plusMinutes(5));
         token.setUsed(false);
 
         when(bindTokenRepository.findByTokenAndUsedFalse("owned-token")).thenReturn(Optional.of(token));
+        // 原子消费：条件 UPDATE 影响行数为 1 表示本次调用成功消费令牌
+        when(bindTokenRepository.markUsedIfUnused(9)).thenReturn(1);
 
         assertTrue(authService.validateBindToken(1, "owned-token"));
-        assertTrue(Boolean.TRUE.equals(token.getUsed())); // 一次性令牌应被消费
+        verify(bindTokenRepository).markUsedIfUnused(9);
     }
 
     @Test

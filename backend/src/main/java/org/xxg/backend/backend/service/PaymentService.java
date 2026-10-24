@@ -47,6 +47,11 @@ public class PaymentService {
     public Map<String, String> createPayment(String orderNo) {
         Order order = orderRepository.findByOrderNo(orderNo)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
+        // 仅待支付订单可发起支付：已取消/已完成/已失败的订单继续生成支付链接，
+        // 会出现"用户对已取消订单付款 -> 回调无法发货 -> 资金吞单"的资损路径
+        if (!"pending".equals(order.getStatus())) {
+            throw new BusinessException("订单当前状态（" + order.getStatus() + "）不允许支付");
+        }
 
         String apiUrl = settingsService.getValue("epay_api_url", "");
         String pid = settingsService.getValue("epay_pid", "");
@@ -131,10 +136,19 @@ public class PaymentService {
                 log.warn("支付回调订单不存在: {}", orderNo);
                 return "fail";
             }
-            // 幂等性检查：只有待支付状态的订单才处理
-            if (!"pending".equals(order.getStatus())) {
-                log.info("订单已处理过，跳过: {}，当前状态: {}", orderNo, order.getStatus());
+            // 幂等性检查：已完成的订单直接确认（网关重试场景）
+            if ("completed".equals(order.getStatus())) {
+                log.info("订单已完成，幂等跳过: {}", orderNo);
                 return "success";
+            }
+            // 已取消/失败的订单收到真实付款：绝不能向网关返回 success（网关会停止重试、
+            // 系统侧无退款无告警，用户付了钱拿不到卡密）。返回 fail 让网关持续重试，
+            // 并输出高级别告警日志驱动人工对账/补发。
+            if (!"pending".equals(order.getStatus())) {
+                log.error("[支付对账告警] 订单 {} 已被置为 {} 状态但收到金额 {} 的成功回调，"
+                        + "请人工核实并补发卡密或退款。回调参数: {}",
+                        orderNo, order.getStatus(), params.get("money"), params);
+                return "fail";
             }
 
             // 验证回调金额与订单金额一致性（防止支付金额被篡改）

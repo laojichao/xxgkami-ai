@@ -87,7 +87,9 @@
                 <i class="fas fa-copy"></i>
                 复制
               </button>
-              <button v-if="enableCardEncryption" class="copy-btn small warning" @click="$emit('copy-encrypted-card', cardCode.code)" title="复制加密卡密">
+              <!-- 传整个 cardCode 对象：处理器需要读取 encryptedKey 字段，
+                   此前只传 .code 字符串导致"加密复制"永远提示没有可用加密值 -->
+              <button v-if="enableCardEncryption" class="copy-btn small warning" @click="$emit('copy-encrypted-card', cardCode)" title="复制加密卡密">
                 <i class="fas fa-lock"></i>
                 加密复制
               </button>

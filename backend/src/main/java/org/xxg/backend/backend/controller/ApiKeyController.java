@@ -11,6 +11,7 @@ import org.xxg.backend.backend.entity.ApiKey;
 import org.xxg.backend.backend.entity.UserApiKey;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.UserApiKeyRepository;
+import org.xxg.backend.backend.mapper.UserRepository;
 import org.xxg.backend.backend.service.ApiKeyService;
 
 import java.time.LocalDateTime;
@@ -28,9 +29,12 @@ import java.util.Optional;
 public class ApiKeyController {
     private final ApiKeyService apiKeyService;
     private final UserApiKeyRepository userApiKeyRepository;
-    public ApiKeyController(ApiKeyService apiKeyService, UserApiKeyRepository userApiKeyRepository) {
+    private final UserRepository userRepository;
+    public ApiKeyController(ApiKeyService apiKeyService, UserApiKeyRepository userApiKeyRepository,
+                            UserRepository userRepository) {
         this.apiKeyService = apiKeyService;
         this.userApiKeyRepository = userApiKeyRepository;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -58,14 +62,45 @@ public class ApiKeyController {
     }
 
     /**
-     * 获取所有API Key列表
+     * 获取所有API Key列表（含每个密钥已分配的用户摘要）
      * <p>GET /admin/apikeys</p>
      * <p>权限：管理员</p>
-     * @return API Key列表
+     * @return API Key列表，每项含 assignedUsers（[{id, username, email}]）
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<ApiKey>>> list() {
-        return ResponseEntity.ok(ApiResponse.ok(apiKeyService.getAllApiKeys()));
+    @Transactional(readOnly = true)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> list() {
+        List<ApiKey> keys = apiKeyService.getAllApiKeys();
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (ApiKey key : keys) {
+            Map<String, Object> item = new java.util.HashMap<>();
+            item.put("id", key.getId());
+            item.put("keyName", key.getKeyName());
+            item.put("name", key.getName());
+            item.put("description", key.getDescription());
+            item.put("status", key.getStatus());
+            item.put("webhookConfig", key.getWebhookConfig());
+            item.put("requireMachineCode", key.getRequireMachineCode());
+            item.put("enableCardEncryption", key.getEnableCardEncryption());
+            item.put("useCount", key.getUseCount());
+            item.put("lastUseTime", key.getLastUseTime());
+            item.put("createTime", key.getCreateTime());
+            // 装配已分配用户摘要：前端"分配用户"弹窗依赖此字段展示已分配列表
+            List<Integer> userIds = userApiKeyRepository.findUserIdsByApiKeyId(key.getId());
+            List<Map<String, Object>> assignedUsers = new java.util.ArrayList<>();
+            if (!userIds.isEmpty()) {
+                for (org.xxg.backend.backend.entity.User u : userRepository.findAllById(userIds)) {
+                    Map<String, Object> summary = new java.util.HashMap<>();
+                    summary.put("id", u.getId());
+                    summary.put("username", u.getUsername());
+                    summary.put("email", u.getEmail());
+                    assignedUsers.add(summary);
+                }
+            }
+            item.put("assignedUsers", assignedUsers);
+            result.add(item);
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     /**
@@ -127,6 +162,10 @@ public class ApiKeyController {
         }
         // 检查 API Key 是否存在
         apiKeyService.getApiKeyById(id);
+        // 检查目标用户存在（无外键约束兜底，避免产生永久孤儿数据）
+        if (!userRepository.existsById(userId)) {
+            throw new BusinessException("目标用户不存在");
+        }
         // 检查是否已分配
         Optional<UserApiKey> existing = userApiKeyRepository.findByUserIdAndApiKeyId(userId, id);
         if (existing.isPresent()) {

@@ -537,9 +537,9 @@ onMounted(async () => {
       }
   }
 
-  // Check settings for OAuth
+  // Check settings for OAuth（公开接口：/settings/all 为 ADMIN-only，登录页调用必 403）
   try {
-     const res = await settingsApi.getAllSettings()
+     const res = await settingsApi.getPublicOAuthSettings()
      if (res.success && res.data) {
         if (res.data.aggregatedLogin === 'true') {
            oauthEnabled.value = true
@@ -660,23 +660,33 @@ const handleRegister = async () => {
     registerError.value = '两次输入的密码不一致'
     return
   }
-  
+  // 与后端 @Size/RegisterRequest 校验对齐，避免提交后才收到生硬的后端报错
+  if (registerForm.username.length < 3 || registerForm.username.length > 50) {
+    registerError.value = '用户名长度必须在 3-50 个字符之间'
+    return
+  }
+  if (registerForm.password.length < 8 || registerForm.password.length > 50) {
+    registerError.value = '密码长度必须在 8-50 个字符之间'
+    return
+  }
+
   registerLoading.value = true
   registerError.value = ''
   registerSuccess.value = ''
-  
+
   try {
+    // nickname/phone 后端 RegisterRequest 不接收，从提交载荷中移除
     const response = await authApi.register({
       username: registerForm.username,
-      nickname: registerForm.nickname,
       password: registerForm.password,
-      phone: registerForm.phone,
       email: registerForm.email,
       code: registerForm.code
     })
     
     if (response.success) {
       registerSuccess.value = '注册成功！请登录'
+      // 清理验证码发送时间记录（隐私痕迹，注册完成后不再需要）
+      localStorage.removeItem('lastRegisterSendTime_' + registerForm.email)
       pendingTimeouts.push(setTimeout(() => {
         showRegister.value = false
         // Reset form
@@ -950,8 +960,10 @@ const handleLogin = async () => {
         localStorage.setItem('isLoggedIn', 'true')
       }
 
+      // resultData.userInfo 判空兜底：后端 success 但 data 缺失时
+      // 直接取 .userInfo 会抛 TypeError，落入 catch 显示语义失真的"登录验证失败"
       emit('login-success', {
-        userInfo: resultData.userInfo
+        userInfo: (resultData && resultData.userInfo) || {}
       })
 
       // 将 setTimeout 纳入 pendingTimeouts 统一管理，防止组件卸载后内存泄漏

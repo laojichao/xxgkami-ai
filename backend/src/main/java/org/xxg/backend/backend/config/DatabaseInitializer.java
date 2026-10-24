@@ -24,8 +24,17 @@ public class DatabaseInitializer implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DatabaseInitializer.class);
 
+    /** 默认管理员账号的初始密码（公开文档值，与 README 对齐） */
+    private static final String DEFAULT_ADMIN_PASSWORD = "admin123";
+
     @PersistenceContext
     private EntityManager entityManager;
+
+    private final org.xxg.backend.backend.util.PasswordUtil passwordUtil;
+
+    public DatabaseInitializer(org.xxg.backend.backend.util.PasswordUtil passwordUtil) {
+        this.passwordUtil = passwordUtil;
+    }
 
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -75,15 +84,30 @@ public class DatabaseInitializer implements CommandLineRunner {
                     log.error("============================================================");
                     log.error("严重安全风险：检测到管理员密码为明文存储，已自动禁用该账号");
                     log.error("明文密码自动加密存在风险（可能为遗留测试数据），请通过以下步骤重置：");
-                    log.error("1. 在数据库中执行：UPDATE admins SET password='<BCrypt哈希>', status=1 WHERE username='admin'");
-                    log.error("2. 使用 BCrypt 工具生成新密码哈希（如：mvn exec:java -Dexec.mainClass=...）");
+                    log.error("1. 使用 BCrypt 工具生成新密码哈希（如 htpasswd -bnBC 10 \"\" <新密码> | tr -d ':\\n'）");
+                    log.error("2. 在数据库中执行：UPDATE admins SET password='<BCrypt哈希>', failed_login_attempts=0, lock_time=NULL WHERE username='admin'");
                     log.error("3. 重启应用");
                     log.error("============================================================");
-                    // 禁用明文密码的管理员账号，防止被利用
+                    // 禁用明文密码的管理员账号，防止被利用。
+                    // lock_time 置于 100 年后实现"永久锁定"：若仅写 NOW()，
+                    // 登录锁定逻辑在 15 分钟后会自动解锁该账号，明文密码仍可被慢速爆破
                     entityManager.createNativeQuery(
-                        "UPDATE admins SET failed_login_attempts = 5, lock_time = NOW() WHERE username = 'admin'")
+                        "UPDATE admins SET failed_login_attempts = 5, lock_time = DATE_ADD(NOW(), INTERVAL 100 YEAR) WHERE username = 'admin'")
                         .executeUpdate();
                 }
+            }
+        } catch (jakarta.persistence.NoResultException e) {
+            // admins 表无 admin 记录（全新安装）：创建默认管理员，与 README 声明的默认账号一致。
+            // 默认密码为公开文档值，仅用于首次登录，启动日志明确提示立即修改
+            try {
+                entityManager.createNativeQuery(
+                    "INSERT INTO admins (username, password, email, totp_enabled, failed_login_attempts, create_time) VALUES " +
+                    "('admin', :bcrypt, NULL, FALSE, 0, NOW())")
+                    .setParameter("bcrypt", passwordUtil.encode(DEFAULT_ADMIN_PASSWORD))
+                    .executeUpdate();
+                log.warn("已创建默认管理员 admin（默认密码 admin123），请立即登录并修改密码！");
+            } catch (Exception insertEx) {
+                log.error("默认管理员创建失败，请手动插入 BCrypt 密码的管理员记录: {}", insertEx.getMessage());
             }
         } catch (Exception e) {
             log.debug("管理员密码迁移跳过（管理员可能尚不存在）: {}", e.getMessage());

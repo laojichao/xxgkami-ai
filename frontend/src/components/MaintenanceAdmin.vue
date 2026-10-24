@@ -97,15 +97,18 @@ const loadSettings = async () => {
   try {
     const res = await maintenanceApi.getStatus()
     if (res.success && res.data) {
-      // 确保后端返回的数据类型正确
+      // 后端 /maintenance/status 返回 {enabled, settings:{...}} 双层结构：
+      // enabled 为维护开关，文案/时间等配置在 settings 内。
+      // 此前直接读顶层 content 等字段恒为空，保存时会把空值写回、清空已有维护文案
+      const detail = res.data.settings || res.data
       settings.value = {
-        id: res.data.id,
+        id: detail.id,
         enabled: Boolean(res.data.enabled), // 强制转换为布尔值
-        content: res.data.content || '',
-        maintenanceTime: res.data.maintenanceTime || '',
-        startTime: res.data.startTime || '',
-        emailSubject: res.data.emailSubject || '',
-        emailTemplate: res.data.emailTemplate || ''
+        content: detail.content || '',
+        maintenanceTime: detail.maintenanceTime || '',
+        startTime: detail.startTime || '',
+        emailSubject: detail.emailSubject || '',
+        emailTemplate: detail.emailTemplate || ''
       }
     }
   } catch (error) {

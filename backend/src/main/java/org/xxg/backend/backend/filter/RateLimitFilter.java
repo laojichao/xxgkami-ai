@@ -199,6 +199,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * 获取客户端IP地址。
      * <p>安全策略：当请求来自可信代理时，从 X-Forwarded-For 头部提取真实客户端 IP；
      * 否则使用 remoteAddr（TCP 连接的直接来源），防止攻击者通过伪造头部绕过限流。</p>
+     * <p>XFF 解析采用"自右向左取第一个非可信代理 IP"：XFF 的追加语义为
+     * {@code client, proxy1, proxy2}，右侧由可信代理逐跳追加，左侧可被客户端
+     * 任意伪造。若取第一个值，攻击者直接请求 nginx 并自带
+     * {@code X-Forwarded-For: <随机IP>}，即可每次更换身份无限绕过登录/验证码限流。</p>
      */
     private String getClientIp(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
@@ -206,10 +210,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (trustedProxies.contains(remoteAddr)) {
             String xff = request.getHeader("X-Forwarded-For");
             if (xff != null && !xff.isEmpty()) {
-                // X-Forwarded-For 格式：client, proxy1, proxy2；取第一个即真实客户端 IP
-                String clientIp = xff.split(",")[0].trim();
-                if (!clientIp.isEmpty()) {
-                    return clientIp;
+                String[] hops = xff.split(",");
+                for (int i = hops.length - 1; i >= 0; i--) {
+                    String hop = hops[i].trim();
+                    if (hop.isEmpty()) continue;
+                    // 跳过可信代理追加的每一跳，第一个非可信值即真实客户端 IP
+                    if (!trustedProxies.contains(hop)) {
+                        return hop;
+                    }
                 }
             }
             String xRealIp = request.getHeader("X-Real-IP");

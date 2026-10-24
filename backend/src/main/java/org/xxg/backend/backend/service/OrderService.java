@@ -182,16 +182,22 @@ public class OrderService {
 
     /**
      * 标记订单为失败状态。
+     * <p>使用悲观锁读取：与支付回调的 completeOrder 并发时（管理员点"标记失败"
+     * 与回调同时到达），无锁的读-判-写可能把已完成并发货的订单覆盖为 failed，
+     * 出现"已收款已发货但订单显示失败"的脏状态。</p>
      *
      * @param orderNo 订单号
      */
     @Transactional
     public void failOrder(String orderNo) {
-        Order order = orderRepository.findByOrderNo(orderNo)
+        Order order = orderRepository.findByOrderNoWithLock(orderNo)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
         // 幂等性检查：已完成的订单不能标记为失败，防止误操作
         if ("completed".equals(order.getStatus())) {
             throw new BusinessException("已完成的订单不能标记为失败");
+        }
+        if ("failed".equals(order.getStatus())) {
+            return; // 已是失败状态，幂等返回
         }
         order.setStatus("failed");
         order.setUpdateTime(LocalDateTime.now());

@@ -27,4 +27,15 @@ public interface BindTokenRepository extends JpaRepository<BindToken, Integer> {
     @Modifying
     @Query("DELETE FROM BindToken b WHERE b.expireTime < :time")
     void deleteByExpireTimeBefore(@Param("time") LocalDateTime time);
+
+    /**
+     * 原子标记令牌为已使用（仅当当前未使用时生效）。
+     * @return 影响行数：1 表示本次调用成功消费令牌，0 表示已被并发请求消费
+     */
+    @Modifying
+    @Query("UPDATE BindToken b SET b.used = true WHERE b.id = :id AND b.used = false")
+    int markUsedIfUnused(@Param("id") Integer id);
+
+    /** 根据用户ID删除全部令牌（删除用户时级联清理） */
+    void deleteByUserId(Integer userId);
 }

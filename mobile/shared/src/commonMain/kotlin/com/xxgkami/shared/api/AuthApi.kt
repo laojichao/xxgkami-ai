@@ -60,21 +60,13 @@ class AuthApi(private val client: ApiClient) {
     /**
      * 用户登出
      *
-     * 注意：当前实现客户端传递 [id] 和 [role] 参数。
-     * 理想情况下应改为 POST /auth/logout 无 body，由服务端从 Token 提取用户信息，
-     * 避免客户端传递敏感参数。此修改需与后端协调，当前保留兼容。
+     * 无需请求体：服务端从请求头携带的 Token 中提取用户身份，
+     * 客户端不传 id/role（后端原本也不消费，且客户端传参可被伪造）。
      *
-     * TODO: 待后端支持无 body 登出接口后，移除 [id] 和 [role] 参数
-     *
-     * @param id 用户ID
-     * @param role 用户角色
+     * @return 登出结果响应
      */
-    suspend fun logout(id: Int, role: String): ApiResponse<Unit> {
-        val body = buildJsonObject {
-            put("id", JsonPrimitive(id))
-            put("role", JsonPrimitive(role))
-        }.toString()
-        val response = client.post("/auth/logout", body)
+    suspend fun logout(): ApiResponse<Unit> {
+        val response = client.post("/auth/logout")
         return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.serializer<Unit>()), response)
     }
 

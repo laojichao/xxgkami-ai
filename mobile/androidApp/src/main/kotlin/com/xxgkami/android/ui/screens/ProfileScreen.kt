@@ -15,8 +15,11 @@ import com.xxgkami.android.viewmodel.AuthViewModel
 
 /**
  * 个人资料页面
- * 展示用户头像、用户名、邮箱、昵称、手机号、角色、注册时间等信息
+ * 展示用户头像、用户名、昵称、邮箱、角色等信息
  * 提供退出登录功能
+ *
+ * 字段说明：后端 /auth/user/info 仅返回 id/username/email/nickname/avatar/role，
+ * 不返回手机号/注册时间，故不展示对应行（避免恒空占位误导用户）。
  *
  * @param navController 页面导航控制器
  * @param authViewModel 认证ViewModel，提供用户信息和退出登录功能
@@ -78,9 +81,7 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                     ProfileItem("用户名", userInfo?.username ?: "")
                     ProfileItem("昵称", userInfo?.nickname ?: "未设置")
                     ProfileItem("邮箱", userInfo?.email ?: "未设置")
-                    ProfileItem("手机号", userInfo?.phone ?: "未设置")
                     ProfileItem("角色", if (userInfo?.role == "admin") "管理员" else "普通用户")
-                    ProfileItem("注册时间", userInfo?.createTime ?: "")
                 }
             }
 
@@ -88,11 +89,10 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
 
             Button(
                 onClick = {
-                    val userId = userInfo?.id ?: 0
-                    val role = userInfo?.role ?: "user"
                     logoutInitiated = true
+                    // 无需传参：服务端从 Token 提取用户身份。
                     // logout 同步清除本地 Token 和 userInfo，LaunchedEffect 会监听到并触发 onLogout
-                    authViewModel.logout(userId, role)
+                    authViewModel.logout()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -117,7 +117,7 @@ private fun ProfileItem(label: String, value: String) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
-    if (label != "注册时间") {
+    if (label != "角色") {
         HorizontalDivider()
     }
 }

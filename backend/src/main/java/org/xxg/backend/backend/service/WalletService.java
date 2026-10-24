@@ -10,9 +10,6 @@ import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.WalletRepository;
 import org.xxg.backend.backend.mapper.WalletTransactionRepository;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
-import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -25,8 +22,6 @@ import java.util.*;
 public class WalletService {
     private final WalletRepository walletRepository;
     private final WalletTransactionRepository transactionRepository;
-    @PersistenceContext
-    private EntityManager entityManager;
 
     public WalletService(WalletRepository walletRepository, WalletTransactionRepository transactionRepository) {
         this.walletRepository = walletRepository;
@@ -74,8 +69,9 @@ public class WalletService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("充值金额必须大于0");
         }
-        // 直接查询/创建钱包（不使用 getOrCreateWallet，避免同类自调用绕过事务代理）
-        Wallet wallet = walletRepository.findByUserId(userId).orElseGet(() -> {
+        // 直接锁定读/创建钱包（不使用 getOrCreateWallet，避免同类自调用绕过事务代理）；
+        // 锁定读保证余额计算基于数据库最新值，防止并发充值互相覆盖
+        Wallet wallet = walletRepository.findByUserIdForUpdate(userId).orElseGet(() -> {
             Wallet created = new Wallet();
             created.setUserId(userId);
             created.setBalance(BigDecimal.ZERO);
@@ -87,14 +83,13 @@ public class WalletService {
     }
 
     /**
-     * 执行充值核心逻辑（加锁、更新余额、记录流水）。
+     * 执行充值核心逻辑（更新余额、记录流水）。
      * 提取此方法消除 recharge 中的重复代码。
      * <p>余额字段做 null 兜底：历史数据可能因迁移或手工插入而为 NULL，
-     * 直接相加会抛 NullPointerException。</p>
+     * 直接相加会抛 NullPointerException。余额基于锁定读的最新值计算。</p>
      */
     private Wallet doRecharge(Wallet wallet, Integer userId, BigDecimal amount,
                               String description, String orderNo) {
-        entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
         wallet.setBalance(safeAmount(wallet.getBalance()).add(amount));
         wallet.setTotalRecharge(safeAmount(wallet.getTotalRecharge()).add(amount));
         wallet.setUpdateTime(LocalDateTime.now());
@@ -124,10 +119,9 @@ public class WalletService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("消费金额必须大于0");
         }
-        // 使用悲观锁防止并发消费导致余额为负
-        Wallet wallet = walletRepository.findByUserId(userId)
+        // 锁定读防止并发消费导致余额为负或丢失更新
+        Wallet wallet = walletRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> new BusinessException("钱包不存在"));
-        entityManager.lock(wallet, LockModeType.PESSIMISTIC_WRITE);
 
         if (safeAmount(wallet.getBalance()).compareTo(amount) < 0) {
             throw new BusinessException("余额不足");

@@ -28,8 +28,10 @@
         <div class="user-info">
           <div class="user-header">
             <h3>{{ user.username }}</h3>
-            <span :class="['user-status', user.status === 1 ? 'active' : 'inactive']">
-              {{ user.status === 1 ? '正常' : '禁用' }}
+            <!-- 后端 User.status 为 Boolean（JSON 序列化为 true/false），按布尔判断；
+                 此前与数字 1 比较导致所有用户永远显示"禁用"、启停按钮永不渲染 -->
+            <span :class="['user-status', user.status === true ? 'active' : 'inactive']">
+              {{ user.status === true ? '正常' : '禁用' }}
             </span>
           </div>
           
@@ -63,18 +65,18 @@
             编辑
           </button>
           
-          <button 
-            v-if="user.status === 0" 
-            class="btn-success" 
+          <button
+            v-if="user.status !== true"
+            class="btn-success"
             @click="toggleUserStatus(user.id, 1)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="20 6 9 17 4 12"></polyline></svg>
             启用
           </button>
-          
-          <button 
-            v-if="user.status === 1" 
-            class="btn-warning" 
+
+          <button
+            v-if="user.status === true"
+            class="btn-warning"
             @click="toggleUserStatus(user.id, 0)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>

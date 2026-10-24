@@ -13,6 +13,8 @@
  * 不可用于任何服务端比对、查重或校验逻辑。
  */
 
+import { logger } from './logger'
+
 /**
  * 计算卡密的本地混淆展示值（与后端 encryptedKey 不同，仅供前端展示）。
  * 算法：URL编码 -> 字符反转 -> Base64 -> 字符替换
@@ -29,7 +31,7 @@ export function obfuscateCardKey(rawKey) {
         return base64.replace(/e/g, '*').replace(/U/g, '-')
     } catch (e) {
         // btoa 对非 Latin-1 字符会抛错；此处降级返回原值由调用方决定如何处理
-        console.error('obfuscateCardKey failed:', e)
+        logger.error('obfuscateCardKey failed:', e)
         return rawKey
     }
 }

@@ -103,7 +103,11 @@ public class WebhookService {
             int port = originalUri.getPort();
             String scheme = originalUri.getScheme();
             String path = originalUri.getRawPath() + (originalUri.getRawQuery() != null ? "?" + originalUri.getRawQuery() : "");
-            String ipUriStr = scheme + "://" + resolvedIp + (port != -1 ? ":" + port : "") + path;
+            // IPv6 地址必须用方括号包裹，否则生成 http://2001:db8::1/... 形式的非法 URI，
+            // URI.create 抛异常被外层吞掉导致 webhook 静默失败
+            String hostPart = resolvedIp.contains(":") && !resolvedIp.startsWith("[")
+                    ? "[" + resolvedIp + "]" : resolvedIp;
+            String ipUriStr = scheme + "://" + hostPart + (port != -1 ? ":" + port : "") + path;
 
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(ipUriStr))

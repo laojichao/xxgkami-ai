@@ -623,12 +623,15 @@ public class CardService {
 
     /**
      * 自助解绑卡密的机器码（公开接口调用）。
-     * <p>需要卡密允许自助解绑。如提供 machine_code 则验证匹配后解绑；
-     * 如未提供 machine_code，则在 allowSelfUnbind 为 true 时直接解绑。
+     * <p>需要卡密允许自助解绑，且必须提供与当前绑定值一致的 machineCode。
      * 使用悲观锁保证读-改-写的原子性。</p>
+     * <p>安全约束：不允许"未提供机器码直接解绑"——自助解绑是公开接口，
+     * 若仅凭卡密字符串（群聊转发/截图泄露场景）即可零凭据解绑，
+     * 攻击者可先解绑再把卡绑到自己的机器，等于盗走他人卡密。
+     * 绑定值本身即凭据：只有持有原设备的用户才能通过匹配校验。</p>
      *
      * @param cardKey     卡密明文
-     * @param machineCode 当前绑定的机器码（可选）
+     * @param machineCode 当前绑定的机器码（必填，须与绑定值一致）
      */
     @Transactional
     public void selfUnbindMachineCode(String cardKey, String machineCode) {
@@ -643,11 +646,11 @@ public class CardService {
         if (card.getMachineCode() == null || card.getMachineCode().isEmpty()) {
             throw new BusinessException("该卡密未绑定机器码，无需解绑");
         }
-        // 如果提供了机器码，验证是否匹配
-        if (machineCode != null && !machineCode.isBlank()) {
-            if (!card.getMachineCode().equals(machineCode)) {
-                throw new BusinessException("机器码不匹配");
-            }
+        if (machineCode == null || machineCode.isBlank()) {
+            throw new BusinessException("自助解绑需要提供当前绑定的机器码");
+        }
+        if (!card.getMachineCode().equals(machineCode)) {
+            throw new BusinessException("机器码不匹配");
         }
         card.setMachineCode(null);
         cardRepository.save(card);

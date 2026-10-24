@@ -275,6 +275,25 @@ class ApiClient(baseUrl: String = "") {
     }
 
     /**
+     * 发送无请求体的 POST 请求。
+     *
+     * 适用于服务端从 Token 提取身份、无需请求体的接口（如 /auth/logout）。
+     * 与 [post] 一样为非幂等请求，401 后不会自动重试。
+     *
+     * @param path 请求路径（不含 baseUrl）
+     * @return 响应体字符串
+     */
+    suspend fun post(path: String): String {
+        return executeWithRefresh(isIdempotent = false) {
+            val response = httpClient().post("${requireBaseUrl()}$path") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            checkResponseStatus(response)
+            response.bodyAsText()
+        }
+    }
+
+    /**
      * 发送 PUT 请求（JSON 请求体）。
      *
      * 注意：PUT 为非幂等请求，401 后不会自动重试。

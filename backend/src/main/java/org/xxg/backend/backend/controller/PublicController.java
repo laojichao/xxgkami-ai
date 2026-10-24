@@ -10,13 +10,14 @@ import org.xxg.backend.backend.mapper.SlideRepository;
 import org.xxg.backend.backend.entity.Card;
 import org.xxg.backend.backend.mapper.CardRepository;
 import org.xxg.backend.backend.service.CardService;
+import org.xxg.backend.backend.service.SettingsService;
 
 import java.util.*;
 
 /**
  * 公开接口控制器。
  * <p>提供无需登录即可访问的公开 API，包括功能特性列表、轮播图查询、
- * 以及卡密机器码的自助查询与解绑。</p>
+ * 卡密机器码的自助查询与解绑、以及登录页所需的第三方登录开关配置。</p>
  * <p>基础路径：{@code /public}</p>
  */
 @RestController
@@ -26,13 +27,16 @@ public class PublicController {
     private final SlideRepository slideRepository;
     private final CardRepository cardRepository;
     private final CardService cardService;
+    private final SettingsService settingsService;
 
     public PublicController(FeatureRepository featureRepository, SlideRepository slideRepository,
-                            CardRepository cardRepository, CardService cardService) {
+                            CardRepository cardRepository, CardService cardService,
+                            SettingsService settingsService) {
         this.featureRepository = featureRepository;
         this.slideRepository = slideRepository;
         this.cardRepository = cardRepository;
         this.cardService = cardService;
+        this.settingsService = settingsService;
     }
 
     /**
@@ -93,10 +97,10 @@ public class PublicController {
 
     /**
      * 自助解绑卡密的机器码。
-     * <p>需要卡密允许自助解绑。如提供 machine_code 则验证匹配后解绑；
-     * 如未提供 machine_code，则在 allowSelfUnbind 为 true 时直接解绑。</p>
+     * <p>需要卡密允许自助解绑，且必须提供与绑定值一致的 machine_code
+     * （绑定值本身即凭据，防止仅凭卡密明文盗解绑他人卡密）。</p>
      *
-     * @param body 请求体，包含 card_key 字段，machine_code 为可选
+     * @param body 请求体，包含 card_key 与 machine_code 字段（均必填）
      * @return 操作结果
      */
     @PostMapping("/cards/machine-bind/unbind")
@@ -109,10 +113,28 @@ public class PublicController {
             return ResponseEntity.ok(ApiResponse.error("卡密格式不正确"));
         }
         String machineCode = body.get("machine_code");
-        if (machineCode != null && machineCode.length() > 255) {
+        if (machineCode == null || machineCode.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("自助解绑需要提供当前绑定的机器码"));
+        }
+        if (machineCode.length() > 255) {
             return ResponseEntity.ok(ApiResponse.error("机器码格式不正确"));
         }
         cardService.selfUnbindMachineCode(cardKey, machineCode);
         return ResponseEntity.ok(ApiResponse.ok("解绑成功"));
+    }
+
+    /**
+     * 获取第三方登录的公开聚合配置。
+     * <p>仅返回登录页展示所需的两个字段（聚合登录开关与平台列表），
+     * 不暴露任何密钥类配置。登录页为匿名访问场景，不能调用 /settings/all（ADMIN-only）。</p>
+     *
+     * @return 包含 aggregatedLogin（"true"/"false"）与 oauth_login_types（逗号分隔）的 Map
+     */
+    @GetMapping("/settings/oauth")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getOAuthSettings() {
+        Map<String, String> result = new HashMap<>();
+        result.put("aggregatedLogin", settingsService.getValue("aggregatedLogin", "false"));
+        result.put("oauth_login_types", settingsService.getValue("oauth_login_types", ""));
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }

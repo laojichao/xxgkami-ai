@@ -13,7 +13,9 @@ import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.*;
 import org.xxg.backend.backend.util.JwtUtil;
 import org.xxg.backend.backend.util.PasswordUtil;
+import org.xxg.backend.backend.filter.JwtRequestFilter;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -45,6 +47,8 @@ public class AuthService {
     private static final int CODE_EXPIRE_MINUTES = 10;
     /** 验证码发送冷却时间（秒） */
     private static final int CODE_SEND_COOLDOWN_SECONDS = 60;
+    /** 用户名字符白名单：字母/数字/下划线/连字符/中文 */
+    private static final String USERNAME_PATTERN = "^[A-Za-z0-9_\\-\\u4e00-\\u9fa5]{3,50}$";
 
     private final AdminRepository adminRepository;
     private final UserRepository userRepository;
@@ -54,6 +58,7 @@ public class AuthService {
     private final PasswordUtil passwordUtil;
     private final EmailService emailService;
     private final TotpService totpService;
+    private final JwtRequestFilter jwtRequestFilter;
     /** 用于在独立事务中记录登录失败次数（避免被登录失败异常回滚） */
     private final TransactionTemplate transactionTemplate;
 
@@ -61,7 +66,8 @@ public class AuthService {
                        VerificationCodeRepository verificationCodeRepository,
                        BindTokenRepository bindTokenRepository,
                        JwtUtil jwtUtil, PasswordUtil passwordUtil, EmailService emailService,
-                       TotpService totpService, PlatformTransactionManager transactionManager) {
+                       TotpService totpService, JwtRequestFilter jwtRequestFilter,
+                       PlatformTransactionManager transactionManager) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
         this.verificationCodeRepository = verificationCodeRepository;
@@ -70,6 +76,7 @@ public class AuthService {
         this.passwordUtil = passwordUtil;
         this.emailService = emailService;
         this.totpService = totpService;
+        this.jwtRequestFilter = jwtRequestFilter;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         // 必须使用 REQUIRES_NEW：TransactionTemplate 默认传播行为是 REQUIRED，
         // 会加入 adminLogin/userLogin 已有的外层事务，登录失败时抛出的异常
@@ -117,6 +124,8 @@ public class AuthService {
         userInfo.put("role", "admin");
         userInfo.put("email", admin.getEmail());
         userInfo.put("createTime", admin.getCreateTime());
+        // 前端 TOTP 管理入口依赖此字段判断"配置"还是"禁用"状态
+        userInfo.put("totpEnabled", Boolean.TRUE.equals(admin.getTotpEnabled()));
 
         return LoginResponse.builder().token(accessToken).refreshToken(refreshToken).userInfo(userInfo).build();
     }
@@ -161,6 +170,7 @@ public class AuthService {
         userInfo.put("nickname", user.getNickname());
         userInfo.put("avatar", user.getAvatar());
         userInfo.put("createTime", user.getCreateTime());
+        userInfo.put("totpEnabled", false);
 
         return LoginResponse.builder().token(accessToken).refreshToken(refreshToken).userInfo(userInfo).build();
     }
@@ -239,6 +249,7 @@ public class AuthService {
 
     @Transactional
     public void register(RegisterRequest request) {
+        validateNewUsername(request.getUsername());
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BusinessException("注册信息有误，请检查后重试");
         }
@@ -246,26 +257,8 @@ public class AuthService {
             throw new BusinessException("注册信息有误，请检查后重试");
         }
 
-        // Verify email code
-        VerificationCode vCode = verificationCodeRepository
-                .findTopByEmailAndTypeOrderByCreateTimeDesc(request.getEmail(), "register")
-                .orElseThrow(() -> new BusinessException("验证码不存在"));
-
-        if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
-            throw new BusinessException("验证码已过期");
-        }
-        // 限制验证码尝试次数，防止暴力破解
-        if (vCode.getAttempts() != null && vCode.getAttempts() >= MAX_FAILED_ATTEMPTS) {
-            verificationCodeRepository.delete(vCode);
-            throw new BusinessException("验证码已失效，请重新获取");
-        }
-        vCode.setAttempts((vCode.getAttempts() == null ? 0 : vCode.getAttempts()) + 1);
-        verificationCodeRepository.save(vCode);
-        if (!constantTimeEquals(vCode.getCode(), request.getCode())) {
-            throw new BusinessException("验证码错误");
-        }
-        // 删除已使用的验证码，防止重复使用
-        verificationCodeRepository.delete(vCode);
+        // 校验并消费邮箱验证码
+        verifyEmailCode(request.getEmail(), "register", request.getCode());
 
         // 密码强度校验
         validatePasswordStrength(request.getPassword());
@@ -277,6 +270,106 @@ public class AuthService {
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
         userRepository.save(user);
+    }
+
+    /**
+     * 第三方 OAuth 登录后完善账号信息（注册绑定）。
+     * <p>与普通注册的区别：邮箱为可选（第三方网关已完成身份验证），无需邮箱验证码；
+     * 必须携带 OAuth 网关回调下发的一次性 registerToken。</p>
+     *
+     * @param request 注册绑定请求（username/password/email/registerToken）
+     */
+    @Transactional
+    public void registerBind(RegisterBindRequest request) {
+        // registerToken 由第三方 OAuth 网关在回调中下发给前端，后端无签发记录，
+        // 无法独立验证真伪，此处仅要求非空以区分注册入口；账号安全由密码强度兜底
+        if (request.getRegisterToken() == null || request.getRegisterToken().isBlank()) {
+            throw new BusinessException("缺少注册令牌，请从第三方登录入口重新进入");
+        }
+        validateNewUsername(request.getUsername());
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new BusinessException("注册信息有误，请检查后重试");
+        }
+        String email = request.getEmail();
+        if (email != null && email.isBlank()) {
+            email = null;
+        }
+        if (email != null && userRepository.existsByEmail(email)) {
+            throw new BusinessException("注册信息有误，请检查后重试");
+        }
+
+        // 密码强度校验（与普通注册一致）
+        validatePasswordStrength(request.getPassword());
+
+        User user = new User();
+        user.setUsername(request.getUsername());
+        user.setPassword(passwordUtil.encode(request.getPassword()));
+        user.setEmail(email);
+        user.setCreateTime(LocalDateTime.now());
+        user.setUpdateTime(LocalDateTime.now());
+        userRepository.save(user);
+    }
+
+    /**
+     * 校验新用户名格式与保留字。
+     * <p>禁止与管理员用户名相同：部分按用户名跨表查询管理员的管理端点
+     * （如 /auth/totp/*）若被同名普通用户命中会造成越权，必须从注册入口杜绝碰撞。</p>
+     */
+    private void validateNewUsername(String username) {
+        if (username == null || !username.matches(USERNAME_PATTERN)) {
+            throw new BusinessException("用户名必须为 3-50 位字母、数字、下划线、连字符或中文");
+        }
+        if (adminRepository.existsByUsername(username)) {
+            throw new BusinessException("注册信息有误，请检查后重试");
+        }
+    }
+
+    /**
+     * 校验邮箱验证码：过期/超限检查、独立事务递增尝试次数、比对通过后消费。
+     * <p>尝试次数递增必须在 REQUIRES_NEW 独立事务中提交——本方法的外层调用方
+     * （register/resetPassword）是 @Transactional，验证码错误时抛出的异常会把
+     * 同一事务内的计数更新一并回滚，导致爆破限制永远不生效（与登录失败计数
+     * 曾出现的缺陷同理）。验证码以 SHA-256 哈希存储，数据库泄露不暴露在途验证码。</p>
+     *
+     * @param email     邮箱
+     * @param type      验证码类型（register/reset/bind）
+     * @param inputCode 用户输入的验证码明文
+     */
+    private void verifyEmailCode(String email, String type, String inputCode) {
+        VerificationCode vCode = verificationCodeRepository
+                .findTopByEmailAndTypeOrderByCreateTimeDesc(email, type)
+                .orElseThrow(() -> new BusinessException("验证码不存在"));
+
+        if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("验证码已过期");
+        }
+        // 限制验证码尝试次数，防止暴力破解
+        if (vCode.getAttempts() != null && vCode.getAttempts() >= MAX_FAILED_ATTEMPTS) {
+            verificationCodeRepository.delete(vCode);
+            throw new BusinessException("验证码已失效，请重新获取");
+        }
+        // 独立事务提交尝试次数，确保验证失败（抛异常回滚外层事务）后计数仍然生效
+        transactionTemplate.executeWithoutResult(
+                status -> verificationCodeRepository.incrementAttempts(vCode.getId()));
+        if (!constantTimeEquals(vCode.getCode(), hashVerificationCode(inputCode))) {
+            throw new BusinessException("验证码错误");
+        }
+        // 删除已使用的验证码，防止重复使用
+        verificationCodeRepository.delete(vCode);
+    }
+
+    /** 对验证码明文做 SHA-256 哈希（十六进制），用于存储与比对 */
+    private String hashVerificationCode(String code) {
+        if (code == null) return "";
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(code.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("验证码哈希计算失败", e);
+        }
     }
 
     @Transactional
@@ -293,7 +386,8 @@ public class AuthService {
 
         VerificationCode vCode = new VerificationCode();
         vCode.setEmail(email);
-        vCode.setCode(code);
+        // 安全修复：验证码以 SHA-256 哈希入库，数据库泄露不暴露在途验证码
+        vCode.setCode(hashVerificationCode(code));
         vCode.setType(type);
         vCode.setExpireTime(LocalDateTime.now().plusMinutes(CODE_EXPIRE_MINUTES));
         verificationCodeRepository.save(vCode);
@@ -441,10 +535,10 @@ public class AuthService {
             return false;
         }
 
-        // 标记为已使用（一次性令牌）
-        bindToken.setUsed(true);
-        bindTokenRepository.save(bindToken);
-        return true;
+        // 原子标记为已使用（一次性令牌）：条件 UPDATE 判定影响行数，
+        // 消除两个并发请求同时读到 used=false、都通过校验、令牌被消费两次的 TOCTOU 窗口
+        int updated = bindTokenRepository.markUsedIfUnused(bindToken.getId());
+        return updated > 0;
     }
 
     /**
@@ -462,25 +556,8 @@ public class AuthService {
 
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        VerificationCode vCode = verificationCodeRepository
-                .findTopByEmailAndTypeOrderByCreateTimeDesc(request.getEmail(), "reset")
-                .orElseThrow(() -> new BusinessException("验证码不存在"));
-
-        if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
-            throw new BusinessException("验证码已过期");
-        }
-        // 限制验证码尝试次数，防止暴力破解
-        if (vCode.getAttempts() != null && vCode.getAttempts() >= MAX_FAILED_ATTEMPTS) {
-            verificationCodeRepository.delete(vCode);
-            throw new BusinessException("验证码已失效，请重新获取");
-        }
-        vCode.setAttempts((vCode.getAttempts() == null ? 0 : vCode.getAttempts()) + 1);
-        verificationCodeRepository.save(vCode);
-        if (!constantTimeEquals(vCode.getCode(), request.getCode())) {
-            throw new BusinessException("验证码错误");
-        }
-        // 删除已使用的验证码，防止重复使用
-        verificationCodeRepository.delete(vCode);
+        // 校验并消费验证码（尝试计数在独立事务中生效，防爆破）
+        verifyEmailCode(request.getEmail(), "reset", request.getCode());
 
         // 密码强度校验
         validatePasswordStrength(request.getNewPassword());
@@ -490,7 +567,13 @@ public class AuthService {
 
         user.setPassword(passwordUtil.encode(request.getNewPassword()));
         user.setUpdateTime(LocalDateTime.now());
+        // 安全修复：重置密码后吊销全部已签发 Token。
+        // 重置密码是账号被盗后的标准止损点，若旧 refresh token 仍可续签，
+        // 攻击者的会话可无限延续，直到受害者本人再次登录触发轮换为止。
+        user.setAccessToken(null);
+        user.setRefreshToken(null);
         userRepository.save(user);
+        jwtRequestFilter.invalidateAccountCache(user.getUsername(), "user");
     }
 
     /**

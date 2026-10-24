@@ -481,9 +481,9 @@ const settings = reactive({
   backupRetention: 7,
   dataCompression: true,
 
-  // 支付设置
+  // 支付设置（默认支付域名不预填：避免无意间把第三方域名当成官方配置上线）
   payment_enabled: 'true',
-  epay_api_url: 'https://pay.myzfw.com/',
+  epay_api_url: '',
   epay_pid: '',
   epay_key: '',
   epay_notify_url: '',

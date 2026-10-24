@@ -64,6 +64,10 @@ local.properties
 *.key
 *.p12
 *.env.production
+# Android 签名文件与签名配置（泄漏私钥可被用于重打包签名）
+*.jks
+*.keystore
+keystore.properties
 
 # Misc
 *.bak

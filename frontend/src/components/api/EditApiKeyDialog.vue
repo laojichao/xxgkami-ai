@@ -117,7 +117,9 @@ function handleSubmit() {
     isActive: form.isActive,
     enableCardEncryption: form.enableCardEncryption,
     requireMachineCode: form.requireMachineCode,
-    machineSpecOnceConfig: form.machineSpecOnceConfig
+    // 实体上该字段 @JsonIgnore，编辑弹窗永远拿不到已有值（恒为 ''）；
+    // 空值时不得提交——后端以"非 null 即更新"判断，空串会清空已配置的规则
+    ...(form.machineSpecOnceConfig ? { machineSpecOnceConfig: form.machineSpecOnceConfig } : {})
   })
 }
 </script>

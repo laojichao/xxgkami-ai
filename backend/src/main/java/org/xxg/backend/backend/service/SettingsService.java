@@ -49,11 +49,12 @@ public class SettingsService {
         if (cached != null) {
             return NULL_SENTINEL.equals(cached) ? defaultValue : cached;
         }
-        // 缓存未命中，查数据库并回填缓存
+        // 缓存未命中，查数据库并回填缓存。
+        // 缓存只区分"存在值"与"不存在"（哨兵），不缓存调用方的 defaultValue——
+        // 不同调用点对同名配置传不同默认值时，先到者的默认值会被后到者读到
         String value = settingRepository.findByName(name)
                 .map(Setting::getValue)
-                .orElse(defaultValue);
-        // ConcurrentHashMap 不允许 null 值，使用哨兵值代替
+                .orElse(null);
         settingsCache.put(name, value != null ? value : NULL_SENTINEL);
         return value != null ? value : defaultValue;
     }

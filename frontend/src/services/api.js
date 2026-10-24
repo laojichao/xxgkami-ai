@@ -96,12 +96,16 @@ async function apiRequest(endpoint, options = {}) {
          return new Promise((resolve, reject) => {
            failedQueue.push({ resolve, reject });
          }).then(() => {
-           // Token 已通过 Cookie 自动刷新，直接重试原请求
-           return fetch(url, config).then(res => {
+           // Token 已通过 Cookie 自动刷新，直接重试原请求。
+           // 必须新建 AbortController：原 config.signal 绑定的超时已被 clearTimeout，
+           // 复用旧 signal 会导致重试请求失去超时控制（永久挂起）。
+           const retryController = new AbortController();
+           const retryTimeout = setTimeout(() => retryController.abort(), API_REQUEST_TIMEOUT_MS);
+           return fetch(url, { ...config, signal: retryController.signal }).then(res => {
              if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
              const ct = res.headers.get("content-type");
              return ct && ct.includes("application/json") ? res.json() : res.text();
-           });
+           }).finally(() => clearTimeout(retryTimeout));
          });
        }
 
@@ -550,10 +554,26 @@ export const cardApi = {
   },
 
   /**
-   * 获取所有卡密
+   * 获取所有卡密（循环分页拉取全量）
+   * <p>/cards/admin/all 单页默认只返回 100 条，不带分页参数会造成
+   * 客户端分页的数据缺失假象，这里循环翻页合并所有卡密。</p>
    */
   async getAllCards() {
-    return await apiRequest('/cards/admin/all');
+    const pageSize = 100;
+    // 防死循环上限：最多 100 页（1 万条），正常业务远达不到
+    const maxPages = 100;
+    const allCards = [];
+    let page = 0;
+    while (page < maxPages) {
+      const res = await apiRequest(`/cards/admin/all?page=${page}&size=${pageSize}`);
+      if (!res.success || !res.data) break;
+      const content = Array.isArray(res.data) ? res.data : (res.data.content || []);
+      allCards.push(...content);
+      if (content.length < pageSize) break;
+      page++;
+    }
+    // 返回格式与单次调用保持一致（data 为数组），调用方无需感知分页细节
+    return { success: true, data: allCards };
   },
 
   /**
@@ -572,8 +592,10 @@ export const cardApi = {
 
   /**
    * 使用卡密
+   * <p>机器码必填：后端已拒绝空机器码（防止卡密被多设备共享），
+   * 不再提供 'Unknown' 默认值污染机器码数据。</p>
    */
-  async useCard(cardKey, deviceId = 'Unknown', ipAddress = '') {
+  async useCard(cardKey, deviceId, ipAddress = '') {
     return await apiRequest('/cards/use', {
       method: 'POST',
       body: JSON.stringify({
@@ -585,10 +607,11 @@ export const cardApi = {
   },
 
   /**
-   * 获取用户的卡密
+   * 获取当前登录用户的卡密
+   * <p>后端从认证信息中提取用户，无需传 userId（/cards/user/{id} 为 ADMIN-only）。</p>
    */
-  async getUserCards(userId) {
-    return await apiRequest(`/cards/user/${userId}`);
+  async getUserCards() {
+    return await apiRequest('/cards/user/me');
   },
 
   /**
@@ -653,10 +676,19 @@ export const cardApi = {
  */
 export const settingsApi = {
   /**
-   * 获取所有设置
+   * 获取所有设置（仅管理员）
    */
   async getAllSettings() {
     return await apiRequest('/settings/all');
+  },
+
+  /**
+   * 获取第三方登录公开配置（无需登录）
+   * <p>/settings/all 为 ADMIN-only，登录页/用户中心等匿名或普通用户场景
+   * 必须改用此公开接口，否则 oauthEnabled 恒为 false、第三方登录入口不显示。</p>
+   */
+  async getPublicOAuthSettings() {
+    return await apiRequest('/public/settings/oauth');
   },
 
   /**

@@ -74,7 +74,13 @@ public class BackupService {
         pb.redirectError(new File(backupDir + "/" + filename + ".err"));
         Process process = pb.start();
         try {
-            int exitCode = process.waitFor();
+            // 超时保护：远程数据库网络抖动/锁等待导致 mysqldump 挂起时，
+            // 无限期的 waitFor 会永久占用请求线程，多次触发可耗尽线程池
+            if (!process.waitFor(10, java.util.concurrent.TimeUnit.MINUTES)) {
+                process.destroyForcibly();
+                throw new BusinessException("数据库备份超时（10分钟），已终止备份进程");
+            }
+            int exitCode = process.exitValue();
             if (exitCode != 0) throw new Exception("数据库备份失败，退出码: " + exitCode);
         } finally {
             process.destroy();

@@ -224,8 +224,15 @@ const handleOAuthCallback = async () => {
         body: JSON.stringify({ token, refreshToken, state: oauthState })
       });
 
-      // 如果后端没有实现 OAuth set-cookies 接口，回退到直接使用 getUserInfo
-      // （后端 OAuth 回调可能已直接设置了 Cookie）
+      // set-cookies 失败时不再继续：Cookie 未设置，后续 getUserInfo 必然 401，
+      // 错误还会被吞掉造成"登录无响应"的假象
+      if (!setCookieRes.ok) {
+        logger.error('OAuth set-cookies failed:', setCookieRes.status);
+        ElMessage.error('登录会话设置失败，请重试');
+        handleLogout();
+        return true;
+      }
+
       // 获取用户信息（通过 Cookie 认证）
       const res = await authApi.getUserInfo()
       if (res.success) {
@@ -239,7 +246,8 @@ const handleOAuthCallback = async () => {
           nickname: res.data.nickname
         }
         localStorage.setItem('userInfo', JSON.stringify(minimalInfo))
-        currentPage.value = 'user'
+        // 按实际角色进入对应页面：管理员经 OAuth 登录应进入管理端，而非固定用户页
+        currentPage.value = res.data.role === 'admin' ? 'admin' : 'user'
       } else {
           logger.error('OAuth login failed:', res);
           handleLogout();

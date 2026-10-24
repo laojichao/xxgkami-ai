@@ -12,6 +12,9 @@ import org.xxg.backend.backend.mapper.WalletRepository;
 import org.xxg.backend.backend.mapper.WalletTransactionRepository;
 import org.xxg.backend.backend.mapper.SocialUserRepository;
 import org.xxg.backend.backend.mapper.VerificationCodeRepository;
+import org.xxg.backend.backend.mapper.UserApiKeyRepository;
+import org.xxg.backend.backend.mapper.BindTokenRepository;
+import org.xxg.backend.backend.mapper.AdminRepository;
 import org.xxg.backend.backend.filter.JwtRequestFilter;
 import org.xxg.backend.backend.util.PasswordUtil;
 
@@ -30,6 +33,9 @@ public class UserService {
     private final WalletTransactionRepository walletTransactionRepository;
     private final SocialUserRepository socialUserRepository;
     private final VerificationCodeRepository verificationCodeRepository;
+    private final UserApiKeyRepository userApiKeyRepository;
+    private final BindTokenRepository bindTokenRepository;
+    private final AdminRepository adminRepository;
     private final PasswordUtil passwordUtil;
     private final JwtRequestFilter jwtRequestFilter;
 
@@ -38,6 +44,9 @@ public class UserService {
                        WalletTransactionRepository walletTransactionRepository,
                        SocialUserRepository socialUserRepository,
                        VerificationCodeRepository verificationCodeRepository,
+                       UserApiKeyRepository userApiKeyRepository,
+                       BindTokenRepository bindTokenRepository,
+                       AdminRepository adminRepository,
                        PasswordUtil passwordUtil,
                        JwtRequestFilter jwtRequestFilter) {
         this.userRepository = userRepository;
@@ -45,6 +54,9 @@ public class UserService {
         this.walletTransactionRepository = walletTransactionRepository;
         this.socialUserRepository = socialUserRepository;
         this.verificationCodeRepository = verificationCodeRepository;
+        this.userApiKeyRepository = userApiKeyRepository;
+        this.bindTokenRepository = bindTokenRepository;
+        this.adminRepository = adminRepository;
         this.passwordUtil = passwordUtil;
         this.jwtRequestFilter = jwtRequestFilter;
     }
@@ -107,12 +119,13 @@ public class UserService {
      * 更新用户个人资料
      * @param userId 用户ID
      * @param nickname 新昵称，为null则不更新
-     * @param email 新邮箱，为null则不更新
+     * @param email 新邮箱，为null则不更新；更换邮箱必须提供目标邮箱的有效验证码
      * @param phone 新手机号，为null则不更新
+     * @param emailCode 新邮箱的验证码（仅更换邮箱时需要，类型为 bind）
      * @return 更新后的用户实体
      */
     @Transactional
-    public User updateProfile(Integer userId, String nickname, String email, String phone) {
+    public User updateProfile(Integer userId, String nickname, String email, String phone, String emailCode) {
         User user = getUserById(userId);
         if (nickname != null) {
             if (nickname.length() > 50) throw new BusinessException("昵称长度不能超过50个字符");
@@ -124,11 +137,87 @@ public class UserService {
             if (userRepository.existsByEmail(email)) {
                 throw new BusinessException("该邮箱已被其他用户使用");
             }
+            // 安全修复：换绑邮箱必须先验证目标邮箱归属（验证码类型 bind），
+            // 否则任何用户可把他人邮箱绑到自己账号，卡密/重置密码邮件会被劫持
+            verifyEmailCodeForProfile(email, emailCode);
             user.setEmail(email);
         }
         if (phone != null && !phone.equals(user.getPhone())) {
             if (phone.length() > 20) throw new BusinessException("手机号长度不能超过20个字符");
             // 检查新手机号是否已被其他用户占用
+            if (userRepository.existsByPhone(phone)) {
+                throw new BusinessException("该手机号已被其他用户使用");
+            }
+            user.setPhone(phone);
+        }
+        user.setUpdateTime(LocalDateTime.now());
+        return userRepository.save(user);
+    }
+
+    /**
+     * 校验换绑邮箱的验证码（type=bind）：存在、未过期、尝试次数未超限且匹配。
+     * 验证通过后立即消费，防止同一验证码被重复使用。
+     */
+    private void verifyEmailCodeForProfile(String email, String emailCode) {
+        if (emailCode == null || emailCode.isBlank()) {
+            throw new BusinessException("更换邮箱需要先获取并填写新邮箱的验证码");
+        }
+        org.xxg.backend.backend.entity.VerificationCode vCode = verificationCodeRepository
+                .findTopByEmailAndTypeOrderByCreateTimeDesc(email, "bind")
+                .orElseThrow(() -> new BusinessException("验证码不存在，请先获取新邮箱的验证码"));
+        if (vCode.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("验证码已过期，请重新获取");
+        }
+        if (vCode.getAttempts() != null && vCode.getAttempts() >= 5) {
+            verificationCodeRepository.delete(vCode);
+            throw new BusinessException("验证码已失效，请重新获取");
+        }
+        String inputHash = sha256Hex(emailCode);
+        if (!java.security.MessageDigest.isEqual(
+                vCode.getCode().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                inputHash.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+            throw new BusinessException("验证码错误");
+        }
+        verificationCodeRepository.delete(vCode);
+    }
+
+    /** SHA-256 哈希（十六进制），与 AuthService 的验证码哈希算法一致 */
+    private String sha256Hex(String input) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("哈希计算失败", e);
+        }
+    }
+
+    /**
+     * 管理员更新用户资料：跳过换绑邮箱的验证码校验（管理员为受信操作方）。
+     * @param userId 用户ID
+     * @param nickname 新昵称，为null则不更新
+     * @param email 新邮箱，为null则不更新
+     * @param phone 新手机号，为null则不更新
+     * @return 更新后的用户实体
+     */
+    @Transactional
+    public User adminUpdateProfile(Integer userId, String nickname, String email, String phone) {
+        User user = getUserById(userId);
+        if (nickname != null) {
+            if (nickname.length() > 50) throw new BusinessException("昵称长度不能超过50个字符");
+            user.setNickname(nickname);
+        }
+        if (email != null && !email.equals(user.getEmail())) {
+            if (email.length() > 100) throw new BusinessException("邮箱长度不能超过100个字符");
+            if (userRepository.existsByEmail(email)) {
+                throw new BusinessException("该邮箱已被其他用户使用");
+            }
+            user.setEmail(email);
+        }
+        if (phone != null && !phone.equals(user.getPhone())) {
+            if (phone.length() > 20) throw new BusinessException("手机号长度不能超过20个字符");
             if (userRepository.existsByPhone(phone)) {
                 throw new BusinessException("该手机号已被其他用户使用");
             }
@@ -168,7 +257,11 @@ public class UserService {
         validatePasswordStrength(newPassword);
         user.setPassword(passwordUtil.encode(newPassword));
         user.setUpdateTime(LocalDateTime.now());
+        // 安全修复：改密后吊销全部已签发 Token，防止旧会话在密码泄露后仍然有效
+        user.setAccessToken(null);
+        user.setRefreshToken(null);
         userRepository.save(user);
+        jwtRequestFilter.invalidateAccountCache(user.getUsername(), "user");
     }
 
     /**
@@ -227,6 +320,8 @@ public class UserService {
         walletRepository.deleteByUserId(userId);
         walletTransactionRepository.deleteByUserId(userId);
         socialUserRepository.deleteByUserId(userId);
+        userApiKeyRepository.deleteByUserId(userId);
+        bindTokenRepository.deleteByUserId(userId);
         if (user.getEmail() != null) {
             verificationCodeRepository.deleteByEmail(user.getEmail());
         }
@@ -299,6 +394,10 @@ public class UserService {
         }
         // 安全修复：调用完整的密码强度校验（大小写字母+数字+长度）
         validatePasswordStrength(password);
+        // 禁止与管理员用户名同名（部分管理端点按用户名跨表查询，同名会引入越权风险）
+        if (adminRepository.existsByUsername(username)) {
+            throw new BusinessException("该用户名不可用");
+        }
         if (userRepository.existsByUsername(username)) {
             throw new BusinessException("用户名已存在");
         }

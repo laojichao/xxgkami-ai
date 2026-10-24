@@ -21,9 +21,13 @@ public class BackendApplication {
 
     /**
      * 应用主入口方法
+     * <p>显式固定 JVM 时区为 Asia/Shanghai，与 JDBC serverTimezone 及 Jackson
+     * 时区配置对齐：容器默认 UTC 时，卡密/订单的 expire_time 会以 UTC 写入比较，
+     * 下发给客户端后本地比对出现 8 小时偏差。</p>
      * @param args 命令行参数
      */
     public static void main(String[] args) {
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Shanghai"));
         SpringApplication.run(BackendApplication.class, args);
     }
 

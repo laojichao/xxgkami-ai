@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -26,6 +27,7 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
@@ -106,7 +108,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // === 公开接口 ===
                 .requestMatchers(
-                    "/auth/login", "/auth/register", "/auth/register-bind",
+                    "/auth/register", "/auth/register-bind",
                     "/auth/user/login", "/auth/admin/login",
                     "/auth/email-code", "/auth/reset-code", "/auth/reset-password",
                     "/auth/bind/validate", "/auth/refresh",
@@ -117,9 +119,18 @@ public class SecurityConfig {
                     "/system/health", "/error",
                     "/cards/use", "/cards/verify"
                 ).permitAll()
+                // 维护状态仅返回开关与公告文案，对访客公开（前端维护遮罩依赖此接口）
+                .requestMatchers(HttpMethod.GET, "/maintenance/status").permitAll()
                 // === Pricing：GET 公开，写操作仅管理员 ===
-                .requestMatchers(HttpMethod.GET, "/pricing", "/pricing/**").permitAll()
-                .requestMatchers("/pricing", "/pricing/**").hasRole("ADMIN")
+                // card-pricing 与 pricing 是同一控制器的别名路径，权限规则必须一致；
+                // 历史缺陷：仅 /pricing 写操作受限，别名 /card-pricing 的写操作落入
+                // anyRequest().authenticated()，普通用户可改价 0.01 元购卡。
+                .requestMatchers(HttpMethod.GET, "/pricing", "/pricing/**",
+                        "/card-pricing", "/card-pricing/**").permitAll()
+                .requestMatchers("/pricing", "/pricing/**",
+                        "/card-pricing", "/card-pricing/**").hasRole("ADMIN")
+                // === 卡密管理：用户查询自己的卡密 ===
+                .requestMatchers("/cards/user/me").hasAnyRole("USER", "ADMIN")
                 // === 卡密管理：查询/删除/启停用/解绑 仅管理员 ===
                 .requestMatchers("/cards/query", "/cards/user/**", "/cards/apikey/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/cards/*").hasRole("ADMIN")

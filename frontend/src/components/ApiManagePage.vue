@@ -409,16 +409,20 @@ const fetchCardCodes = async (apiKeyId) => {
 const handleGenerateCardCodes = async ({ count, type, value, stackTime }) => {
   if (!currentApiKey.value.id) return
   try {
+    // 载荷必须使用 camelCase 匹配后端 GenerateCardRequest：
+    // Jackson 默认忽略未知字段，snake_case 会导致类型/绑定/次数全部丢失
+    // （选"次数卡"也生成时间卡、卡不绑定该 API Key、弹窗列表永远为空）
     const res = await cardApi.createCards({
       count: count,
-      card_type: type,
+      cardType: type,
+      // days 必须同时提交：后端仅依据 days 计算 CardStatus.expireTime
       duration: type === 'time' ? value : 0,
-      total_count: type === 'count' ? value : 0,
-      verify_method: 'web',
-      encryption_type: 'advanced',
-      allow_reverify: 1,
-      api_key_id: currentApiKey.value.id,
-      stack_time_if_same_machine: type === 'time' && stackTime
+      days: type === 'time' ? value : null,
+      totalCount: type === 'count' ? value : 0,
+      verifyMethod: 'web',
+      allowReverify: 1,
+      apiKeyId: currentApiKey.value.id,
+      stackTimeIfSameMachine: type === 'time' && stackTime
     })
     ElMessage.success(`成功生成 ${res.data.length} 个卡密`)
     await fetchCardCodes(currentApiKey.value.id)

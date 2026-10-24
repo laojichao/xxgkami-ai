@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.xxg.backend.backend.entity.ApiKey;
 import org.xxg.backend.backend.exception.BusinessException;
 import org.xxg.backend.backend.mapper.ApiKeyRepository;
+import org.xxg.backend.backend.mapper.UserApiKeyRepository;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -18,9 +19,11 @@ import java.util.*;
 public class ApiKeyService {
 
     private final ApiKeyRepository apiKeyRepository;
+    private final UserApiKeyRepository userApiKeyRepository;
 
-    public ApiKeyService(ApiKeyRepository apiKeyRepository) {
+    public ApiKeyService(ApiKeyRepository apiKeyRepository, UserApiKeyRepository userApiKeyRepository) {
         this.apiKeyRepository = apiKeyRepository;
+        this.userApiKeyRepository = userApiKeyRepository;
     }
 
     /**
@@ -168,11 +171,15 @@ public class ApiKeyService {
     }
 
     /**
-     * 删除指定API密钥
+     * 删除指定API密钥（级联清理用户分配关系）
      * @param id 密钥ID
      */
     @Transactional
     public void deleteApiKey(Integer id) {
+        // 先清理 user_api_keys 中的分配关系，避免悬空引用（表无外键约束兜底）。
+        // cards.api_key_id 保留：卡密与订单同为审计数据，仅指向已删除密钥的
+        // Webhook 触发会因查不到密钥而自然跳过，不影响卡密本身的有效性。
+        userApiKeyRepository.deleteByApiKeyId(id);
         apiKeyRepository.deleteById(id);
     }
 

@@ -14,9 +14,19 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.2"
+        // API 基础地址（必须以 / 结尾，ApiClient 以 baseUrl + path 直接拼接请求 URL）：
+        // - debug 默认指向 Android 模拟器访问宿主机回环地址 10.0.2.2
+        // - release 构建时必须覆盖为生产 HTTPS 地址，例如：
+        //   ./gradlew assembleRelease -PapiBaseUrl=https://api.example.com/api/
+        // - 明文 http:// 仅允许 localhost/10.0.2.2/127.0.0.1（见 ApiProvider.updateBaseUrl 校验）
+        val apiBaseUrl = (project.findProperty("apiBaseUrl") as String?) ?: "http://10.0.2.2:8080/api/"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     buildTypes {
         release {

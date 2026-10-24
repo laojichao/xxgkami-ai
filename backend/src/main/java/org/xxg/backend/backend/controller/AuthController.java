@@ -7,8 +7,10 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -57,6 +59,10 @@ public class AuthController {
     private final JwtRequestFilter jwtRequestFilter;
     private final OAuthStateRepository oauthStateRepository;
     private final EmailService emailService;
+
+    /** CORS 允许域名（与 SecurityConfig 共用同一配置项），用于 set-cookies 来源校验 */
+    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    private String corsOrigins;
 
     /** OAuth state 过期时间：5 分钟 */
     private static final int OAUTH_STATE_TTL_MINUTES = 5;
@@ -123,7 +129,7 @@ public class AuthController {
                                                                   HttpServletRequest servletRequest,
                                                                   HttpServletResponse response) {
         LoginResponse loginResponse = authService.adminLogin(request);
-        setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
+        setTokenCookies(response, servletRequest, loginResponse.getToken(), loginResponse.getRefreshToken());
         // 移动端客户端需要从响应体中获取 Token，Web端使用 httpOnly Cookie
         if (!isMobileClient(servletRequest)) {
             loginResponse.setToken(null);
@@ -146,7 +152,7 @@ public class AuthController {
                                                                  HttpServletRequest servletRequest,
                                                                  HttpServletResponse response) {
         LoginResponse loginResponse = authService.userLogin(request);
-        setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
+        setTokenCookies(response, servletRequest, loginResponse.getToken(), loginResponse.getRefreshToken());
         // 移动端客户端需要从响应体中获取 Token，Web端使用 httpOnly Cookie
         if (!isMobileClient(servletRequest)) {
             loginResponse.setToken(null);
@@ -169,14 +175,14 @@ public class AuthController {
     }
 
     /**
-     * 注册并绑定（客户端绑定场景）。
-     * @deprecated 此接口与 /auth/register 功能完全相同，请使用 /auth/register 替代。
-     * 保留此接口仅为兼容旧版客户端，后续版本将移除。
+     * 注册并绑定（第三方 OAuth 登录后完善账号信息）。
+     * <p>与 /auth/register 的区别：邮箱可选、无需邮箱验证码，
+     * 必须携带 OAuth 网关回调下发的 registerToken。</p>
      */
-    @Deprecated(since = "1.0.2", forRemoval = true)
+    @Operation(summary = "OAuth 注册绑定", description = "第三方登录后完善账号信息。密码要求：8-50位，包含大小写字母和数字。")
     @PostMapping("/register-bind")
-    public ResponseEntity<ApiResponse<Void>> registerBind(@Valid @RequestBody RegisterRequest request) {
-        authService.register(request);
+    public ResponseEntity<ApiResponse<Void>> registerBind(@Valid @RequestBody RegisterBindRequest request) {
+        authService.registerBind(request);
         return ResponseEntity.ok(ApiResponse.ok("注册成功"));
     }
 
@@ -251,7 +257,7 @@ public class AuthController {
         TokenRefreshRequest refreshRequest = new TokenRefreshRequest();
         refreshRequest.setRefreshToken(refreshTokenValue);
         LoginResponse loginResponse = authService.refreshToken(refreshRequest);
-        setTokenCookies(response, loginResponse.getToken(), loginResponse.getRefreshToken());
+        setTokenCookies(response, servletRequest, loginResponse.getToken(), loginResponse.getRefreshToken());
         // 移动端客户端需要从响应体中获取 Token，Web端使用 httpOnly Cookie
         if (!isMobileClient(servletRequest)) {
             loginResponse.setToken(null);
@@ -268,7 +274,8 @@ public class AuthController {
      * @return 操作结果
      */
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(Authentication auth, HttpServletResponse response) {
+    public ResponseEntity<ApiResponse<Void>> logout(Authentication auth, HttpServletRequest servletRequest,
+                                                     HttpServletResponse response) {
         if (auth != null) {
             String username = auth.getName();
             // 清除用户表中的 token
@@ -292,7 +299,7 @@ public class AuthController {
             jwtRequestFilter.invalidateAccountCache(username, role);
         }
         // 清除客户端 httpOnly Cookie
-        clearTokenCookies(response);
+        clearTokenCookies(response, servletRequest);
         return ResponseEntity.ok(ApiResponse.ok("已退出"));
     }
 
@@ -316,6 +323,7 @@ public class AuthController {
             info.put("nickname", user.getNickname());
             info.put("avatar", user.getAvatar());
             info.put("role", "user");
+            info.put("totpEnabled", false);
             return ResponseEntity.ok(ApiResponse.ok(info));
         }
         Admin admin = adminRepository.findByUsername(username).orElse(null);
@@ -327,6 +335,7 @@ public class AuthController {
             info.put("nickname", admin.getUsername());
             info.put("avatar", "");
             info.put("role", "admin");
+            info.put("totpEnabled", Boolean.TRUE.equals(admin.getTotpEnabled()));
             return ResponseEntity.ok(ApiResponse.ok(info));
         }
         throw new BusinessException("用户不存在");
@@ -334,11 +343,14 @@ public class AuthController {
 
     /**
      * 更新管理员信息（如邮箱）。
+     * <p>安全修复：限定 ADMIN 角色。端点按用户名查 admins 表，
+     * 若允许同名普通用户调用，可劫持真实管理员的邮箱（用户名跨表碰撞）。</p>
      *
      * @param auth 当前认证信息
      * @param request 更新请求（含邮箱字段）
      * @return 操作结果
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/admin/update")
     public ResponseEntity<ApiResponse<Void>> updateAdmin(Authentication auth,
                                                           @Valid @RequestBody UpdateAdminRequest request) {
@@ -378,17 +390,20 @@ public class AuthController {
      * @return 验证结果
      */
     @PostMapping("/bind/validate")
-    public ResponseEntity<ApiResponse<Void>> validateBindToken(@Valid @RequestBody RegisterBindRequest request) {
+    public ResponseEntity<ApiResponse<Void>> validateBindToken(@Valid @RequestBody BindValidateRequest request) {
         boolean result = authService.validateBindToken(request.getUserId(), request.getToken());
         return ResponseEntity.ok(result ? ApiResponse.ok("验证成功") : ApiResponse.error("验证失败"));
     }
 
     /**
      * 初始化 TOTP 两步验证，返回密钥和二维码 URL。
+     * <p>安全修复：限定 ADMIN 角色——TOTP 仅面向管理员，且端点按用户名查 admins 表，
+     * 同名普通用户调用可给真实管理员强启攻击者已知的 TOTP。</p>
      *
      * @param auth 当前认证信息
      * @return 包含 secret 和 qrCode 的结果
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/totp/setup")
     public ResponseEntity<ApiResponse<Map<String, String>>> setupTotp(Authentication auth) {
         if (auth == null) return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
@@ -415,6 +430,7 @@ public class AuthController {
      * @param request 包含 TOTP 验证码的请求
      * @return 操作结果
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/totp/enable")
     public ResponseEntity<ApiResponse<Void>> enableTotp(Authentication auth,
                                                          @Valid @RequestBody TotpCodeRequest request) {
@@ -441,6 +457,7 @@ public class AuthController {
      * @param request 包含 TOTP 验证码的请求
      * @return 操作结果
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/totp/disable")
     public ResponseEntity<ApiResponse<Void>> disableTotp(Authentication auth,
                                                           @Valid @RequestBody TotpCodeRequest request) {
@@ -472,6 +489,7 @@ public class AuthController {
      * @param auth 当前认证信息
      * @return 恢复码列表（仅此次返回，后续不可再查看）
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/totp/recovery-code")
     @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendRecoveryCode(Authentication auth) {
@@ -621,7 +639,15 @@ public class AuthController {
     @PostMapping("/oauth/set-cookies")
     @Transactional
     public ResponseEntity<ApiResponse<Void>> setOAuthCookies(@RequestBody Map<String, String> body,
+                                                              HttpServletRequest servletRequest,
                                                               HttpServletResponse response) {
+        // 安全修复：校验 Origin/Referer 防止跨站表单伪造的登录会话固定。
+        // OAuth state 仅一次性且 5 分钟有效，但任何匿名者都能自行铸造 state，
+        // 若不校验来源，攻击者可诱导受害者浏览器跨站提交 {攻击者token, state}，
+        // 将受害者会话固定为攻击者身份（付款购卡后卡密寄给攻击者账号邮箱）。
+        if (!isTrustedOrigin(servletRequest)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("非法的请求来源"));
+        }
         // 验证 state 参数（防止 session fixation）
         String state = body.get("state");
         if (state == null || state.isBlank()) {
@@ -648,8 +674,32 @@ public class AuthController {
         if (!jwtUtil.isTokenValid(refreshTokenValue) || !jwtUtil.isRefreshToken(refreshTokenValue)) {
             return ResponseEntity.badRequest().body(ApiResponse.error("无效的 refresh token"));
         }
-        setTokenCookies(response, accessToken, refreshTokenValue);
+        setTokenCookies(response, servletRequest, accessToken, refreshTokenValue);
         return ResponseEntity.ok(ApiResponse.ok("Cookie 已设置"));
+    }
+
+    /**
+     * 判断请求是否来自可信来源（Origin 或 Referer 命中 CORS 白名单）。
+     * <p>浏览器对跨站 POST 始终携带 Origin 头；无任何来源头（非浏览器客户端）
+     * 一律拒绝。Origin 优先，缺失时回退 Referer 前缀匹配。</p>
+     */
+    private boolean isTrustedOrigin(HttpServletRequest request) {
+        String[] allowedOrigins = Arrays.stream(corsOrigins.split(","))
+                .map(String::trim)
+                .toArray(String[]::new);
+        String origin = request.getHeader("Origin");
+        if (origin != null && !origin.isBlank()) {
+            return Arrays.asList(allowedOrigins).contains(origin);
+        }
+        String referer = request.getHeader("Referer");
+        if (referer != null && !referer.isBlank()) {
+            for (String allowed : allowedOrigins) {
+                if (referer.startsWith(allowed + "/") || referer.equals(allowed)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -675,21 +725,25 @@ public class AuthController {
      *   <li>httpOnly=true: 禁止 JavaScript 读取，防止 XSS 窃取 Token</li>
      *   <li>secure=true: 仅通过 HTTPS 传输（开发环境可通过 localhost 豁免）</li>
      *   <li>sameSite=Strict: 防止 CSRF 攻击，完全禁止跨站携带 Cookie</li>
-     *   <li>path: access_token 为 "/"（全局可用），refresh_token 为 "/auth/refresh"（最小权限）</li>
+     *   <li>path: access_token 为 contextPath（全局可用），
+     *       refresh_token 为 contextPath + /auth/refresh（最小权限；
+     *       必须包含 context-path=/api 前缀，否则浏览器永不回传该 Cookie）</li>
      * </ul>
      */
-    private void setTokenCookies(HttpServletResponse response, String accessToken, String refreshToken) {
+    private void setTokenCookies(HttpServletResponse response, HttpServletRequest request,
+                                 String accessToken, String refreshToken) {
+        String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
         ResponseCookie accessCookie = ResponseCookie.from("access_token", accessToken)
                 .httpOnly(true)
                 .secure(true)
-                .path("/")
+                .path(contextPath + "/")
                 .maxAge(3600)
                 .sameSite("Strict")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", refreshToken)
                 .httpOnly(true)
                 .secure(true)
-                .path("/auth/refresh")
+                .path(contextPath + "/auth/refresh")
                 .maxAge(604800)
                 .sameSite("Strict")
                 .build();
@@ -701,18 +755,19 @@ public class AuthController {
      * 清除客户端的 access_token 和 refresh_token Cookie。
      * <p>通过将 maxAge 设为 0 使 Cookie 立即过期。</p>
      */
-    private void clearTokenCookies(HttpServletResponse response) {
+    private void clearTokenCookies(HttpServletResponse response, HttpServletRequest request) {
+        String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
         ResponseCookie accessCookie = ResponseCookie.from("access_token", "")
                 .httpOnly(true)
                 .secure(true)
-                .path("/")
+                .path(contextPath + "/")
                 .maxAge(0)
                 .sameSite("Strict")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", "")
                 .httpOnly(true)
                 .secure(true)
-                .path("/auth/refresh")
+                .path(contextPath + "/auth/refresh")
                 .maxAge(0)
                 .sameSite("Strict")
                 .build();

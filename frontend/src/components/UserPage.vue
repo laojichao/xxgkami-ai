@@ -534,6 +534,15 @@
                   <el-form-item label="邮箱">
                     <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
                   </el-form-item>
+                  <!-- 换绑邮箱需验证码：后端已强制 emailCode 校验，防止冒认他人邮箱 -->
+                  <el-form-item v-if="isEmailChanged" label="邮箱验证码">
+                    <div style="display: flex; gap: 8px; width: 100%">
+                      <el-input v-model="profileForm.emailCode" placeholder="新邮箱收到的验证码" />
+                      <el-button :disabled="emailCodeTimer > 0" @click="sendEmailChangeCode">
+                        {{ emailCodeTimer > 0 ? `${emailCodeTimer}s后重发` : '获取验证码' }}
+                      </el-button>
+                    </div>
+                  </el-form-item>
                   <el-form-item label="手机号">
                     <el-input v-model="profileForm.phone" placeholder="请输入手机号" />
                   </el-form-item>
@@ -548,7 +557,7 @@
                   <span>{{ localUserInfo.hasPassword ? '修改密码' : '设置密码' }}</span>
                 </template>
                 <el-form :model="passwordForm" label-width="100px">
-                  <el-form-item label="旧密码" v-if="localUserInfo.hasPassword">
+                  <el-form-item label="旧密码" v-if="localUserInfo.hasPassword !== false">
                     <el-input v-model="passwordForm.oldPassword" type="password" placeholder="请输入旧密码" show-password />
                   </el-form-item>
                   <el-form-item label="新密码">
@@ -711,7 +720,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi, paymentApi } from '../services/api.js'
+import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi, paymentApi, authApi } from '../services/api.js'
 import UserSettingsPage from './UserSettingsPage.vue'
 import logger from '../utils/logger'
 
@@ -794,8 +803,42 @@ const selectedCard = ref(null)
 const profileForm = reactive({
   nickname: '',
   email: '',
-  phone: ''
+  phone: '',
+  emailCode: ''
 })
+
+// 换绑邮箱验证码倒计时
+const emailCodeTimer = ref(0)
+let emailCodeTimerInterval = null
+/** 邮箱是否发生变化（相对资料加载时的原值） */
+const isEmailChanged = computed(() => {
+  const original = localUserInfo.email || ''
+  return profileForm.email && profileForm.email !== original
+})
+
+/** 发送换绑邮箱验证码（后端 type=bind） */
+const sendEmailChangeCode = async () => {
+  if (!profileForm.email) {
+    ElMessage.warning('请先填写新邮箱')
+    return
+  }
+  try {
+    const res = await authApi.sendEmailCode(profileForm.email, 'bind')
+    if (res.success) {
+      ElMessage.success('验证码已发送，请查收邮件')
+      emailCodeTimer.value = 60
+      emailCodeTimerInterval = setInterval(() => {
+        emailCodeTimer.value--
+        if (emailCodeTimer.value <= 0) clearInterval(emailCodeTimerInterval)
+      }, 1000)
+    } else {
+      ElMessage.error(res.message || '验证码发送失败')
+    }
+  } catch (error) {
+    logger.error('发送换绑邮箱验证码失败:', error)
+    ElMessage.error('验证码发送失败')
+  }
+}
 
 // 修改密码表单
 const passwordForm = reactive({
@@ -839,7 +882,9 @@ let pollTimer = null
 
 // 修改密码
 const handleChangePassword = async () => {
-  if (localUserInfo.hasPassword && !passwordForm.oldPassword) {
+  // hasPassword !== false：字段缺失（undefined）时按"已设置密码"处理，
+  // 要求旧密码，避免提交空 oldPassword 被后端 @NotBlank 拒绝
+  if (localUserInfo.hasPassword !== false && !passwordForm.oldPassword) {
     ElMessage.warning('请输入旧密码')
     return
   }
@@ -887,10 +932,10 @@ const fetchSocialBindings = async () => {
   }
 }
 
-// 获取OAuth配置
+// 获取OAuth配置（公开接口：/settings/all 为 ADMIN-only，匿名/普通用户调用必 403）
 const fetchOAuthSettings = async () => {
    try {
-     const res = await settingsApi.getAllSettings()
+     const res = await settingsApi.getPublicOAuthSettings()
      if (res.success && res.data) {
          const types = res.data.oauth_login_types || ''
          oauthLoginTypes.qq = types.includes('qq')
@@ -965,16 +1010,25 @@ const fetchUserProfile = async () => {
 // 更新用户资料
 const updateProfile = async () => {
     try {
-        const result = await userProfileApi.updateProfile(profileForm);
+        // 邮箱发生变化时必须携带新邮箱的验证码（后端已强制校验）
+        const payload = { ...profileForm }
+        if (!isEmailChanged.value) {
+            delete payload.emailCode
+        } else if (!payload.emailCode) {
+            ElMessage.warning('更换邮箱需要先获取并填写新邮箱的验证码')
+            return
+        }
+        const result = await userProfileApi.updateProfile(payload)
         if (result.success) {
-            ElMessage.success('个人信息更新成功');
-            await fetchUserProfile();
+            ElMessage.success('个人信息更新成功')
+            profileForm.emailCode = ''
+            await fetchUserProfile()
         } else {
-            ElMessage.error(result.message || '更新失败');
+            ElMessage.error(result.message || '更新失败')
         }
     } catch (error) {
-        logger.error('Failed to update profile:', error);
-        ElMessage.error('更新失败');
+        logger.error('Failed to update profile:', error)
+        ElMessage.error('更新失败')
     }
 }
 
@@ -1008,15 +1062,10 @@ const handleAvatarUpload = async (file) => {
 
 const fetchOrders = async () => {
     try {
-        const userId = localUserInfo.id;
-        if (!userId) {
-            logger.warn('用户ID不存在，跳过加载订单');
-            return;
-        }
-
+        // /cards/user/me 由后端从认证信息提取用户，无需本地 userId
         const [ordersResult, cardsResult] = await Promise.all([
             orderApi.getOrders(),
-            cardApi.getUserCards(userId)
+            cardApi.getUserCards()
         ]);
 
         // /orders 返回统一响应格式，data 为 Spring Data Page 对象
@@ -1165,6 +1214,10 @@ onBeforeUnmount(() => {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  if (emailCodeTimerInterval) {
+    clearInterval(emailCodeTimerInterval);
+    emailCodeTimerInterval = null;
+  }
 })
 
 onMounted(async () => {
@@ -1230,15 +1283,21 @@ const queryCard = async () => {
     return
   }
 
+  // /cards/query 为 ADMIN-only 接口，普通用户改为在"我的卡密"列表内本地匹配，
+  // 避免必然的 403 权限错误
   loading.value = true
   try {
-    const result = await cardApi.queryCard(queryForm.cardKey)
-    if (result.success) {
-      queryResult.value = result.data
+    const keyword = queryForm.cardKey.trim().toLowerCase()
+    const matched = (myCards.value || []).find(
+      card => (card.cardKey || '').toLowerCase() === keyword
+        || (card.cardKey || '').toLowerCase().startsWith(keyword)
+    )
+    if (matched) {
+      queryResult.value = matched
       ElMessage.success('查询成功')
     } else {
-      ElMessage.error(result.message || '查询失败')
       queryResult.value = null
+      ElMessage.warning('未在您的卡密中找到该卡号')
     }
   } catch (error) {
     logger.error(error)
@@ -1259,14 +1318,16 @@ const getStatusText = (status) => {
   return texts[status] || '未知'
 }
 
+// 使用卡密：机器码必填（后端已拒绝空机器码，防止卡密被多设备共享）
 const useCard = (card) => {
-  ElMessageBox.confirm('确定要使用这张卡密吗？', '确认使用', {
-    confirmButtonText: '确定',
+  ElMessageBox.prompt('请输入当前设备的机器码以完成绑定', '使用卡密', {
+    confirmButtonText: '确定使用',
     cancelButtonText: '取消',
-    type: 'warning'
-  }).then(async () => {
+    inputPlaceholder: '机器码（可在客户端软件中查看）',
+    inputValidator: (value) => (value && value.trim() ? true : '机器码不能为空')
+  }).then(async ({ value }) => {
     try {
-      const result = await cardApi.useCard(card.cardKey);
+      const result = await cardApi.useCard(card.cardKey, value.trim());
       if (result.success) {
         ElMessage.success('卡密使用成功');
         fetchOrders();
@@ -1335,8 +1396,12 @@ const purchaseCard = async (cardType) => {
     ? timeCardOptions.value.find(item => item.id === selectedOption)
     : countCardOptions.value.find(item => item.id === selectedOption)
 
-  const totalPrice = option.price * quantity
+  // 浮点直乘会出现 ¥59.70000000000001 之类的展示；toFixed(2) 统一计价展示
+  const totalPrice = (option.price * quantity).toFixed(2)
 
+  // 进入函数即置 loading：确认框期间禁止重复触发，
+  // 否则快速双击会叠加两个确认框、创建两笔订单
+  purchaseLoading.value = true
   try {
     await ElMessageBox.confirm(
       `确认购买 ${quantity} 张 ${option.description}？\n总价：¥${totalPrice}`,
@@ -1347,8 +1412,6 @@ const purchaseCard = async (cardType) => {
         type: 'warning'
       }
     )
-
-    purchaseLoading.value = true
     ElMessage.info('正在处理支付...')
 
     const createOrderData = {
@@ -1414,7 +1477,7 @@ const purchaseCard = async (cardType) => {
       }
 
       ElMessageBox.alert(
-        `订单号：${result.data.order_id}\n购买成功！\n支付金额：¥${result.data.total_price}\n\n系统已发送订单通知邮件到您的邮箱：${localUserInfo.email}`,
+        `订单号：${result.data.id}\n购买成功！\n支付金额：¥${result.data.totalPrice}\n\n系统已发送订单通知邮件到您的邮箱：${localUserInfo.email}`,
         '购买成功',
         {
           confirmButtonText: '确定',

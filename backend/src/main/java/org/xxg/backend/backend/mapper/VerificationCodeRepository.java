@@ -26,4 +26,12 @@ public interface VerificationCodeRepository extends JpaRepository<VerificationCo
 
     /** 根据邮箱删除验证码 */
     void deleteByEmail(String email);
+
+    /**
+     * 原子递增验证码尝试次数。
+     * <p>用于在 REQUIRES_NEW 独立事务中提交计数，避免外层事务回滚导致爆破限制失效。</p>
+     */
+    @Modifying
+    @Query("UPDATE VerificationCode v SET v.attempts = COALESCE(v.attempts, 0) + 1 WHERE v.id = :id")
+    void incrementAttempts(@Param("id") Integer id);
 }

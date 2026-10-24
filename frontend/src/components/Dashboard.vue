@@ -241,6 +241,9 @@ const handleCreateKeys = async (keyData) => {
       if (result.success) {
         await loadKeys()
         ElMessage.success(`成功创建 ${totalCount} 条卡密`)
+      } else {
+        // 失败必须提示：此前静默返回，用户以为创建成功但列表无新数据
+        ElMessage.error('生成卡密失败: ' + (result.message || '未知错误'))
       }
     } catch (error) {
       logger.error('生成卡密失败:', error)
@@ -249,7 +252,8 @@ const handleCreateKeys = async (keyData) => {
     return
   }
 
-  // 逐条创建，显示进度条
+  // 大批量：单次请求提交（后端支持单请求 count≤1000 的批量生成），
+  // 此前 for 循环逐条发最多 1000 个串行请求，耗时且极易超时
   createProgress.visible = true
   createProgress.current = 0
   createProgress.total = totalCount
@@ -258,24 +262,24 @@ const handleCreateKeys = async (keyData) => {
   createProgress.done = false
   createProgress.percent = 0
 
-  const singleData = { ...keyData, count: 1 }
-
-  for (let i = 0; i < totalCount; i++) {
-    try {
-      const result = await cardApi.createCards(singleData)
-      if (result.success) {
-        createProgress.success++
-      } else {
-        createProgress.fail++
-      }
-    } catch (error) {
-      logger.error(`创建第 ${i + 1} 条失败:`, error)
-      createProgress.fail++
+  try {
+    const result = await cardApi.createCards({ ...keyData, count: totalCount })
+    if (result.success) {
+      createProgress.success = totalCount
+      createProgress.percent = 100
+    } else {
+      createProgress.fail = totalCount
+      createProgress.percent = 100
+      ElMessage.error('批量生成卡密失败: ' + (result.message || '未知错误'))
     }
-    createProgress.current = i + 1
-    createProgress.percent = Math.round(((i + 1) / totalCount) * 100)
+  } catch (error) {
+    logger.error('批量生成卡密失败:', error)
+    createProgress.fail = totalCount
+    createProgress.percent = 100
+    ElMessage.error('批量生成卡密失败: ' + error.message)
   }
 
+  createProgress.current = totalCount
   createProgress.done = true
   await loadKeys()
 

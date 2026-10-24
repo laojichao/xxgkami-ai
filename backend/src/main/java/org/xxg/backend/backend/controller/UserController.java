@@ -52,6 +52,8 @@ public class UserController {
         profile.put("phone", user.getPhone());
         profile.put("status", user.getStatus());
         profile.put("emailVerified", user.getEmailVerified());
+        // 前端依赖此字段决定"修改密码"是否显示旧密码输入框
+        profile.put("hasPassword", user.getPassword() != null && !user.getPassword().isBlank());
         profile.put("lastLoginTime", user.getLastLoginTime());
         profile.put("loginCount", user.getLoginCount());
         profile.put("createTime", user.getCreateTime());
@@ -64,6 +66,8 @@ public class UserController {
         String nickname = body.get("nickname");
         String email = body.get("email");
         String phone = body.get("phone");
+        // 换绑邮箱时需提供目标邮箱的 bind 类型验证码
+        String emailCode = body.get("emailCode");
         // 输入长度校验
         if (nickname != null && nickname.length() > 50) {
             return ResponseEntity.badRequest().body(ApiResponse.error("昵称长度不能超过50个字符"));
@@ -78,7 +82,7 @@ public class UserController {
             return ResponseEntity.badRequest().body(ApiResponse.error("手机号格式不正确"));
         }
         User user = userService.getUserByUsername(auth.getName());
-        userService.updateProfile(user.getId(), nickname, email, phone);
+        userService.updateProfile(user.getId(), nickname, email, phone, emailCode);
         return ResponseEntity.ok(ApiResponse.ok("个人信息更新成功"));
     }
 
@@ -185,6 +189,9 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
+    /** 允许绑定的社交平台类型白名单 */
+    private static final java.util.Set<String> ALLOWED_SOCIAL_TYPES = java.util.Set.of("qq", "wx", "wechat", "alipay");
+
     @PostMapping("/user/social/bind")
     @Transactional
     public ResponseEntity<ApiResponse<Void>> bindSocial(Authentication auth, @RequestBody Map<String, String> body) {
@@ -193,6 +200,10 @@ public class UserController {
         String socialType = body.get("socialType");
         if (socialUid == null || socialUid.isBlank() || socialType == null || socialType.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("社交平台信息不完整"));
+        }
+        // socialType 白名单校验：防止任意字符串写入绑定表造成数据污染
+        if (!ALLOWED_SOCIAL_TYPES.contains(socialType.toLowerCase())) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("不支持的社交平台类型"));
         }
         // 检查是否已绑定
         if (socialUserRepository.findByUserId(user.getId()).isPresent()) {
@@ -243,7 +254,8 @@ public class UserController {
 
     @PutMapping("/admin/users/{id}")
     public ResponseEntity<ApiResponse<Void>> updateUser(@PathVariable Integer id, @Valid @RequestBody UpdateUserRequest body) {
-        userService.updateProfile(id, body.getNickname(), body.getEmail(), body.getPhone());
+        // 管理员更新用户资料：跳过换绑邮箱验证码校验（管理员为受信操作方）
+        userService.adminUpdateProfile(id, body.getNickname(), body.getEmail(), body.getPhone());
         return ResponseEntity.ok(ApiResponse.ok("用户已更新"));
     }
 
