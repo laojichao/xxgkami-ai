@@ -45,8 +45,8 @@
               </label>
             </div>
             <input type="text" v-model="config.url" :disabled="!config.isCustomUrl" :placeholder="config.isCustomUrl ? 'http://your-server.com/callback' : '系统将自动生成回调 URL'" />
-            <small v-if="config.isCustomUrl">当卡密核销成功后，系统将请求此 URL</small>
-            <small v-else>系统自动设置 URL (默认: http://{client_ip}:8888/callback)，支持变量替换</small>
+            <small v-if="config.isCustomUrl">当卡密核销成功后，系统将请求此 URL（内网/回环地址会被 SSRF 防护拦截）</small>
+            <small v-else>系统自动设置 URL（基于当前站点地址生成），支持变量替换</small>
           </div>
 
           <!-- 请求方式选择 -->
@@ -416,12 +416,19 @@ const docPanelStyle = computed(() => {
   }
 })
 
-/** 根据当前环境自动生成默认回调URL */
+/**
+ * 生成默认回调 URL。
+ *
+ * 说明：历史上默认生成 /api/custom/{key}/use 路径，但后端从未提供该端点，
+ * 生成的 URL 不可用。实际生效的 Webhook 消费方是后端 WebhookService
+ * （读取 webhookConfig.url 向其发请求），与站内路径无关。
+ * 因此默认值改用站点地址 + /api/webhook/use 作为占位提示，
+ * 管理员仍应填写自己服务的真实回调地址。
+ */
 function generateDefaultUrl() {
   const protocol = window.location.protocol
   const host = window.location.host
-  const key = props.apiKey?.key || '{api_key}'
-  return `${protocol}//${host}/api/custom/${key}/use`
+  return `${protocol}//${host}/api/webhook/use`
 }
 
 /** 弹窗打开/关闭时初始化或重置配置 */
@@ -628,16 +635,6 @@ const previewUrl = computed(() => {
   }
 
   if (config.method === 'GET' && config.params.length > 0) {
-    const hasApiKeyParam = config.params.some(p => p.type === 'variable' && p.value === 'api_key')
-    if (hasApiKeyParam) {
-      url = url.replace(/\/api\/custom\/[^/]+\/use/, '/api/custom/use')
-    } else {
-      if (url.endsWith('/api/custom/use')) {
-        const key = props.apiKey?.key || '{api_key}'
-        url = url.replace('/api/custom/use', `/api/custom/${key}/use`)
-      }
-    }
-
     const queryParts = config.params.map(p => {
       let val = p.value
       if (p.type === 'variable') {

@@ -192,8 +192,10 @@ const fetchApiKeys = async () => {
         // 兼容历史数据可能出现的 1/0 数字形式，避免密钥状态永远显示为「未使用」
         isActive: key.status === true || key.status === 1,
         createdAt: key.createTime,
-        lastUsed: null,
-        requestCount: 0,
+        // 后端列表接口返回 lastUseTime/useCount，此前写死 null/0
+        // 导致卡片"最后使用/请求次数"永远不更新
+        lastUsed: key.lastUseTime || null,
+        requestCount: key.useCount || 0,
         cardCodes: cardCodes,
         webhookConfig: (() => { try { return key.webhookConfig ? JSON.parse(key.webhookConfig) : null } catch(e) { logger.warn('Invalid webhookConfig JSON:', e); return null } })(),
         assignedUsers: key.assignedUsers || [],
@@ -279,7 +281,10 @@ const handleSaveApiKey = async (formData) => {
       // 必须使用后端 DTO 的 camelCase 字段名，snake_case 会被静默忽略
       enableCardEncryption: formData.enableCardEncryption,
       requireMachineCode: formData.requireMachineCode,
-      machineSpecOnceConfig: formData.machineSpecOnceConfig || ''
+      // 空值不提交该字段（历史缺陷：`|| ''` 回退把空串提交，
+      // 后端以"非 null 即更新"判定，空串会清空已配置的规则——
+      // 而该字段 @JsonIgnore 列表接口永不返回，编辑弹窗拿不到已有值）
+      ...(formData.machineSpecOnceConfig ? { machineSpecOnceConfig: formData.machineSpecOnceConfig } : {})
     })
     ElMessage.success('保存成功')
 

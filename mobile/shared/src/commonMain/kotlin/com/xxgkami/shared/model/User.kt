@@ -30,9 +30,19 @@ data class User(
     val createTime: String? = null
 )
 
-/** 登录请求 */
+/**
+ * 登录请求
+ *
+ * @property totpCode 管理员 TOTP 二次验证码。
+ *   后端 LoginRequest.totpCode 在管理员启用 TOTP 时强制校验，模型缺该字段
+ *   会使启用 2FA 的管理员在移动端永远登录失败
+ */
 @Serializable
-data class LoginRequest(val username: String, val password: String)
+data class LoginRequest(
+    val username: String,
+    val password: String,
+    val totpCode: String? = null
+)
 
 /** 注册请求 */
 @Serializable

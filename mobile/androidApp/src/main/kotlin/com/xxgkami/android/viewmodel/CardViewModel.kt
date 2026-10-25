@@ -100,29 +100,15 @@ class CardViewModel : ViewModel() {
     }
 
     /**
-     * 解绑卡密的机器码（需提供机器码验证）
-     * @param cardKey 卡密字符串
-     * @param machineCode 要解绑的机器码
-     */
-    fun unbindMachineCode(cardKey: String, machineCode: String) {
-        unbindMachineCodeInternal(cardKey, machineCode)
-    }
-
-    /**
-     * 自助解绑卡密的机器码（无需机器码验证）
-     * @param cardKey 卡密字符串
-     */
-    fun unbindMachineCode(cardKey: String) {
-        unbindMachineCodeInternal(cardKey, null)
-    }
-
-    /**
-     * 解绑机器码的内部实现，统一处理加载状态和结果反馈。
+     * 解绑卡密的机器码。
+     *
+     * 后端要求提供与当前绑定值一致的机器码（绑定值本身即凭据），
+     * 仅凭卡密明文解绑会被拒绝，因此 machineCode 为必填参数。
      *
      * @param cardKey 卡密字符串
-     * @param machineCode 机器码，null 表示自助解绑
+     * @param machineCode 当前绑定的机器码（必填，须与绑定值一致）
      */
-    private fun unbindMachineCodeInternal(cardKey: String, machineCode: String?) {
+    fun unbindMachineCode(cardKey: String, machineCode: String) {
         viewModelScope.launch {
             _unbindLoading.value = true
             _unbindResult.value = null

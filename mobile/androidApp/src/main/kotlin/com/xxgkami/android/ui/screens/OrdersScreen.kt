@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -91,11 +92,12 @@ private fun OrderList(orders: List<Order>) {
 
 /**
  * 单个订单卡片
- * 展示订单号、卡密类型、数量、总价、状态和创建时间
+ * 展示订单号、卡密类型、数量、总价、状态、创建时间，以及已购卡密（可复制）
  * @param order 订单数据对象
  */
 @Composable
 private fun OrderCard(order: Order) {
+    val context = LocalContext.current
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(16.dp)) {
             Text("订单号: ${order.orderNo ?: ""}", style = MaterialTheme.typography.titleSmall)
@@ -105,6 +107,32 @@ private fun OrderCard(order: Order) {
             Text("状态: ${orderStatusText(order.status)} | 支付方式: ${order.paymentMethod ?: ""}", style = MaterialTheme.typography.bodySmall)
             order.createTime?.let {
                 Text("创建时间: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // 已购卡密：后端 Order.cardKeys 注释明言前端订单页依赖该字段，
+            // 此前模型缺字段导致移动端永远看不到/无法复制已购卡密
+            order.cardKeys?.takeIf { it.isNotBlank() }?.let { keys ->
+                Spacer(Modifier.height(8.dp))
+                Text("卡密：", style = MaterialTheme.typography.bodySmall)
+                keys.split(",").filter { it.isNotBlank() }.forEach { key ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            key.trim(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                    as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(
+                                android.content.ClipData.newPlainText("card_key", key.trim())
+                            )
+                            android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                        }) { Text("复制") }
+                    }
+                }
             }
         }
     }

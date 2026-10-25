@@ -189,6 +189,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { userApi } from '../services/api.js'
+import { parseBackendDate } from '../utils/parseDate.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import logger from '../utils/logger'
 
@@ -270,7 +271,7 @@ const goToPage = (page) => {
 /** 格式化日期字符串为本地时间 */
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString()
+  return parseBackendDate(dateStr).toLocaleString()
 }
 
 /** 打开新建用户弹窗，重置表单 */
@@ -295,7 +296,9 @@ const openEditModal = (user) => {
   form.nickname = user.nickname
   form.email = user.email
   form.phone = user.phone
-  form.status = user.status
+  // 后端 status 为 Boolean（true=启用），select 的 option 值为数字 1/0，
+  // 需归一化否则下拉框无法命中任何选项（显示为空）
+  form.status = user.status === true || user.status === 1 ? 1 : 0
   showModal.value = true
 }
 
@@ -333,7 +336,14 @@ const submitForm = async () => {
     if (isEditing.value) {
       // 编辑时排除空密码字段，避免覆盖用户密码
       const { password, ...updateData } = form
-      const payload = password ? { ...updateData, password } : updateData
+      // status 转为 Boolean：后端 UpdateUserRequest.status 为 Boolean 类型，
+      // 传 1/0 数字会被 Jackson 忽略（历史上编辑弹窗改状态无效的根因之一）。
+      // 仅在编辑态携带（新建态无该字段，用户创建后默认启用）
+      const payload = {
+        ...updateData,
+        status: updateData.status === 1 || updateData.status === true
+      }
+      if (password) payload.password = password
       await userApi.updateUser(form.id, payload)
     } else {
       await userApi.createUser(form)

@@ -1,63 +1,47 @@
 /**
- * 卡密核销接口 /v1/use_card 多语言调用示例
+ * 卡密核销接口 /cards/verify 多语言调用示例
  * 请将 BASE_URL 换为您的 API 根路径（含 /api，勿以 / 结尾），如 https://a.com/api 或 http://localhost:8080/api
  */
 
 export const API_USE_CARD_INTRO = `说明：
-· 接口路径：{BASE_URL}/v1/use_card（与文档一致，支持 GET 查询参数或 POST JSON）
-· 必填参数：api_key、card_key；可选：machine_code（一机一码）、ip_address（不传则服务端取请求 IP）
-· 若 API Key 开启「卡密加密」，card_key 需传加密后的字符串（与开放平台约定一致）`
+· 接口路径：{BASE_URL}/cards/verify（仅 POST JSON，与文档一致）
+· 必填参数：cardKey、machineCode；可选：apiKeyId（触发回调通知）
+· 接口为公开接口，限流 30 次/分钟/IP；machineCode 缺失将被拒绝（防多设备共享）`
 
 export const API_USE_CARD_EXAMPLES = [
   {
     id: 'curl',
-    label: 'cURL (GET)',
-    code: `# GET 查询参数
-curl -G "${'BASE_URL'}/v1/use_card" \\
-  --data-urlencode "api_key=YOUR_API_KEY" \\
-  --data-urlencode "card_key=YOUR_CARD_KEY" \\
-  --data-urlencode "machine_code=YOUR_MACHINE_CODE"
-
-# POST JSON
-curl -X POST "${'BASE_URL'}/v1/use_card" \\
+    label: 'cURL (POST JSON)',
+    code: `# POST JSON
+curl -X POST "${'BASE_URL'}/cards/verify" \\
   -H "Content-Type: application/json" \\
-  -d '{"api_key":"YOUR_API_KEY","card_key":"YOUR_CARD_KEY","machine_code":"YOUR_MACHINE_CODE"}'`
+  -d '{"cardKey":"YOUR_CARD_KEY","machineCode":"YOUR_MACHINE_CODE"}'`
   },
   {
     id: 'curl-post-form',
-    label: 'cURL (POST 表单)',
-    code: `curl -X POST "${'BASE_URL'}/v1/use_card" \\
-  -H "Content-Type: application/x-www-form-urlencoded" \\
-  --data "api_key=YOUR_API_KEY&card_key=YOUR_CARD_KEY&machine_code=YOUR_MACHINE_CODE"`
+    label: 'cURL (POST JSON 紧凑)',
+    code: `curl -X POST "${'BASE_URL'}/cards/verify" -H "Content-Type: application/json" -d "{\\"cardKey\\":\\"YOUR_CARD_KEY\\",\\"machineCode\\":\\"YOUR_MACHINE_CODE\\"}"`
   },
   {
     id: 'wget',
-    label: 'Wget',
-    code: `wget -qO- "${'BASE_URL'}/v1/use_card?api_key=YOUR_API_KEY&card_key=YOUR_CARD_KEY&machine_code=YOUR_MACHINE_CODE"`
+    label: 'Wget (POST JSON)',
+    code: `wget -qO- --header="Content-Type: application/json" --post-data='{"cardKey":"YOUR_CARD_KEY","machineCode":"YOUR_MACHINE_CODE"}' "${'BASE_URL'}/cards/verify"`
   },
   {
     id: 'httpie',
     label: 'HTTPie',
-    code: `# GET
-http GET "${'BASE_URL'}/v1/use_card" api_key==YOUR_API_KEY card_key==YOUR_CARD_KEY machine_code==YOUR_MACHINE_CODE
-
-# POST JSON
-http POST "${'BASE_URL'}/v1/use_card" api_key=YOUR_API_KEY card_key=YOUR_CARD_KEY machine_code=YOUR_MACHINE_CODE`
+    code: `# POST JSON
+http POST "${'BASE_URL'}/cards/verify" cardKey=YOUR_CARD_KEY machineCode=YOUR_MACHINE_CODE`
   },
   {
     id: 'powershell',
     label: 'PowerShell',
     code: `$base = "BASE_URL"
-$uri = "$base/v1/use_card?api_key=YOUR_API_KEY&card_key=YOUR_CARD_KEY&machine_code=YOUR_MACHINE_CODE"
-Invoke-RestMethod -Uri $uri -Method Get
-
-# POST JSON
 $body = @{
-  api_key = "YOUR_API_KEY"
-  card_key = "YOUR_CARD_KEY"
-  machine_code = "YOUR_MACHINE_CODE"
+  cardKey = "YOUR_CARD_KEY"
+  machineCode = "YOUR_MACHINE_CODE"
 } | ConvertTo-Json
-Invoke-RestMethod -Uri "$base/v1/use_card" -Method Post -Body $body -ContentType "application/json"`
+Invoke-RestMethod -Uri "$base/cards/verify" -Method Post -Body $body -ContentType "application/json"`
   },
   {
     id: 'node-fetch',
@@ -65,23 +49,12 @@ Invoke-RestMethod -Uri "$base/v1/use_card" -Method Post -Body $body -ContentType
     code: `const BASE = process.env.API_BASE || 'BASE_URL';
 
 async function useCard() {
-  const url = new URL(BASE + '/v1/use_card');
-  url.searchParams.set('api_key', 'YOUR_API_KEY');
-  url.searchParams.set('card_key', 'YOUR_CARD_KEY');
-  url.searchParams.set('machine_code', 'YOUR_MACHINE_CODE');
-  const res = await fetch(url);
-  const data = await res.json();
-  console.log(data);
-}
-
-async function useCardPost() {
-  const res = await fetch(BASE + '/v1/use_card', {
+  const res = await fetch(BASE + '/cards/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      api_key: 'YOUR_API_KEY',
-      card_key: 'YOUR_CARD_KEY',
-      machine_code: 'YOUR_MACHINE_CODE'
+      cardKey: 'YOUR_CARD_KEY',
+      machineCode: 'YOUR_MACHINE_CODE'
     })
   });
   console.log(await res.json());
@@ -95,18 +68,9 @@ useCard().catch(console.error);`
     code: `const axios = require('axios');
 const BASE = process.env.API_BASE || 'BASE_URL';
 
-axios.get(BASE + '/v1/use_card', {
-  params: {
-    api_key: 'YOUR_API_KEY',
-    card_key: 'YOUR_CARD_KEY',
-    machine_code: 'YOUR_MACHINE_CODE'
-  }
-}).then(r => console.log(r.data)).catch(console.error);
-
-axios.post(BASE + '/v1/use_card', {
-  api_key: 'YOUR_API_KEY',
-  card_key: 'YOUR_CARD_KEY',
-  machine_code: 'YOUR_MACHINE_CODE'
+axios.post(BASE + '/cards/verify', {
+  cardKey: 'YOUR_CARD_KEY',
+  machineCode: 'YOUR_MACHINE_CODE'
 }).then(r => console.log(r.data)).catch(console.error);`
   },
   {
@@ -115,10 +79,11 @@ axios.post(BASE + '/v1/use_card', {
     code: `const BASE = 'BASE_URL';
 
 async function redeem() {
-  const u = new URL(BASE + '/v1/use_card');
-  u.searchParams.set('api_key', 'YOUR_API_KEY');
-  u.searchParams.set('card_key', 'YOUR_CARD_KEY');
-  const r = await fetch(u.toString(), { method: 'GET' });
+  const r = await fetch(BASE + '/cards/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cardKey: 'YOUR_CARD_KEY', machineCode: 'YOUR_MACHINE_CODE' })
+  });
   return r.json();
 }
 
@@ -134,14 +99,19 @@ redeem().then(console.log).catch(console.error);`
 <script>
 const BASE = 'BASE_URL';
 document.getElementById('go').onclick = async () => {
-  const u = new URL(BASE + '/v1/use_card');
-  u.searchParams.set('api_key', 'YOUR_API_KEY');
-  u.searchParams.set('card_key', document.querySelector('#card').value);
-  const r = await fetch(u);
+  const r = await fetch(BASE + '/cards/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cardKey: document.querySelector('#card').value,
+      machineCode: document.querySelector('#machine').value
+    })
+  });
   document.getElementById('out').textContent = JSON.stringify(await r.json(), null, 2);
 };
 </script>
 <input id="card" placeholder="卡密" />
+<input id="machine" placeholder="机器码" />
 </body></html>`
   },
   {
@@ -153,14 +123,16 @@ const BASE = 'BASE_URL'
 const result = ref(null)
 const loading = ref(false)
 const cardKey = ref('')
+const machineCode = ref('')
 
 async function redeem() {
   loading.value = true
   try {
-    const u = new URL(BASE + '/v1/use_card')
-    u.searchParams.set('api_key', 'YOUR_API_KEY')
-    u.searchParams.set('card_key', cardKey.value)
-    const r = await fetch(u.toString())
+    const r = await fetch(BASE + '/cards/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardKey: cardKey.value, machineCode: machineCode.value })
+    })
     result.value = await r.json()
   } finally {
     loading.value = false
@@ -171,6 +143,7 @@ async function redeem() {
 <template>
   <div>
     <input v-model="cardKey" placeholder="卡密" />
+    <input v-model="machineCode" placeholder="机器码" />
     <button :disabled="loading" @click="redeem">核销</button>
     <pre>{{ result }}</pre>
   </div>
@@ -183,21 +156,11 @@ async function redeem() {
 
 BASE = "BASE_URL"
 
-# GET
-r = requests.get(f"{BASE}/v1/use_card", params={
-    "api_key": "YOUR_API_KEY",
-    "card_key": "YOUR_CARD_KEY",
-    "machine_code": "YOUR_MACHINE_CODE",
-})
-print(r.json())
-
-# POST JSON
 r = requests.post(
-    f"{BASE}/v1/use_card",
+    f"{BASE}/cards/verify",
     json={
-        "api_key": "YOUR_API_KEY",
-        "card_key": "YOUR_CARD_KEY",
-        "machine_code": "YOUR_MACHINE_CODE",
+        "cardKey": "YOUR_CARD_KEY",
+        "machineCode": "YOUR_MACHINE_CODE",
     },
 )
 print(r.json())`
@@ -211,24 +174,13 @@ import urllib.request
 
 BASE = "BASE_URL"
 
-def get_redeem():
-    q = urllib.parse.urlencode({
-        "api_key": "YOUR_API_KEY",
-        "card_key": "YOUR_CARD_KEY",
-        "machine_code": "YOUR_MACHINE_CODE",
-    })
-    url = f"{BASE}/v1/use_card?{q}"
-    with urllib.request.urlopen(url) as resp:
-        return json.loads(resp.read().decode())
-
 def post_redeem():
     data = json.dumps({
-        "api_key": "YOUR_API_KEY",
-        "card_key": "YOUR_CARD_KEY",
-        "machine_code": "YOUR_MACHINE_CODE",
+        "cardKey": "YOUR_CARD_KEY",
+        "machineCode": "YOUR_MACHINE_CODE",
     }).encode()
     req = urllib.request.Request(
-        f"{BASE}/v1/use_card",
+        f"{BASE}/cards/verify",
         data=data,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -236,31 +188,20 @@ def post_redeem():
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode())
 
-print(get_redeem())`
+print(post_redeem())`
   },
   {
     id: 'php',
     label: 'PHP',
     code: `<?php
 $base = 'BASE_URL';
-$url = $base . '/v1/use_card?' . http_build_query([
-    'api_key' => 'YOUR_API_KEY',
-    'card_key' => 'YOUR_CARD_KEY',
-    'machine_code' => 'YOUR_MACHINE_CODE',
-]);
-$ch = curl_init($url);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-echo curl_exec($ch);
-
-// POST JSON
-$ch = curl_init($base . '/v1/use_card');
+$ch = curl_init($base . '/cards/verify');
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
     CURLOPT_POSTFIELDS => json_encode([
-        'api_key' => 'YOUR_API_KEY',
-        'card_key' => 'YOUR_CARD_KEY',
-        'machine_code' => 'YOUR_MACHINE_CODE',
+        'cardKey' => 'YOUR_CARD_KEY',
+        'machineCode' => 'YOUR_MACHINE_CODE',
     ]),
     CURLOPT_RETURNTRANSFER => true,
 ]);
@@ -272,52 +213,32 @@ echo curl_exec($ch);`
     code: `package main
 
 import (
-    "encoding/json"
     "fmt"
     "io"
     "net/http"
-    "net/url"
     "strings"
 )
 
 const base = "BASE_URL"
 
 func main() {
-    u, _ := url.Parse(base + "/v1/use_card")
-    q := u.Query()
-    q.Set("api_key", "YOUR_API_KEY")
-    q.Set("card_key", "YOUR_CARD_KEY")
-    q.Set("machine_code", "YOUR_MACHINE_CODE")
-    u.RawQuery = q.Encode()
-    resp, err := http.Get(u.String())
+    payload := "{\\"cardKey\\":\\"YOUR_CARD_KEY\\",\\"machineCode\\":\\"YOUR_MACHINE_CODE\\"}"
+    resp, err := http.Post(base+"/cards/verify", "application/json", strings.NewReader(payload))
     if err != nil {
         panic(err)
     }
     defer resp.Body.Close()
     body, _ := io.ReadAll(resp.Body)
     fmt.Println(string(body))
-
-    // POST JSON
-    payload := "{\"api_key\":\"YOUR_API_KEY\",\"card_key\":\"YOUR_CARD_KEY\",\"machine_code\":\"YOUR_MACHINE_CODE\"}"
-    resp2, err := http.Post(base+"/v1/use_card", "application/json", strings.NewReader(payload))
-    if err != nil {
-        panic(err)
-    }
-    defer resp2.Body.Close()
-    var v map[string]interface{}
-    json.NewDecoder(resp2.Body).Decode(&v)
-    fmt.Println(v)
 }`
   },
   {
     id: 'java',
     label: 'Java (HttpClient)',
     code: `import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 public class UseCard {
@@ -325,23 +246,14 @@ public class UseCard {
 
     public static void main(String[] args) throws Exception {
         var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-        String q = "api_key=" + enc("YOUR_API_KEY")
-            + "&card_key=" + enc("YOUR_CARD_KEY")
-            + "&machine_code=" + enc("YOUR_MACHINE_CODE");
-        var getReq = HttpRequest.newBuilder()
-            .uri(URI.create(BASE + "/v1/use_card?" + q))
-            .GET().build();
-        System.out.println(client.send(getReq, HttpResponse.BodyHandlers.ofString()).body());
-
-        String json = "{\\"api_key\\":\\"YOUR_API_KEY\\",\\"card_key\\":\\"YOUR_CARD_KEY\\",\\"machine_code\\":\\"YOUR_MACHINE_CODE\\"}";
+        String json = "{\\"cardKey\\":\\"YOUR_CARD_KEY\\",\\"machineCode\\":\\"YOUR_MACHINE_CODE\\"}";
         var postReq = HttpRequest.newBuilder()
-            .uri(URI.create(BASE + "/v1/use_card"))
+            .uri(URI.create(BASE + "/cards/verify"))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json))
             .build();
         System.out.println(client.send(postReq, HttpResponse.BodyHandlers.ofString()).body());
     }
-    static String enc(String s) { return URLEncoder.encode(s, StandardCharsets.UTF_8); }
 }`
   },
   {
@@ -354,16 +266,11 @@ using System.Text.Json;
 const string Base = "BASE_URL";
 
 using var http = new HttpClient();
-var qs = "api_key=YOUR_API_KEY&card_key=YOUR_CARD_KEY&machine_code=YOUR_MACHINE_CODE";
-var getResp = await http.GetAsync($"{Base}/v1/use_card?{qs}");
-Console.WriteLine(await getResp.Content.ReadAsStringAsync());
-
 var body = JsonSerializer.Serialize(new {
-    api_key = "YOUR_API_KEY",
-    card_key = "YOUR_CARD_KEY",
-    machine_code = "YOUR_MACHINE_CODE"
+    cardKey = "YOUR_CARD_KEY",
+    machineCode = "YOUR_MACHINE_CODE"
 });
-var postResp = await http.PostAsync($"{Base}/v1/use_card",
+var postResp = await http.PostAsync($"{Base}/cards/verify",
     new StringContent(body, Encoding.UTF8, "application/json"));
 Console.WriteLine(await postResp.Content.ReadAsStringAsync());`
   },
@@ -376,23 +283,14 @@ require 'uri'
 
 BASE = 'BASE_URL'
 
-uri = URI("#{BASE}/v1/use_card")
-uri.query = URI.encode_www_form(
-  api_key: 'YOUR_API_KEY',
-  card_key: 'YOUR_CARD_KEY',
-  machine_code: 'YOUR_MACHINE_CODE'
-)
-puts Net::HTTP.get(uri)
-
-uri2 = URI("#{BASE}/v1/use_card")
-req = Net::HTTP::Post.new(uri2)
+uri = URI("#{BASE}/cards/verify")
+req = Net::HTTP::Post.new(uri)
 req['Content-Type'] = 'application/json'
 req.body = {
-  api_key: 'YOUR_API_KEY',
-  card_key: 'YOUR_CARD_KEY',
-  machine_code: 'YOUR_MACHINE_CODE'
+  cardKey: 'YOUR_CARD_KEY',
+  machineCode: 'YOUR_MACHINE_CODE'
 }.to_json
-puts Net::HTTP.start(uri2.hostname, uri2.port, use_ssl: uri2.scheme == 'https') { |h| h.request(req).body }`
+puts Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |h| h.request(req).body }`
   },
   {
     id: 'kotlin',
@@ -402,8 +300,12 @@ import java.net.URL
 
 fun main() {
     val base = "BASE_URL"
-    val q = "api_key=YOUR_API_KEY&card_key=YOUR_CARD_KEY&machine_code=YOUR_MACHINE_CODE"
-    val conn = URL("$base/v1/use_card?$q").openConnection() as HttpURLConnection
+    val body = "{\\"cardKey\\":\\"YOUR_CARD_KEY\\",\\"machineCode\\":\\"YOUR_MACHINE_CODE\\"}"
+    val conn = URL("$base/cards/verify").openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.doOutput = true
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.outputStream.use { it.write(body.toByteArray()) }
     println(conn.inputStream.bufferedReader().readText())
 }`
   },
@@ -416,20 +318,12 @@ import 'package:http/http.dart' as http;
 const base = 'BASE_URL';
 
 Future<void> main() async {
-  final uri = Uri.parse('$base/v1/use_card').replace(queryParameters: {
-    'api_key': 'YOUR_API_KEY',
-    'card_key': 'YOUR_CARD_KEY',
-    'machine_code': 'YOUR_MACHINE_CODE',
-  });
-  print(await http.read(uri));
-
   final r = await http.post(
-    Uri.parse('$base/v1/use_card'),
+    Uri.parse('$base/cards/verify'),
     headers: {'Content-Type': 'application/json'},
     body: jsonEncode({
-      'api_key': 'YOUR_API_KEY',
-      'card_key': 'YOUR_CARD_KEY',
-      'machine_code': 'YOUR_MACHINE_CODE',
+      'cardKey': 'YOUR_CARD_KEY',
+      'machineCode': 'YOUR_MACHINE_CODE',
     }),
   );
   print(r.body);
@@ -442,26 +336,15 @@ Future<void> main() async {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base = "BASE_URL";
     let client = reqwest::Client::new();
-    let get_url = format!(
-        "{}/v1/use_card?api_key={}&card_key={}&machine_code={}",
-        base,
-        "YOUR_API_KEY",
-        "YOUR_CARD_KEY",
-        "YOUR_MACHINE_CODE"
-    );
-    let r = client.get(&get_url).send().await?;
-    println!("{}", r.text().await?);
-
-    let r2 = client
-        .post(format!("{}/v1/use_card", base))
+    let r = client
+        .post(format!("{}/cards/verify", base))
         .json(&serde_json::json!({
-            "api_key": "YOUR_API_KEY",
-            "card_key": "YOUR_CARD_KEY",
-            "machine_code": "YOUR_MACHINE_CODE",
+            "cardKey": "YOUR_CARD_KEY",
+            "machineCode": "YOUR_MACHINE_CODE",
         }))
         .send()
         .await?;
-    println!("{}", r2.text().await?);
+    println!("{}", r.text().await?);
     Ok(())
 }`
   },
@@ -471,23 +354,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     code: `import Foundation
 
 let base = "BASE_URL"
-var comp = URLComponents(string: base + "/v1/use_card")!
-comp.queryItems = [
-    URLQueryItem(name: "api_key", value: "YOUR_API_KEY"),
-    URLQueryItem(name: "card_key", value: "YOUR_CARD_KEY"),
-    URLQueryItem(name: "machine_code", value: "YOUR_MACHINE_CODE"),
-]
-let (data, _) = try await URLSession.shared.data(from: comp.url!)
-print(String(data: data, encoding: .utf8)!)
-
-// POST JSON
-var req = URLRequest(url: URL(string: base + "/v1/use_card")!)
+var req = URLRequest(url: URL(string: base + "/cards/verify")!)
 req.httpMethod = "POST"
 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 req.httpBody = try JSONSerialization.data(withJSONObject: [
-    "api_key": "YOUR_API_KEY",
-    "card_key": "YOUR_CARD_KEY",
-    "machine_code": "YOUR_MACHINE_CODE",
-])`
+    "cardKey": "YOUR_CARD_KEY",
+    "machineCode": "YOUR_MACHINE_CODE",
+])
+let (data, _) = try await URLSession.shared.data(for: req)
+print(String(data: data, encoding: .utf8)!)`
   }
 ]

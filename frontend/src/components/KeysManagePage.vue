@@ -360,6 +360,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { cardApi } from '../services/api.js'
+import { parseBackendDate } from '../utils/parseDate.js'
 import logger from '../utils/logger'
 import { copyToClipboard } from '../utils/clipboard.js'
 import { trapFocus } from '../utils/trapFocus.js'
@@ -372,7 +373,7 @@ const props = defineProps({
   keys: Array
 })
 
-const emit = defineEmits(['create-keys', 'delete-key', 'update-key', 'toggle-key-status'])
+const emit = defineEmits(['create-keys', 'delete-key', 'update-key', 'toggle-key-status', 'unbind-machine-code'])
 
 /* ========== 时间卡倒计时 ========== */
 const nowMs = ref(Date.now())
@@ -666,7 +667,7 @@ const jumpToPage = () => {
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
-  return new Date(dateString).toLocaleString('zh-CN')
+  return parseBackendDate(dateString).toLocaleString('zh-CN')
 }
 
 const getCardTypeText = (cardType) => {
@@ -743,11 +744,22 @@ const editKey = (key) => {
     machine_code: key.machineCode || key.machine_code || '',
     allow_self_unbind: key.allowSelfUnbind === true || key.allowSelfUnbind === 1 || key.allow_self_unbind === true || key.allow_self_unbind === 1
   })
+  // 记录打开弹窗时的原值：机器码被"重置"清空需显式解绑；状态被改动
+  // 需单独走 PATCH /cards/admin/{id}/status（后端 updateCard 不处理 status）
+  editingKeyOriginalMachineCode = editingKey.machine_code
+  editingKeyOriginalStatus = key.status
   showEditKeyModal.value = true
 }
 
+// 打开编辑弹窗时的原值（非响应式，仅用于保存时对比）
+let editingKeyOriginalMachineCode = ''
+let editingKeyOriginalStatus = null
+
 const updateKey = () => {
-  // 转换为 camelCase 以匹配后端 DTO
+  // 转换为 camelCase 以匹配后端 DTO。
+  // 注意：machineCode 字段后端 updateCard 不处理（历史缺陷），
+  // "重置机器码"通过 emit('unbind-machine-code') 单独走解绑接口；
+  // status 同理，单独走 PATCH 状态接口
   emit('update-key', {
     id: editingKey.id,
     cardKey: editingKey.card_key,
@@ -755,13 +767,19 @@ const updateKey = () => {
     duration: editingKey.duration,
     totalCount: editingKey.total_count,
     remainingCount: editingKey.remaining_count,
-    status: editingKey.status,
     verifyMethod: editingKey.verify_method,
     encryptionType: editingKey.encryption_type,
     allowReverify: editingKey.allow_reverify,
-    machineCode: editingKey.machine_code,
     allowSelfUnbind: editingKey.allow_self_unbind
   })
+  // 机器码被"重置"清空（原值非空 → 现为空）时，显式触发解绑
+  if (editingKeyOriginalMachineCode && !editingKey.machine_code) {
+    emit('unbind-machine-code', editingKey.id)
+  }
+  // 状态被改动时，走专用 PATCH 接口（updateCard 明确不允许更新 status）
+  if (editingKeyOriginalStatus !== null && Number(editingKey.status) !== Number(editingKeyOriginalStatus)) {
+    emit('toggle-key-status', { id: editingKey.id, status: Number(editingKey.status) })
+  }
   showEditKeyModal.value = false
 }
 

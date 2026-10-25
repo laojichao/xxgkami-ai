@@ -267,7 +267,10 @@ const handleOAuthCallback = async () => {
 
            if (isBinding && registerToken) {
                try {
-                   const res = await userProfileApi.bindSocial(registerToken);
+                   // /user/social/bind 要求 {socialUid, socialType}（后端校验必填），
+                   // 历史上只传 {token} 会被 400 拒绝。OAuth 网关未就位时
+                   // 无真实社交身份可传，明确失败提示而非静默 400。
+                   const res = await userProfileApi.bindSocial(registerToken, 'qq');
                    if (res.success) {
                        ElMessage.success('绑定成功！');
                    } else {
@@ -302,6 +305,11 @@ const handleOAuthCallback = async () => {
                // App.vue manages currentPage.
                return true;
            }
+           // registerToken 缺失：OAuth 网关回调参数不完整，无法进入补全注册流程。
+           // 明确提示并清理 URL，避免用户停留在无响应的空白登录页
+           ElMessage.error('第三方登录回调参数缺失，请重新发起登录');
+           window.history.replaceState({}, document.title, window.location.pathname);
+           return true;
       } else {
           const hashQs2 = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
           const error = urlParams.get('error') || (hashQs2 ? new URLSearchParams(hashQs2).get('error') : null);

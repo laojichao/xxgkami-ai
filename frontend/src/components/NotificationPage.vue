@@ -328,8 +328,14 @@ const sendTestEmail = async () => {
       sender_name: emailSettings.senderName
     }
 
-    await settingsApi.sendTestEmail(testEmail.value, currentSettings)
-    showToast(`测试邮件已发送到 ${testEmail.value}`, 'success')
+    // 后端发送失败时返回 HTTP 200 + ApiResponse.error（success=false），
+    // 必须检查业务状态，否则配置错误也提示"已发送"误导排查
+    const res = await settingsApi.sendTestEmail(testEmail.value, currentSettings)
+    if (res.success) {
+      showToast(`测试邮件已发送到 ${testEmail.value}`, 'success')
+    } else {
+      showToast(res.message || '发送失败，请检查邮件配置', 'error')
+    }
   } catch (error) {
     logger.error('发送测试邮件失败:', error)
     showToast('发送测试邮件失败: ' + error.message, 'error')

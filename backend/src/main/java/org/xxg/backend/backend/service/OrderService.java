@@ -6,6 +6,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.xxg.backend.backend.dto.CreateOrderRequest;
 import org.xxg.backend.backend.entity.*;
 import org.xxg.backend.backend.exception.BusinessException;
@@ -147,10 +149,22 @@ public class OrderService {
         }
         order.setCardKeys(finalCardKeys);
         orderRepository.save(order);
-        // 投递卡密到用户邮箱：前端在购买成功提示中明确告知「已发送订单通知邮件」，
-        // 但此前 EmailService 虽已注入却从未调用，用户实际收不到任何邮件。
-        // 邮件为异步发送且失败不抛异常，不影响订单完成这一核心事务。
-        sendCardKeysByEmail(order, finalCardKeys);
+        // 投递卡密到用户邮箱：注册到事务提交后执行（与 Webhook 触发时机对齐）。
+        // 此前在事务内直接调用：若邮件（@Async）已发出而外层事务随后回滚，
+        // 用户会收到一批查无此卡的"幽灵卡密"——卡密外发不可撤回。
+        // 无事务同步上下文时（如单元测试直接调用）退化为立即发送。
+        final String keysForEmail = finalCardKeys;
+        final Order orderForEmail = order;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sendCardKeysByEmail(orderForEmail, keysForEmail);
+                }
+            });
+        } else {
+            sendCardKeysByEmail(orderForEmail, keysForEmail);
+        }
     }
 
     /**
@@ -198,6 +212,12 @@ public class OrderService {
         }
         if ("failed".equals(order.getStatus())) {
             return; // 已是失败状态，幂等返回
+        }
+        // 仅允许从 pending 标记失败：cancelled（超时自动取消）是终态审计记录，
+        // 覆盖为 failed 会抹掉"用户超时未付"痕迹，且使统计口径失真
+        // （getOrderStats 无 cancelled 计数，凭空消失）
+        if (!"pending".equals(order.getStatus())) {
+            throw new BusinessException("当前状态不允许标记失败: " + order.getStatus());
         }
         order.setStatus("failed");
         order.setUpdateTime(LocalDateTime.now());
@@ -306,7 +326,7 @@ public class OrderService {
 
     /**
      * 获取订单统计信息。
-     * <p>包含总数、待支付/已完成/已失败订单数、今日新增订单数。</p>
+     * <p>包含总数、待支付/已完成/已失败订单数、今日新增订单数及已完成订单总收入。</p>
      *
      * @return 统计数据 Map
      */
@@ -317,8 +337,13 @@ public class OrderService {
         stats.put("pendingOrders", orderRepository.countByStatus("pending"));
         stats.put("completedOrders", orderRepository.countByStatus("completed"));
         stats.put("failedOrders", orderRepository.countByStatus("failed"));
+        // 超时自动取消数：此前四张统计卡片之和恒不等于总数（差额全是 cancelled），
+        // 运维无法量化"超时未支付"规模
+        stats.put("cancelledOrders", orderRepository.countByStatus("cancelled"));
         stats.put("todayOrders", orderRepository.countByCreateTimeAfter(
                 LocalDateTime.now().toLocalDate().atStartOfDay()));
+        // 已完成订单总收入：前端订单管理页"总收入"卡片此前无数据来源恒显示 0.00
+        stats.put("totalRevenue", orderRepository.sumTotalPriceByStatus("completed"));
         return stats;
     }
 

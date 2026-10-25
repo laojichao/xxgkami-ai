@@ -547,6 +547,11 @@ public class AuthController {
         if (username == null || username.isBlank() || recoveryCode == null || recoveryCode.isBlank()) {
             throw new BusinessException("用户名和恢复码不能为空");
         }
+        // 输入长度上限：恢复码固定 8 位、用户名 50 位。超长输入直接拒绝，
+        // 避免哈希计算被超长字符串放大成廉价资源消耗
+        if (username.length() > 50 || recoveryCode.trim().length() != 8) {
+            throw new BusinessException("用户名或恢复码格式无效");
+        }
         Admin admin = adminRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException("管理员不存在"));
         if (!Boolean.TRUE.equals(admin.getTotpEnabled())) {
@@ -723,7 +728,10 @@ public class AuthController {
      * <p>Cookie 属性说明：</p>
      * <ul>
      *   <li>httpOnly=true: 禁止 JavaScript 读取，防止 XSS 窃取 Token</li>
-     *   <li>secure=true: 仅通过 HTTPS 传输（开发环境可通过 localhost 豁免）</li>
+     *   <li>secure: 按请求实际协议动态决定（HTTPS 请求置 true；
+     *       反向代理场景信任 X-Forwarded-Proto）。
+     *       固定 true 会使纯 HTTP 部署（如内网 nginx.dev.conf）的浏览器
+     *       拒绝回传 Cookie，登录后立即"未登录"</li>
      *   <li>sameSite=Strict: 防止 CSRF 攻击，完全禁止跨站携带 Cookie</li>
      *   <li>path: access_token 为 contextPath（全局可用），
      *       refresh_token 为 contextPath + /auth/refresh（最小权限；
@@ -733,16 +741,17 @@ public class AuthController {
     private void setTokenCookies(HttpServletResponse response, HttpServletRequest request,
                                  String accessToken, String refreshToken) {
         String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+        boolean secure = isSecureRequest(request);
         ResponseCookie accessCookie = ResponseCookie.from("access_token", accessToken)
                 .httpOnly(true)
-                .secure(true)
+                .secure(secure)
                 .path(contextPath + "/")
                 .maxAge(3600)
                 .sameSite("Strict")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", refreshToken)
                 .httpOnly(true)
-                .secure(true)
+                .secure(secure)
                 .path(contextPath + "/auth/refresh")
                 .maxAge(604800)
                 .sameSite("Strict")
@@ -752,21 +761,36 @@ public class AuthController {
     }
 
     /**
+     * 判断当前请求是否为 HTTPS（含反向代理转发场景）。
+     * <p>nginx.prod.conf 已配置 proxy_set_header X-Forwarded-Proto $scheme，
+     * 后端据此识别代理后的真实协议；直连时回退 request.isSecure()。</p>
+     */
+    private boolean isSecureRequest(HttpServletRequest request) {
+        String forwardedProto = request.getHeader("X-Forwarded-Proto");
+        if (forwardedProto != null && !forwardedProto.isBlank()) {
+            return "https".equalsIgnoreCase(forwardedProto.trim());
+        }
+        return request.isSecure();
+    }
+
+    /**
      * 清除客户端的 access_token 和 refresh_token Cookie。
-     * <p>通过将 maxAge 设为 0 使 Cookie 立即过期。</p>
+     * <p>通过将 maxAge 设为 0 使 Cookie 立即过期。
+     * secure 属性必须与设置时一致，否则 HTTP 环境下浏览器不会删除带 secure 的 Cookie。</p>
      */
     private void clearTokenCookies(HttpServletResponse response, HttpServletRequest request) {
         String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+        boolean secure = isSecureRequest(request);
         ResponseCookie accessCookie = ResponseCookie.from("access_token", "")
                 .httpOnly(true)
-                .secure(true)
+                .secure(secure)
                 .path(contextPath + "/")
                 .maxAge(0)
                 .sameSite("Strict")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", "")
                 .httpOnly(true)
-                .secure(true)
+                .secure(secure)
                 .path(contextPath + "/auth/refresh")
                 .maxAge(0)
                 .sameSite("Strict")

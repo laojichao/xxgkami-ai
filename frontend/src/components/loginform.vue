@@ -315,8 +315,7 @@
       </div>
     </div>
     
-    <!-- TOTP恢复弹窗（通过邮箱验证码关闭双重验证） -->
-    <!-- TOTP 恢复弹窗 -->
+    <!-- TOTP恢复弹窗（通过一次性恢复码关闭双重验证） -->
     <div v-if="showRecoveryModal" class="modal-overlay" @keydown.escape="showRecoveryModal = false">
       <div class="modal-content" style="max-width: 400px;" role="dialog" aria-modal="true" aria-label="重置双重验证">
         <div class="modal-header">
@@ -326,15 +325,12 @@
           </button>
         </div>
         <div class="modal-body">
-          <p style="margin-bottom: 15px; color: #666; font-size: 0.9em;">将发送验证码到管理员绑定的邮箱，验证通过后将自动关闭双重验证。</p>
+          <p style="margin-bottom: 15px; color: #666; font-size: 0.9em;">输入启用双重验证时生成的任意一个一次性恢复码（8 位字母数字），验证通过后将关闭双重验证并自动重新登录。若未保存恢复码，请联系数据库管理员重置。</p>
           <form @submit.prevent="handleRecovery" class="totp-form">
              <div class="form-group">
-               <label>邮箱验证码</label>
+               <label>恢复码</label>
                <div class="code-input-wrapper">
-                 <input type="text" v-model="recoveryForm.code" required placeholder="输入邮箱验证码">
-                 <button type="button" @click="sendRecoveryCode" :disabled="recoveryTimer > 0" class="code-btn">
-                   {{ recoveryTimer > 0 ? `${recoveryTimer}s后重发` : '获取验证码' }}
-                 </button>
+                 <input type="text" v-model="recoveryForm.code" required placeholder="输入8位恢复码" maxlength="8" autocomplete="off">
                </div>
              </div>
              
@@ -424,52 +420,23 @@ const showRecoveryModal = ref(false)
 const recoveryLoading = ref(false)
 const recoveryError = ref('')
 const recoverySuccess = ref('')
-const recoveryTimer = ref(0)
-let recoveryTimerInterval = null
 let pendingTimeouts = []
 
-/** TOTP恢复表单（邮箱验证码） */
+/** TOTP恢复表单（一次性恢复码） */
 const recoveryForm = reactive({
   code: ''
 })
 
-/** 发送TOTP恢复验证码到管理员邮箱 */
-const sendRecoveryCode = async () => {
-  if (!loginForm.username) {
-    recoveryError.value = '请先输入用户名'
-    return
-  }
+/**
+ * 恢复码弹窗直接输入一次性恢复码（/auth/totp/disable-by-recovery 公开接口）。
+ * 历史实现的"发送邮箱验证码"（POST /auth/totp/recovery-code）要求 ADMIN 登录态，
+ * 而该弹窗的使用场景恰恰是管理员因丢失 TOTP 设备无法登录——必然 401，入口完全不可用。
+ */
 
-  try {
-    const response = await authApi.sendRecoveryCode(loginForm.username)
-    if (response.success) {
-      recoverySuccess.value = '验证码已发送，请查收邮件'
-      recoveryError.value = ''
-      startRecoveryTimer()
-    } else {
-      recoveryError.value = response.message || '发送失败'
-    }
-  } catch (error) {
-    recoveryError.value = '发送失败: ' + (error.message || '未知错误')
-  }
-}
-
-/** 启动恢复验证码倒计时（60秒） */
-const startRecoveryTimer = (initialValue = VERIFICATION_CODE_COUNTDOWN_SEC) => {
-  recoveryTimer.value = initialValue
-  if (recoveryTimerInterval) clearInterval(recoveryTimerInterval)
-  recoveryTimerInterval = setInterval(() => {
-    recoveryTimer.value--
-    if (recoveryTimer.value <= 0) {
-      clearInterval(recoveryTimerInterval)
-    }
-  }, 1000)
-}
-
-/** 提交TOTP恢复验证码，验证通过后自动关闭双重验证并重新登录 */
+/** 提交一次性恢复码，验证通过后自动关闭双重验证并重新登录 */
 const handleRecovery = async () => {
   if (!recoveryForm.code) {
-    recoveryError.value = '请输入验证码'
+    recoveryError.value = '请输入恢复码'
     return
   }
 
@@ -479,14 +446,14 @@ const handleRecovery = async () => {
 
   try {
     const response = await authApi.disableTotpByRecovery(loginForm.username, recoveryForm.code)
-    
+
     if (response.success) {
-      recoverySuccess.value = '双重验证已关闭，请重新登录'
+      // 常驻提示：ref 值会在自动重登的 resetForm 中被清空，用户看不到确认
+      ElMessage.success('双重验证已关闭，正在自动登录...')
       setTimeout(() => {
         showRecoveryModal.value = false
         recoveryForm.code = ''
-        // Auto login or just close modal?
-        // Let's try to login again automatically without TOTP
+        // 2FA 已关闭，直接凭用户名密码重新登录
         handleLogin()
       }, MODAL_AUTO_CLOSE_DELAY_MS)
     } else {
@@ -558,7 +525,6 @@ onMounted(async () => {
 
 // 组件卸载时清理所有定时器和 watcher，防止内存泄漏
 onUnmounted(() => {
-  if (recoveryTimerInterval) clearInterval(recoveryTimerInterval)
   if (timerInterval) clearInterval(timerInterval)
   if (forgotTimerInterval) clearInterval(forgotTimerInterval)
   pendingTimeouts.forEach(id => clearTimeout(id))
@@ -990,6 +956,25 @@ const handleLogin = async () => {
       }
     }
   } catch (error) {
+    // 后端对"密码正确但缺少/错误 TOTP 验证码"返回 400 + message
+    // （apiRequest 对非 2xx 响应 throw Error(message)）。此前只等
+    // 'TOTP_REQUIRED' 字面量（后端从不返回），导致启用 2FA 的管理员
+    // 永远看不到验证码输入框，完全无法登录。按消息语义识别：
+    // 仅匹配 TOTP 关键字——'验证码' 过宽会命中邮箱验证码类文案
+    // （验证码不存在/已过期/已失效等，register/reset 路径）
+    const msg = (error && error.message) || ''
+    if (msg.includes('TOTP')) {
+        showTotpInput.value = true
+        errorMessage.value = msg
+        // TOTP 输错后清空上次的错误码：输入框 maxlength=6，
+        // 用户重输易漏删导致反复提交同一错误码，叠加后端失败计数有误锁风险
+        loginForm.totpCode = ''
+        // 将 setTimeout 纳入 pendingTimeouts 统一管理，防止组件卸载后内存泄漏
+        pendingTimeouts.push(setTimeout(() => {
+           if (totpInputRef.value) totpInputRef.value.focus()
+        }, TOTP_FOCUS_DELAY_MS))
+        return
+    }
     logger.error('登录请求失败:', error)
     errorMessage.value = '登录验证失败，请稍后重试'
   } finally {

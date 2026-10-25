@@ -37,7 +37,9 @@ public class CardPricing {
 
     @Column(nullable = false, length = 100)
     @NotBlank(message = "描述不能为空")
-    @Size(max = 500)
+    // 上限与列宽（100）对齐：此前 @Size(500) 放行了 101-500 字符的描述，
+    // 入库时 Data too long 变成 500 错误而非友好的校验提示
+    @Size(max = 100, message = "描述长度不能超过100个字符")
     private String description; // 规格描述(如"7天卡", "100次卡")
 
     @Column(name = "create_time")

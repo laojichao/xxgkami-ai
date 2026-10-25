@@ -28,6 +28,9 @@ import java.util.Map;
  * <p>基础路径：/user, /admin/users</p>
  */
 @RestController
+// 必须标注 @Validated：方法参数上的 @Min（如 /admin/users 的 page）
+// 仅对标注该注解的 Bean 生效，缺失时约束静默不校验
+@org.springframework.validation.annotation.Validated
 @Tag(name = "用户管理", description = "用户 CRUD、个人资料、密码修改")
 public class UserController {
     private final UserService userService;
@@ -130,7 +133,8 @@ public class UserController {
 
     @PostMapping("/user/avatar")
     public ResponseEntity<ApiResponse<Map<String, String>>> uploadAvatar(Authentication auth,
-                                                                           @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+                                                                           @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+                                                                           jakarta.servlet.http.HttpServletRequest request) {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("请选择要上传的文件"));
         }
@@ -165,7 +169,12 @@ public class UserController {
             java.nio.file.Files.createDirectories(uploadDir);
             java.nio.file.Path filePath = uploadDir.resolve(fileName);
             file.transferTo(filePath.toFile());
-            String url = "/uploads/avatars/" + fileName;
+            // URL 必须带 contextPath（/api）：静态资源映射只服务 /api/uploads/**，
+            // nginx 也按 /api/uploads/ 转发。历史缺陷：返回 "/uploads/..." 导致
+            // 前端 <img src> 请求打到前端静态路由（404），Docker/dev 双环境头像破图。
+            // 注意：存量用户 avatar 字段存的旧路径（无 /api 前缀）由 nginx 兼容规则兜底
+            String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+            String url = contextPath + "/uploads/avatars/" + fileName;
             userService.updateAvatar(user.getId(), url);
             return ResponseEntity.ok(ApiResponse.ok(Map.of("url", url)));
         } catch (Exception e) {
@@ -256,6 +265,11 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> updateUser(@PathVariable Integer id, @Valid @RequestBody UpdateUserRequest body) {
         // 管理员更新用户资料：跳过换绑邮箱验证码校验（管理员为受信操作方）
         userService.adminUpdateProfile(id, body.getNickname(), body.getEmail(), body.getPhone());
+        // 状态字段：null 表示未提交（不改动）；非 null 时按目标状态显式设置，
+        // 与 /admin/users/{id}/status 的幂等语义一致，避免翻转语义在并发下产生相反结果
+        if (body.getStatus() != null) {
+            userService.setUserStatus(id, body.getStatus());
+        }
         return ResponseEntity.ok(ApiResponse.ok("用户已更新"));
     }
 

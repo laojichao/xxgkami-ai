@@ -53,6 +53,8 @@ class AuthServiceTest {
     @Mock
     private org.xxg.backend.backend.filter.JwtRequestFilter jwtRequestFilter;
     @Mock
+    private SettingsService settingsService;
+    @Mock
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     @InjectMocks

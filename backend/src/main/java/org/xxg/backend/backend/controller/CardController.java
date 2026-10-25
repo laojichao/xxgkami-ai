@@ -28,6 +28,9 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/cards")
+// 必须标注 @Validated：方法参数上的 @Min/@Max（如 /trend 的 days）
+// 仅对标注该注解的 Bean 生效，缺失时约束静默不校验
+@org.springframework.validation.annotation.Validated
 @Tag(name = "卡密管理", description = "卡密生成、验证、查询、启停用、机器码解绑")
 public class CardController {
 
@@ -106,7 +109,8 @@ public class CardController {
         List<Card> cards = cardService.generateCardsBatch(
                 request.getCardType(), request.getDuration(), request.getTotalCount(),
                 request.getCreatorType(), request.getCreatorId(), request.getCreatorName(),
-                request.getVerifyMethod(), request.resolveDays(), request.getApiKeyId(), count);
+                request.getVerifyMethod(), request.resolveDays(), request.getApiKeyId(), count,
+                request.getAllowReverify(), request.getStackTimeIfSameMachine(), request.getAllowSelfUnbind());
         return ResponseEntity.ok(ApiResponse.ok("卡密生成成功，共 " + count + " 张", cards));
     }
 
@@ -157,7 +161,12 @@ public class CardController {
         if (status == 2) {
             cardService.disableCard(id);
         } else {
-            cardService.setCardStatus(id, status);
+            // 必须走 enableCard：setCardStatus 只改主表 status，不恢复
+            // CardStatus.isValid——暂停后"启用"的卡密会永久无法通过验证
+            // （verifyCard 校验 isValid=false 直接拒绝），而后台列表显示正常，
+            // 管理员无法察觉。enableCard 会同步恢复 isValid 并按使用记录
+            // 还原 0/1 状态，忽略传入的 status 值（由后端权威决定）
+            cardService.enableCard(id);
         }
         return ResponseEntity.ok(ApiResponse.ok("状态已更新"));
     }
@@ -170,7 +179,8 @@ public class CardController {
     }
 
     @GetMapping("/trend")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getUsageTrend(@RequestParam(defaultValue = "7") int days) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getUsageTrend(
+            @RequestParam(defaultValue = "7") @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(365) int days) {
         return ResponseEntity.ok(ApiResponse.ok(cardService.getUsageTrend(days)));
     }
 
@@ -185,15 +195,24 @@ public class CardController {
      * @return 当前用户的卡密列表（脱敏 DTO）
      */
     @GetMapping("/user/me")
-    public ResponseEntity<ApiResponse<List<CardResponse>>> getMyCards(org.springframework.security.core.Authentication auth) {
+    public ResponseEntity<ApiResponse<List<org.xxg.backend.backend.dto.UserCardResponse>>> getMyCards(
+            org.springframework.security.core.Authentication auth) {
         if (auth == null) {
             return ResponseEntity.status(401).body(ApiResponse.error("未登录"));
         }
         Integer userId = userRepository.findByUsername(auth.getName())
                 .map(org.xxg.backend.backend.entity.User::getId)
                 .orElseThrow(() -> new org.xxg.backend.backend.exception.BusinessException("当前账号未关联用户"));
-        List<Card> cards = cardService.getCardsByCreator("user", userId);
-        List<CardResponse> responses = cards.stream().map(CardResponse::fromEntity).collect(Collectors.toList());
+        // 归属查询需同时覆盖两类来源：后台分配（creatorType=user）
+        // 与订单支付生成（creatorType=system，creatorId=购买者）。
+        // 此前仅按 creatorType=user 过滤，订单购买的卡不出现在"我的卡密"
+        //
+        // 使用 UserCardResponse 而非 CardResponse：后者返回 encryptedKey/deviceId/
+        // creatorId 等内部字段，其类注释明确"普通用户接口不得使用此 DTO"
+        List<Card> cards = cardService.getOwnedCards(userId);
+        List<org.xxg.backend.backend.dto.UserCardResponse> responses = cards.stream()
+                .map(org.xxg.backend.backend.dto.UserCardResponse::fromEntity)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.ok(responses));
     }
 

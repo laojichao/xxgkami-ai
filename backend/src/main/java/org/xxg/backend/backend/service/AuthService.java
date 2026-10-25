@@ -59,6 +59,8 @@ public class AuthService {
     private final EmailService emailService;
     private final TotpService totpService;
     private final JwtRequestFilter jwtRequestFilter;
+    /** 读取站点地址配置（绑定二维码连接信息），与设置页的 site_url 配置项对应 */
+    private final SettingsService settingsService;
     /** 用于在独立事务中记录登录失败次数（避免被登录失败异常回滚） */
     private final TransactionTemplate transactionTemplate;
 
@@ -67,6 +69,7 @@ public class AuthService {
                        BindTokenRepository bindTokenRepository,
                        JwtUtil jwtUtil, PasswordUtil passwordUtil, EmailService emailService,
                        TotpService totpService, JwtRequestFilter jwtRequestFilter,
+                       SettingsService settingsService,
                        PlatformTransactionManager transactionManager) {
         this.adminRepository = adminRepository;
         this.userRepository = userRepository;
@@ -77,6 +80,7 @@ public class AuthService {
         this.emailService = emailService;
         this.totpService = totpService;
         this.jwtRequestFilter = jwtRequestFilter;
+        this.settingsService = settingsService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         // 必须使用 REQUIRES_NEW：TransactionTemplate 默认传播行为是 REQUIRED，
         // 会加入 adminLogin/userLogin 已有的外层事务，登录失败时抛出的异常
@@ -269,7 +273,24 @@ public class AuthService {
         user.setEmail(request.getEmail());
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
-        userRepository.save(user);
+        // 并发同名注册时两条请求都通过上面的 existsByUsername 预检，
+        // 一条成功另一条撞唯一索引——直接捕获转为与串行路径一致的友好提示，
+        // 而不是 GlobalExceptionHandler 统一转出的 409 "数据冲突"
+        saveUserHandlingConflicts(user);
+    }
+
+    /**
+     * 保存用户并将唯一键冲突（并发注册/创建绕过 exists 预检的场景）
+     * 转为与串行路径一致的友好业务提示。
+     * <p>注意：捕获后不可在同一事务内继续查询，直接抛出即可
+     * （冲突时事务已标记 rollback-only）。</p>
+     */
+    private void saveUserHandlingConflicts(User user) {
+        try {
+            userRepository.save(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new BusinessException("用户名或邮箱已被使用，请更换后重试");
+        }
     }
 
     /**
@@ -307,7 +328,7 @@ public class AuthService {
         user.setEmail(email);
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
-        userRepository.save(user);
+        saveUserHandlingConflicts(user);
     }
 
     /**
@@ -503,6 +524,9 @@ public class AuthService {
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
+        // 前端绑定二维码（UserSettingsPage）优先读取 siteUrl 构造服务器连接信息；
+        // 未配置时返回空串，前端回退到当前页面地址推导
+        result.put("siteUrl", settingsService.getValue("site_url", ""));
         return result;
     }
 

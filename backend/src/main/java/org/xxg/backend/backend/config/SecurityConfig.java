@@ -105,6 +105,22 @@ public class SecurityConfig {
             )
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // 历史缺陷：未配置 exceptionHandling 时，Spring Security 6 对未认证请求
+            // 返回 403 而非 401（且响应体为容器默认错误页）。前端/移动端均以 401
+            // 作为"token 过期需静默刷新"的信号（api.js response.status === 401 分支、
+            // ApiClient 的 Unauthorized 重试），403 语义会使 access_token 到期（1h）后
+            // 刷新流程永不触发，用户直接掉线且误报"权限不足"。
+            .exceptionHandling(e -> e
+                .authenticationEntryPoint((req, res, ex) -> {
+                    res.setStatus(401);
+                    res.setContentType("application/json;charset=UTF-8");
+                    res.getWriter().write("{\"success\":false,\"message\":\"未登录或登录已过期\"}");
+                })
+                .accessDeniedHandler((req, res, ex) -> {
+                    res.setStatus(403);
+                    res.setContentType("application/json;charset=UTF-8");
+                    res.getWriter().write("{\"success\":false,\"message\":\"权限不足\"}");
+                }))
             .authorizeHttpRequests(auth -> auth
                 // === 公开接口 ===
                 .requestMatchers(
@@ -114,6 +130,11 @@ public class SecurityConfig {
                     "/auth/bind/validate", "/auth/refresh",
                     "/auth/oauth/state", "/auth/oauth/set-cookies",
                     "/auth/totp/disable-by-recovery",
+                    // 登出必须放行：token 已过期时该接口落在 anyRequest().authenticated()
+                    // 会返回 401，客户端无法清除本地 httpOnly Cookie，陷入
+                    // "登不出去"死局。控制器内部已对 auth==null 做了完整处理（跳过
+                    // 服务端 token 清理，仅清除 Cookie），公开访问无安全影响
+                    "/auth/logout",
                     "/public/**",
                     "/payment/notify", "/payment/return",
                     "/system/health", "/error",

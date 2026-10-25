@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用主题：原引用 @style/Theme.Material3.DayNight.NoActionBar，但该样式
+  定义在 com.google.android.material（MDC）库，项目未声明该依赖 → 资源链接
+  失败（AAPT2 error: resource style/Theme.Material3.DayNight.NoActionBar not found）。
+  本项目 UI 全部为 Jetpack Compose，XML 主题只需提供 ComposeActivity 的宿主
+  Theme（无 ActionBar 的透壳），Material 组件由 Compose 层渲染。
+-->
+<resources>
+    <style name="Theme.XXGKami" parent="android:Theme.Material.NoActionBar">
+        <!-- Compose 负责状态栏/导航栏配色（enableEdgeToEdge），此处保持透壳 -->
+    </style>
+</resources>

@@ -150,6 +150,16 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理非法参数异常（如分页 page<0 / size<=0 时 PageRequest 抛出）。
+     * <p>此前落入兜底 handler 返回 500，把客户端参数错误误报为服务端故障。</p>
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        log.debug("Illegal argument: {}", e.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error("请求参数无效"));
+    }
+
+    /**
      * 兜底异常处理器，捕获所有未处理的异常
      * 记录错误日志，返回500通用错误信息，避免泄露内部细节
      */

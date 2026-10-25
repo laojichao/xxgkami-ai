@@ -112,6 +112,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { parseBackendDate } from '../../utils/parseDate.js'
 
 /**
  * CardCodesDialog 组件
@@ -168,7 +169,7 @@ const getCardCodeStatusText = (status) => {
 /** 格式化日期 */
 const formatDate = (date) => {
   if (!date) return '-'
-  return new Date(date).toLocaleString()
+  return parseBackendDate(date).toLocaleString()
 }
 </script>
 

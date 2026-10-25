@@ -132,6 +132,11 @@ public class RequestMonitorFilter extends OncePerRequestFilter {
      * 获取客户端真实 IP 地址。
      * <p>当请求来自可信代理时，从 X-Forwarded-For 头部提取真实客户端 IP；
      * 否则使用 remoteAddr，防止攻击者通过伪造头部绕过 IP 黑名单。</p>
+     * <p>XFF 解析采用"自右向左取第一个非可信代理 IP"（与 RateLimitFilter 策略一致）：
+     * XFF 追加语义为 {@code client, proxy1, proxy2}，右侧由可信代理逐跳追加、
+     * 左侧可被客户端任意伪造。若取第一个值，攻击者直连 nginx 时自带
+     * {@code X-Forwarded-For: <随机IP>} 即可伪造 IP 黑名单判定与访问日志，
+     * 使黑名单封禁与日志审计同时失效。</p>
      *
      * @param request HTTP 请求
      * @return 客户端 IP 地址
@@ -141,9 +146,14 @@ public class RequestMonitorFilter extends OncePerRequestFilter {
         if (trustedProxies.contains(remoteAddr)) {
             String xff = request.getHeader("X-Forwarded-For");
             if (xff != null && !xff.isEmpty()) {
-                String clientIp = xff.split(",")[0].trim();
-                if (!clientIp.isEmpty()) {
-                    return clientIp;
+                String[] hops = xff.split(",");
+                for (int i = hops.length - 1; i >= 0; i--) {
+                    String hop = hops[i].trim();
+                    if (hop.isEmpty()) continue;
+                    // 跳过可信代理追加的每一跳，第一个非可信值即真实客户端 IP
+                    if (!trustedProxies.contains(hop)) {
+                        return hop;
+                    }
                 }
             }
             String xRealIp = request.getHeader("X-Real-IP");

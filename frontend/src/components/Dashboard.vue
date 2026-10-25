@@ -50,6 +50,7 @@
         @delete-key="handleDeleteKey"
         @toggle-key-status="handleToggleKeyStatus"
         @update-key="handleUpdateKey"
+        @unbind-machine-code="handleUnbindMachineCode"
       />
 
       <!-- 定价管理页面 -->
@@ -103,6 +104,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { cardApi, statsApi, publicApi, settingsApi, maintenanceApi } from '../services/api.js'
+import { parseBackendDate } from '../utils/parseDate.js'
 import { ElMessage } from 'element-plus'
 import NavigationBar from './NavigationBar.vue'
 import logger from '../utils/logger'
@@ -224,7 +226,7 @@ const handleTabChange = (tab, section) => {
 }
 
 const formatDate = (timestamp) => {
-  return new Date(timestamp).toLocaleString('zh-CN')
+  return parseBackendDate(timestamp).toLocaleString('zh-CN')
 }
 
 const handleCreateKeys = async (keyData) => {
@@ -321,6 +323,23 @@ const handleUpdateKey = async (keyData) => {
   }
 }
 
+/** 编辑弹窗"重置机器码"：后端 updateCard 不处理 machineCode，
+ *  必须显式调 PUT /cards/{id}/unbind 才真正解绑 */
+const handleUnbindMachineCode = async (cardId) => {
+  try {
+    const result = await cardApi.unbindCard(cardId)
+    if (result.success) {
+      ElMessage.success('机器码已解绑')
+      await loadKeys()
+    } else {
+      ElMessage.error(result.message || '解绑失败')
+    }
+  } catch (error) {
+    logger.error('解绑机器码失败:', error)
+    ElMessage.error(error.message || '解绑机器码失败')
+  }
+}
+
 const handleToggleKeyStatus = async ({ id, status }) => {
   try {
     const result = await cardApi.updateAdminStatus(id, status)
@@ -383,12 +402,10 @@ const loadKeys = async () => {
 }
 
 const handleSaveSettings = async (settingsData) => {
-  try {
-    await settingsApi.saveSettings(settingsData)
-    ElMessage.success('设置已保存')
-  } catch (error) {
-    ElMessage.error('保存失败: ' + error.message)
-  }
+  // 设置保存已由 SettingsPage 内部完成（emit 前已 await saveSettings 成功），
+  // 此前父组件二次提交导致每次保存发出 2 次 POST、弹 2 次成功提示、数据库双写。
+  // 父组件仅记录日志，不再重复调用保存接口
+  logger.info('设置已由设置页保存:', Object.keys(settingsData || {}).length, '项')
 }
 
 const handleClearCache = async () => {

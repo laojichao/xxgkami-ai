@@ -132,17 +132,34 @@ async function query() {
   }
 }
 
-/** 执行设备解绑操作（需用户二次确认） */
+/** 执行设备解绑操作（需用户提供当前绑定的机器码并二次确认） */
 async function unbind() {
   if (!canUnbind.value) return
   const key = cardKeyInput.value.trim()
+  // 后端要求提供与当前绑定值一致的机器码（绑定值本身即凭据），
+  // 仅凭卡密明文解绑会被拒绝，必须让用户输入
+  let machineCode = ''
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '为防止他人仅凭卡密盗解绑设备，请输入该卡密当前绑定的完整机器码（即查询结果中脱敏显示对应的原始值）',
+      '验证机器码',
+      {
+        confirmButtonText: '确认解绑',
+        cancelButtonText: '取消',
+        inputPlaceholder: '当前绑定的机器码',
+        inputValidator: (v) => (v && v.trim() ? true : '机器码不能为空'),
+        type: 'warning'
+      }
+    )
+    machineCode = value.trim()
+  } catch { return }
   try {
     await ElMessageBox.confirm('确定要解绑当前设备吗？解绑后可在新设备上重新绑定。', '确认解绑', { type: 'warning' })
   } catch { return }
   loadingUnbind.value = true
   errorMsg.value = ''
   try {
-    const res = await cardApi.publicMachineUnbind(key)
+    const res = await cardApi.publicMachineUnbind(key, machineCode)
     if (res.success) {
       ElMessage.success(res.message || '解绑成功')
       await query()

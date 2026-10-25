@@ -27,6 +27,16 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
     Optional<Card> findByEncryptedKey(String encryptedKey);
     /** 根据创建者类型和创建者ID查询卡密列表 */
     List<Card> findByCreatorTypeAndCreatorId(Card.CreatorType creatorType, Integer creatorId);
+
+    /**
+     * 查询归属指定用户的全部卡密：后台手动分配（creatorType=user）
+     * 与订单支付生成（creatorType=system, creatorId=购买者）。
+     * <p>历史缺陷：仅按 creatorType=user 过滤时，订单生成的卡
+     * （creatorType=system）不出现在"我的卡密"中。</p>
+     */
+    @Query("SELECT c FROM Card c WHERE (c.creatorType = org.xxg.backend.backend.entity.Card$CreatorType.user AND c.creatorId = :userId) " +
+           "OR (c.creatorType = org.xxg.backend.backend.entity.Card$CreatorType.system AND c.creatorId = :userId)")
+    List<Card> findOwnedByUser(@Param("userId") Integer userId);
     /** 根据创建者类型查询卡密列表（不限创建者ID） */
     List<Card> findByCreatorType(Card.CreatorType creatorType);
     /** 根据创建者类型和创建者ID分页查询卡密 */

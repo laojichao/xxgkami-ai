@@ -128,12 +128,14 @@ public class SettingsController {
 
     @PostMapping("/save")
     public ResponseEntity<ApiResponse<Void>> saveSettings(@RequestBody Map<String, String> settings) {
-        // 安全修复：限制配置键和值的长度，防止超大请求导致内存或数据库问题
+        // 安全修复：限制配置键和值的长度，防止超大请求导致内存或数据库问题。
+        // 键上限 50 与 Setting.name 列宽（length=50）对齐——校验放宽到 100 时，
+        // 51-100 字符的键会通过校验后在入库阶段抛 Data too long（500 而非业务提示）
         for (Map.Entry<String, String> entry : settings.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (key == null || key.length() > 100) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("配置键长度不能超过100个字符"));
+            if (key == null || key.length() > 50) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("配置键长度不能超过50个字符"));
             }
             if (value != null && value.length() > 10000) {
                 return ResponseEntity.badRequest().body(ApiResponse.error("配置值长度不能超过10000个字符: " + key));
@@ -159,8 +161,14 @@ public class SettingsController {
 
     @PostMapping("/email/test")
     public ResponseEntity<ApiResponse<Void>> sendTestEmail(@RequestBody Map<String, String> body) {
+        String to = body.get("to");
+        // 收件地址格式校验：避免把测试邮件发向非法地址（该接口 ADMIN-only，
+        // 但仍做输入校验兜底，与 NotificationPage 前端校验对齐）
+        if (to == null || to.isBlank() || !to.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("收件邮箱格式不正确"));
+        }
         try {
-            emailService.sendVerificationCode(body.get("to"), "123456", "test");
+            emailService.sendVerificationCode(to, "123456", "test");
             return ResponseEntity.ok(ApiResponse.ok("测试邮件已发送"));
         } catch (Exception e) {
             return ResponseEntity.ok(ApiResponse.error("发送失败，请检查邮件配置"));

@@ -39,7 +39,7 @@
             <option value="completed">已完成</option>
             <option value="pending">待处理</option>
             <option value="failed">已失败</option>
-            <option value="refunded">已退款</option>
+            <option value="cancelled">已取消</option>
           </select>
         </div>
         
@@ -484,7 +484,7 @@ const loadStats = async () => {
       stats.totalOrders = response.data.totalOrders || 0
       stats.completedOrders = response.data.completedOrders || 0
       stats.pendingOrders = response.data.pendingOrders || 0
-      // 收入统计暂由后端返回，如后端未提供则保持默认值
+      // 已完成订单总收入（后端 /orders/stats 返回 totalRevenue）
       if (response.data.totalRevenue !== undefined) {
         stats.totalRevenue = Number(response.data.totalRevenue).toFixed(2)
       }
@@ -615,7 +615,7 @@ const getStatusClass = (status) => {
     completed: 'status-completed',
     pending: 'status-pending',
     failed: 'status-failed',
-    refunded: 'status-refunded'
+    cancelled: 'status-cancelled'
   }
   return statusMap[status] || 'status-unknown'
 }
@@ -626,7 +626,7 @@ const getStatusText = (status) => {
     completed: '已完成',
     pending: '待处理',
     failed: '已失败',
-    refunded: '已退款'
+    cancelled: '已取消'
   }
   return statusMap[status] || '未知'
 }
@@ -1065,7 +1065,7 @@ onMounted(() => {
   color: #7f1d1d;
 }
 
-.status-refunded {
+.status-cancelled {
   background: #e0f2fe;
   color: #0c4a6e;
 }

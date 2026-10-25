@@ -721,6 +721,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { userProfileApi, cardApi, pricingApi, orderApi, settingsApi, paymentApi, authApi } from '../services/api.js'
+import { parseBackendDate } from '../utils/parseDate.js'
 import UserSettingsPage from './UserSettingsPage.vue'
 import logger from '../utils/logger'
 
@@ -1050,7 +1051,9 @@ const handleAvatarUpload = async (file) => {
         const result = await userProfileApi.uploadAvatar(file.raw);
         if (result.success) {
             ElMessage.success('头像上传成功');
-            localUserInfo.avatar = result.url;
+            // 后端返回 {success, message, data:{url}}——此前取顶层 result.url
+            // 恒为 undefined，上传成功但页面不更新，用户误以为失败重复上传
+            localUserInfo.avatar = result.data?.url || localUserInfo.avatar;
         } else {
             ElMessage.error(result.message || '头像上传失败');
         }
@@ -1111,7 +1114,7 @@ const fetchOrders = async () => {
                     status: '成功',
                     remark: '正常使用'
                 }))
-                .sort((a, b) => new Date(b.useTime) - new Date(a.useTime));
+                .sort((a, b) => parseBackendDate(b.useTime) - parseBackendDate(a.useTime));
 
             stats.totalCards = cardsResult.data.length;
             stats.usedCards = usedCardsList.length;
@@ -1121,7 +1124,7 @@ const fetchOrders = async () => {
             // 真正的过期判定基于 expireTime 是否早于当前时间。
             stats.expiredCards = cardsResult.data.filter(card => {
                 const expire = card.expireTime || card.expire_time;
-                return expire != null && new Date(expire).getTime() < Date.now();
+                return expire != null && parseBackendDate(expire).getTime() < Date.now();
             }).length;
 
             recentRecords.value = usageRecords.value.slice(0, RECENT_RECORDS_LIMIT);

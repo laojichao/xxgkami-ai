@@ -189,6 +189,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { monitorApi, statsApi } from '../services/api.js'
+import { parseBackendDate } from '../utils/parseDate.js'
 import logger from '../utils/logger'
 
 const props = defineProps({
@@ -632,7 +633,7 @@ const formatTime = (timeString) => {
   if (!timeString) return '未知'
 
   try {
-    const time = new Date(timeString)
+    const time = parseBackendDate(timeString)
     const now = new Date()
     const diff = now - time
 
