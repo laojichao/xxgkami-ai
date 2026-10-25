@@ -57,9 +57,19 @@ public class EmailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
         message.setTo(to);
-        message.setSubject("register".equals(type) ? "注册验证码" : "重置密码验证码");
+        message.setSubject(subjectFor(type));
         message.setText("您的验证码是: " + code + "\n有效期10分钟，请勿泄露给他人。");
         mailSender.send(message);
+    }
+
+    /** 按验证码用途映射邮件主题（bind=换绑邮箱） */
+    private String subjectFor(String type) {
+        return switch (type == null ? "" : type) {
+            case "register" -> "注册验证码";
+            case "reset" -> "重置密码验证码";
+            case "bind" -> "换绑邮箱验证码";
+            default -> "验证码";
+        };
     }
 
     /**

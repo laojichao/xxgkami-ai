@@ -136,7 +136,8 @@
     </div>
   </aside>
 
-  <!-- 管理员账号设置弹窗（修改用户名/邮箱/密码） -->
+  <!-- 管理员账号设置弹窗（仅邮箱：后端 /auth/admin/update 只消费 email 字段，
+       历史版本展示的用户名/密码输入框被后端静默丢弃，造成"已改密"的错误预期） -->
   <el-dialog
     v-model="showAdminModal"
     title="管理员账号设置"
@@ -145,14 +146,8 @@
     append-to-body
   >
     <el-form :model="adminForm" label-width="80px">
-      <el-form-item label="用户名">
-        <el-input v-model="adminForm.username" placeholder="请输入新用户名" />
-      </el-form-item>
       <el-form-item label="邮箱">
         <el-input v-model="adminForm.email" placeholder="请输入管理员邮箱" />
-      </el-form-item>
-      <el-form-item label="新密码">
-        <el-input v-model="adminForm.password" type="password" placeholder="留空则不修改" show-password />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -191,9 +186,7 @@ const showAdminModal = ref(false)
 const updating = ref(false)
 /** 管理员账号编辑表单 */
 const adminForm = reactive({
-  username: '',
-  email: '',
-  password: ''
+  email: ''
 })
 
 /** 切换侧边栏折叠/展开状态 */
@@ -222,26 +215,16 @@ const handleCommand = (command) => {
 
 /** 打开管理员账号设置弹窗，回填当前用户名和邮箱 */
 const openAdminModal = () => {
-  adminForm.username = props.userInfo?.username || ''
   adminForm.email = props.userInfo?.email || ''
-  adminForm.password = ''
   showAdminModal.value = true
 }
 
-/** 提交管理员账号更新请求，成功后强制重新登录 */
+/** 提交管理员账号更新请求，成功后强制重新登录（仅邮箱可改） */
 const updateAdminProfile = async () => {
-  if (!adminForm.username) {
-    ElMessage.warning('用户名不能为空')
-    return
-  }
-  
   try {
     updating.value = true
     const res = await authApi.updateAdmin({
-      id: props.userInfo.id,
-      username: adminForm.username,
-      email: adminForm.email,
-      password: adminForm.password
+      email: adminForm.email
     })
     
     if (res.success) {

@@ -64,6 +64,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { parseBackendDate } from '../../utils/parseDate.js'
 
 /**
  * UserManageDialog 组件
@@ -111,7 +112,7 @@ function handleAssign() {
 /** 格式化日期 */
 const formatDate = (date) => {
   if (!date) return '-'
-  return new Date(date).toLocaleString()
+  return parseBackendDate(date).toLocaleString()
 }
 </script>
 

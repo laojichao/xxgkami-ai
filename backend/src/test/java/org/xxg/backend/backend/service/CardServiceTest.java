@@ -163,7 +163,7 @@ class CardServiceTest {
     void generateCardsBatch_TimeCardWithoutDays_ThrowsException() {
         assertThrows(BusinessException.class,
                 () -> cardService.generateCardsBatch("time", 1440, null,
-                        "admin", 1, "admin", "web", null, null, 5));
+                        "admin", 1, "admin", "web", null, null, 5, null, null, null));
     }
 
     @Test

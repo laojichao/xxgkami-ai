@@ -32,6 +32,17 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
+    // 解绑结果反馈：此前 ViewModel 暴露了 unbindResult 但界面从不订阅，
+    // 解绑成功/失败都没有任何提示（失败时用户会误以为已成功）
+    val unbindResult by viewModel.unbindResult.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(unbindResult) {
+        unbindResult?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearUnbindResult()
+        }
+    }
 
     // 如果用户信息尚未加载（例如直接导航到此页面），先触发加载
     LaunchedEffect(Unit) {
@@ -53,7 +64,10 @@ fun MyCardsScreen(navController: NavController, viewModel: CardViewModel = viewM
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("我的卡密") }) }) { padding ->
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("我的卡密") }) },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
         when {
             isLoading && !isRefreshing -> {
                 Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -105,17 +119,35 @@ private fun CardList(cards: List<Card>, viewModel: CardViewModel) {
         }
     }
 
-    // 解绑确认对话框
+    // 解绑确认对话框：服务端要求提供与绑定值一致的机器码（绑定值即凭据）
     unbindTarget?.let { card ->
+        var machineInput by remember(card.id) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { unbindTarget = null },
             title = { Text("解绑设备") },
-            text = { Text("确定要解绑卡密 ${card.cardKey ?: ""} 的设备绑定吗？解绑后可在新设备上使用。") },
+            text = {
+                Column {
+                    Text("解绑卡密 ${card.cardKey ?: ""} 需验证当前绑定的机器码，解绑后可在新设备上使用。")
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = machineInput,
+                        onValueChange = { machineInput = it },
+                        label = { Text("当前绑定的机器码") },
+                        singleLine = true
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    card.cardKey?.let { key -> viewModel.unbindMachineCode(key) }
-                    unbindTarget = null
-                }) { Text("确认解绑") }
+                TextButton(
+                    onClick = {
+                        val machine = machineInput.trim()
+                        if (machine.isNotEmpty()) {
+                            card.cardKey?.let { key -> viewModel.unbindMachineCode(key, machine) }
+                            unbindTarget = null
+                        }
+                    },
+                    enabled = machineInput.isNotBlank()
+                ) { Text("确认解绑") }
             },
             dismissButton = {
                 TextButton(onClick = { unbindTarget = null }) { Text("取消") }

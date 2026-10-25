@@ -14,7 +14,7 @@ public class EmailCodeRequest {
     @NotBlank(message = "邮箱不能为空")
     @Email(message = "邮箱格式不正确")
     private String email;
-    /** 验证码用途类型，如 register/reset，默认 register */
-    @Pattern(regexp = "^(register|reset)$", message = "type仅支持register或reset")
+    /** 验证码用途类型：register=注册、reset=重置密码、bind=换绑邮箱，默认 register */
+    @Pattern(regexp = "^(register|reset|bind)$", message = "type仅支持register、reset或bind")
     private String type = "register";
 }

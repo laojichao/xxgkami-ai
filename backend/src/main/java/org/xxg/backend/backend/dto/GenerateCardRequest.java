@@ -41,6 +41,16 @@ public class GenerateCardRequest {
     /** 关联的API密钥ID */
     private Integer apiKeyId;
 
+    // 以下三个开关此前不在 DTO 中：前端生成弹窗提交后 Jackson 静默丢弃，
+    // 新卡一律取实体默认值（allowReverify=true/stackTime=false/allowSelfUnbind=false），
+    // 导致"允许重复验证/同机续期/允许自助解绑"三个开关全部无效
+    /** 是否允许重复验证（null 取实体默认 true） */
+    private Boolean allowReverify;
+    /** 同机器码重复使用时是否叠加时长（null 取实体默认 false） */
+    private Boolean stackTimeIfSameMachine;
+    /** 是否允许用户自行解绑设备（null 取实体默认 false） */
+    private Boolean allowSelfUnbind;
+
     /** 批量生成数量 */
     @Min(value = 1, message = "生成数量必须大于0")
     private Integer count = 1;

@@ -117,11 +117,15 @@ public class SettingsService {
             setting.setName(name);
             setting.setValue(value);
             toSave.add(setting);
-            // 同步更新缓存
-            settingsCache.put(name, value);
         }
 
         settingRepository.saveAll(toSave);
+        // 缓存写入必须在 saveAll 成功之后：此前先写缓存再落库，
+        // saveAll 抛异常（如唯一索引冲突转 409）时缓存里已写入
+        // 数据库中并不存在的值，且无自动纠正路径
+        for (Map.Entry<String, String> entry : settings.entrySet()) {
+            settingsCache.put(entry.getKey(), entry.getValue());
+        }
     }
 
     /**
@@ -143,14 +147,16 @@ public class SettingsService {
      * 定时刷新配置缓存，每 5 分钟执行一次。
      * <p>确保多实例部署时配置变更能及时生效，
      * 即使管理员未手动调用 /settings/refresh-cache 接口。</p>
+     * <p>历史缺陷：此前仅在 cacheLoaded=true 时执行，而该标记只在
+     * getAllSettings/refreshCache 被调用后置位——实例启动后从未访问过
+     * /settings/all 时，定时刷新永远不执行，跨实例的配置变更在本实例永久陈旧
+     * （支付等关键键会一直用旧值）。</p>
      */
     @Scheduled(fixedRate = 300000) // 每5分钟执行一次
     public void scheduledRefreshCache() {
         try {
-            if (cacheLoaded) {
-                refreshCache();
-                log.debug("配置缓存定时刷新完成");
-            }
+            refreshCache();
+            log.debug("配置缓存定时刷新完成");
         } catch (Exception e) {
             log.warn("配置缓存定时刷新失败: {}", e.getMessage());
         }

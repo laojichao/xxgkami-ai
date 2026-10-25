@@ -44,20 +44,25 @@ import java.util.concurrent.TimeUnit
  * - 调试构建可暂时留空 [CERT_PIN_SHA256] 以使用系统默认信任链
  */
 actual fun createPlatformEngine(host: String): HttpClientEngine? {
-    val engineConfig: OkHttpConfig.() -> Unit = {
-        // 仅当配置了真实证书指纹（非占位符且非空）时启用证书锁定
-        if (CERT_PIN_SHA256.isNotBlank() && CERT_PIN_SHA256 != PLACEHOLDER_PIN) {
-            val certificatePinner = CertificatePinner.Builder()
-                .add(host, "sha256/$CERT_PIN_SHA256")
-                .build()
-            certificatePinner(certificatePinner)
+    // ktor 2.3.x 的 OkHttp 引擎 API：OkHttpConfig 通过 config{} 块暴露底层
+    // OkHttpClient.Builder（此前使用的顶层 connectTimeout/readTimeout/
+    // writeTimeout 快捷方法与 OkHttpEngine.create(config) 工厂在 2.3.x 已变更，
+    // 按 2.3.13 实测 API 编写）
+    return OkHttpEngine {
+        config {
+            // 仅当配置了真实证书指纹（非占位符且非空）时启用证书锁定
+            if (CERT_PIN_SHA256.isNotBlank() && CERT_PIN_SHA256 != PLACEHOLDER_PIN) {
+                certificatePinner(
+                    CertificatePinner.Builder()
+                        .add(host, "sha256/$CERT_PIN_SHA256")
+                        .build()
+                )
+            }
+            connectTimeout(10, TimeUnit.SECONDS)
+            readTimeout(15, TimeUnit.SECONDS)
+            writeTimeout(15, TimeUnit.SECONDS)
         }
-        connectTimeout(10, TimeUnit.SECONDS)
-        readTimeout(15, TimeUnit.SECONDS)
-        writeTimeout(15, TimeUnit.SECONDS)
     }
-
-    return OkHttpEngine.create(engineConfig)
 }
 
 /**

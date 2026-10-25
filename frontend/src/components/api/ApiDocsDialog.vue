@@ -11,15 +11,14 @@
       <div class="modal-body docs-body">
         <div class="doc-section">
           <h4>1. 使用卡密接口</h4>
-          <p>通过 API 密钥和卡密，直接使用/核销卡密。</p>
+          <p>通过卡密与机器码直接使用/核销卡密（无需登录，接口有限流保护：30 次/分钟/IP）。</p>
 
           <div class="endpoint-box">
             <span class="method-badge post">POST</span>
-            <span class="method-badge get">GET</span>
-            <code class="url">/api/v1/use_card</code>
+            <code class="url">/api/cards/verify</code>
           </div>
 
-          <h5>请求参数</h5>
+          <h5>请求参数（JSON 请求体）</h5>
           <div class="table-container">
             <table class="params-table">
               <thead>
@@ -32,28 +31,22 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>api_key</td>
-                  <td>是</td>
-                  <td>String</td>
-                  <td>您的 API 密钥 (api_key)</td>
-                </tr>
-                <tr>
-                  <td>card_key</td>
+                  <td>cardKey</td>
                   <td>是</td>
                   <td>String</td>
                   <td>要使用的卡密</td>
                 </tr>
                 <tr>
-                  <td>machine_code</td>
-                  <td>否</td>
+                  <td>machineCode</td>
+                  <td>是</td>
                   <td>String</td>
-                  <td>机器码 (一机一码，首次使用时绑定)</td>
+                  <td>机器码（一机一码，首次使用时绑定；缺失将被拒绝）</td>
                 </tr>
                 <tr>
-                  <td>ip_address</td>
+                  <td>apiKeyId</td>
                   <td>否</td>
-                  <td>String</td>
-                  <td>客户端IP (若不传则自动获取请求IP)</td>
+                  <td>Integer</td>
+                  <td>关联的 API Key ID（用于触发回调通知）</td>
                 </tr>
               </tbody>
             </table>
@@ -62,9 +55,12 @@
           <h5>响应示例</h5>
           <pre class="code-block">
 {
-  "code": 200,
-  "message": "Card used successfully",
-  "success": true
+  "success": true,
+  "message": "验证成功",
+  "statusCode": 200,
+  "remaining_count": 99,
+  "remaining_time": 2592000,
+  "expire_time": "2026-11-24T15:00:00"
 }</pre>
         </div>
       </div>

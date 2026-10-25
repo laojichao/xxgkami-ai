@@ -38,6 +38,8 @@ public class UserService {
     private final AdminRepository adminRepository;
     private final PasswordUtil passwordUtil;
     private final JwtRequestFilter jwtRequestFilter;
+    /** 用于在独立事务中递增验证码尝试次数（避免被外层事务回滚） */
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     public UserService(UserRepository userRepository,
                        WalletRepository walletRepository,
@@ -48,7 +50,8 @@ public class UserService {
                        BindTokenRepository bindTokenRepository,
                        AdminRepository adminRepository,
                        PasswordUtil passwordUtil,
-                       JwtRequestFilter jwtRequestFilter) {
+                       JwtRequestFilter jwtRequestFilter,
+                       org.springframework.transaction.PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.walletRepository = walletRepository;
         this.walletTransactionRepository = walletTransactionRepository;
@@ -59,6 +62,11 @@ public class UserService {
         this.adminRepository = adminRepository;
         this.passwordUtil = passwordUtil;
         this.jwtRequestFilter = jwtRequestFilter;
+        // REQUIRES_NEW：换绑邮箱验证码验证失败时，外层 updateProfile 事务回滚，
+        // 但尝试计数必须独立提交，否则爆破限制不生效（与 AuthService 同款修复）
+        this.transactionTemplate = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     /**
@@ -157,6 +165,9 @@ public class UserService {
     /**
      * 校验换绑邮箱的验证码（type=bind）：存在、未过期、尝试次数未超限且匹配。
      * 验证通过后立即消费，防止同一验证码被重复使用。
+     * <p>尝试次数递增必须在独立事务中提交（与 AuthService.verifyEmailCode 一致）：
+     * 本方法的外层调用方（updateProfile）是 @Transactional，验证码错误时抛出的
+     * 异常会把同一事务内的计数更新一并回滚，导致爆破限制永远不生效。</p>
      */
     private void verifyEmailCodeForProfile(String email, String emailCode) {
         if (emailCode == null || emailCode.isBlank()) {
@@ -172,6 +183,9 @@ public class UserService {
             verificationCodeRepository.delete(vCode);
             throw new BusinessException("验证码已失效，请重新获取");
         }
+        // 独立事务提交尝试计数（REQUIRES_NEW），验证失败被回滚时计数仍然生效
+        transactionTemplate.executeWithoutResult(
+                status -> verificationCodeRepository.incrementAttempts(vCode.getId()));
         String inputHash = sha256Hex(emailCode);
         if (!java.security.MessageDigest.isEqual(
                 vCode.getCode().getBytes(java.nio.charset.StandardCharsets.UTF_8),
@@ -412,7 +426,13 @@ public class UserService {
         user.setStatus(true);
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
-        User saved = userRepository.save(user);
+        // 并发创建绕过 exists 预检时转友好提示，而非兜底 handler 的 409
+        User saved;
+        try {
+            saved = userRepository.save(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new BusinessException("用户名或邮箱已被使用");
+        }
         // 为新用户创建钱包
         Wallet wallet = new Wallet();
         wallet.setUserId(saved.getId());

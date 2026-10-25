@@ -50,4 +50,8 @@ public interface OrderRepository extends JpaRepository<Order, Integer>, JpaSpeci
     @Query("UPDATE Order o SET o.status = :newStatus, o.updateTime = :updateTime WHERE o.status = :oldStatus AND o.createTime < :expireTime")
     int batchCancelExpiredOrders(@Param("newStatus") String newStatus, @Param("updateTime") LocalDateTime updateTime,
                                  @Param("oldStatus") String oldStatus, @Param("expireTime") LocalDateTime expireTime);
+
+    /** 汇总指定状态订单的总金额（无匹配记录时 SUM 返回 null，由调用方兜底为 0） */
+    @Query("SELECT COALESCE(SUM(o.totalPrice), 0) FROM Order o WHERE o.status = :status")
+    java.math.BigDecimal sumTotalPriceByStatus(@Param("status") String status);
 }

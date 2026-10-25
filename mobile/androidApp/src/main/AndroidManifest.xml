@@ -6,7 +6,7 @@
     <application
         android:allowBackup="false"
         android:label="XXG卡密"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar"
+        android:theme="@style/Theme.XXGKami"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true">
         <activity

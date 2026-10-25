@@ -101,9 +101,12 @@ public class MaintenanceController {
      * 清理30天前的访问日志
      * <p>POST /maintenance/clear-logs</p>
      * <p>权限：管理员</p>
+     * <p>必须在事务中执行：deleteByCreateTimeBefore 是 @Modifying JPQL DELETE，
+     * 无事务上下文时 Spring Data 会抛 TransactionRequiredException，接口直接 500。</p>
      * @return 操作结果
      */
     @PostMapping("/clear-logs")
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<ApiResponse<Void>> clearLogs() {
         LocalDateTime expireTime = LocalDateTime.now().minusDays(30);
         int deleted = accessLogRepository.deleteByCreateTimeBefore(expireTime);

@@ -82,6 +82,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { parseBackendDate } from '../../utils/parseDate.js'
 
 /**
  * ApiKeyCard 组件
@@ -118,7 +119,7 @@ defineEmits([
 /** 格式化日期为本地字符串 */
 const formatDate = (date) => {
   if (!date) return '-'
-  return new Date(date).toLocaleString()
+  return parseBackendDate(date).toLocaleString()
 }
 </script>
 

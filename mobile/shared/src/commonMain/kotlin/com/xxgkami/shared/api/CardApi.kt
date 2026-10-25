@@ -60,23 +60,19 @@ class CardApi(private val client: ApiClient) {
     }
 
     /**
-     * 解绑卡密的机器码。
+     * 解绑卡密的机器码（自助解绑）。
      *
-     * 合并了原有的两个重载函数，通过 [machineCode] 参数区分行为：
-     * - 当 [machineCode] 非空时，走"需机器码验证"的解绑流程
-     * - 当 [machineCode] 为 null 时，走"自助解绑"流程（无需机器码验证）
+     * 后端要求同时提供与当前绑定值一致的 machine_code（绑定值本身即凭据，
+     * 仅凭卡密明文解绑会被服务端拒绝），因此 machineCode 为必填参数。
      *
      * @param cardKey 卡密字符串
-     * @param machineCode 要解绑的机器码，null 表示自助解绑（不验证机器码）
+     * @param machineCode 当前绑定的机器码（必填，须与绑定值一致）
      * @return 解绑结果响应
      */
-    suspend fun machineUnbind(cardKey: String, machineCode: String? = null): ApiResponse<Unit> {
+    suspend fun machineUnbind(cardKey: String, machineCode: String): ApiResponse<Unit> {
         val body = buildJsonObject {
             put("card_key", JsonPrimitive(cardKey))
-            // machineCode 为 null 时不传 machine_code 字段，服务端走自助解绑流程
-            if (machineCode != null) {
-                put("machine_code", JsonPrimitive(machineCode))
-            }
+            put("machine_code", JsonPrimitive(machineCode))
         }.toString()
         val response = client.post("/public/cards/machine-bind/unbind", body)
         return json.decodeFromString(ApiResponse.serializer(kotlinx.serialization.builtins.serializer<Unit>()), response)

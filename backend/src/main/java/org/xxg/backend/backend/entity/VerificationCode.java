@@ -22,7 +22,12 @@ public class VerificationCode {
     @Column(nullable = false, length = 100)
     private String email; // 接收验证码的邮箱地址
 
-    @Column(nullable = false, length = 10)
+    // 验证码内容（SHA-256 hex，64 字符）。历史缺陷：列宽 10 是明文 6 位码时代
+    // 的遗留，第四轮改为哈希入库后未同步加宽——MySQL 严格模式下发码接口
+    // 直接 Data too long 500，非严格模式静默截断导致验证码永远比对失败。
+    // 注意 ddl-auto=validate 不会自动改表，存量库需执行迁移 SQL：
+    // ALTER TABLE verification_codes MODIFY COLUMN code VARCHAR(64) NOT NULL;
+    @Column(nullable = false, length = 64)
     private String code; // 验证码内容
 
     @Column(nullable = false, length = 20)

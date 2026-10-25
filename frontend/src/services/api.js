@@ -14,8 +14,6 @@ const API_REQUEST_TIMEOUT_MS = 30000;
 const TOKEN_REFRESH_TIMEOUT_MS = 15000;
 /** 默认分页大小 */
 const DEFAULT_PAGE_SIZE = 10;
-/** 用户列表最大获取数量 */
-const MAX_USERS_FETCH_SIZE = 500;
 /** 钱包交易记录默认分页大小 */
 const DEFAULT_TRANSACTION_PAGE_SIZE = 20;
 /** 卡密使用趋势默认天数 */
@@ -364,16 +362,6 @@ export const authApi = {
   },
 
   /**
-   * 发送TOTP恢复验证码
-   */
-  async sendRecoveryCode(username) {
-    return await apiRequest('/auth/totp/recovery-code', {
-      method: 'POST',
-      body: JSON.stringify({ username })
-    });
-  },
-
-  /**
    * 通过恢复码禁用TOTP
    * 注意：后端字段名为 recoveryCode，使用 code 会导致参数为空而失败
    */
@@ -644,6 +632,18 @@ export const cardApi = {
   },
 
   /**
+   * 管理员：解绑机器码（PUT /cards/{id}/unbind）。
+   * <p>编辑弹窗的"重置机器码"按钮此前只把本地字段清空随 PUT /cards/admin/{id}
+   * 提交，但后端 updateCard 不处理 machineCode 字段——重置完全无效。
+   * 保存后须显式调用本接口才真正解绑。</p>
+   */
+  async unbindCard(cardId) {
+    return await apiRequest(`/cards/${cardId}/unbind`, {
+      method: 'PUT'
+    });
+  },
+
+  /**
    * 查询单个卡密详情（需要登录）
    */
   async queryCard(cardKey) {
@@ -662,11 +662,13 @@ export const cardApi = {
 
   /**
    * 公开页：解绑机器码与设备 ID（无需登录，须已绑定）
+   * <p>后端要求同时提供与当前绑定值一致的 machine_code（绑定值本身即凭据，
+   * 仅凭卡密明文解绑等于盗卡），缺失必被拒绝。</p>
    */
-  async publicMachineUnbind(cardKey) {
+  async publicMachineUnbind(cardKey, machineCode) {
     return await apiRequest('/public/cards/machine-bind/unbind', {
       method: 'POST',
-      body: JSON.stringify({ card_key: cardKey })
+      body: JSON.stringify({ card_key: cardKey, machine_code: machineCode })
     });
   }
 };
@@ -761,8 +763,13 @@ export const orderApi = {
   /**
    * 获取用户订单列表
    */
+  /**
+   * 获取用户订单列表。
+   * <p>后端默认分页 size=20，不传参数时"购买记录"最多显示 20 条。
+   * 此处带上 size=100（后端上限），老用户可看到全部近期订单。</p>
+   */
   async getOrders() {
-    return await apiRequest('/orders');
+    return await apiRequest('/orders?page=0&size=100');
   },
 
   /**
@@ -839,8 +846,25 @@ export const apiKeyApi = {
     });
   },
 
+  /**
+   * 获取所有用户（循环分页拉取全量）。
+   * <p>后端 /admin/users 有 size≤100 硬上限，此前单次请求 size=500
+   * 被截断到 100——用户数超百后"分配用户"弹窗看不到后面的用户。</p>
+   */
   async getAllUsers() {
-    return await apiRequest(`/admin/users?size=${MAX_USERS_FETCH_SIZE}`);
+    const pageSize = 100;
+    const maxPages = 50; // 防死循环上限（5000 用户，远超业务规模）
+    const allUsers = [];
+    let page = 0;
+    while (page < maxPages) {
+      const res = await apiRequest(`/admin/users?page=${page}&size=${pageSize}`);
+      if (!res.success || !res.data) break;
+      const content = Array.isArray(res.data) ? res.data : (res.data.content || []);
+      allUsers.push(...content);
+      if (content.length < pageSize) break;
+      page++;
+    }
+    return { success: true, data: allUsers };
   }
 };
 
@@ -926,10 +950,16 @@ export const userProfileApi = {
   /**
    * 绑定社交账号
    */
-  async bindSocial(token) {
+  /**
+   * 绑定社交账号。
+   * <p>后端 /user/social/bind 要求 {socialUid, socialType}（socialType 白名单
+   * qq/wx/wechat/alipay），历史上只传 {token} 会被 400 拒绝。
+   * OAuth 网关就位后应传网关回调给出的真实社交身份。</p>
+   */
+  async bindSocial(socialUid, socialType) {
     return await apiRequest('/user/social/bind', {
       method: 'POST',
-      body: JSON.stringify({ token })
+      body: JSON.stringify({ socialUid, socialType })
     });
   },
 

@@ -8,6 +8,10 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+// commonMain 中的 @Volatile 必须显式导入 kotlin.concurrent.Volatile——
+// 裸使用在 K2MetadataCompiler 对 stdlib-common 编译时报 unresolved reference，
+// 此前仓库从未成功编译过 shared 模块（问题报告只有 TaskSelectionException）
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,10 +72,27 @@ class ApiClient(baseUrl: String = "") {
     /** 互斥锁，防止多个并发请求同时触发 Token 刷新 */
     private val refreshMutex = Mutex()
 
+    /** 跨平台轻量日志（commonMain 无平台日志 API，输出到标准错误流） */
+    private fun logW(message: String) {
+        try {
+            println("[ApiClient] $message")
+        } catch (_: Exception) {
+            // 日志失败不影响主流程
+        }
+    }
+
+    /**
+     * 懒加载初始化锁。
+     * <p>注意：commonMain 不可使用 `synchronized(this)`（仅存在于 stdlib jvmMain，
+     * 元数据编译报 unresolved）。改用 Mutex + 非阻塞 tryLock 实现双检：
+     * 快路径无锁读，慢路径加锁后双检，初始化完成后永不再走慢路径。</p>
+     */
+    private val initMutex = Mutex()
+
     /** 获取 HTTP 客户端实例，线程安全地懒加载初始化 */
-    private fun httpClient(): HttpClient {
+    private suspend fun httpClient(): HttpClient {
         _httpClient?.let { return it }
-        synchronized(this) {
+        initMutex.withLock {
             _httpClient?.let { return it }
             val client = createHttpClient()
             _httpClient = client
@@ -172,17 +193,24 @@ class ApiClient(baseUrl: String = "") {
                             return@withLock true
                         }
                     }
+                    // 200 但业务失败：refresh token 明确失效（后端已删除/轮换），
+                    // 属于"确实该登出"
+                    clearTokens()
+                    onLogout?.invoke()
+                    return@withLock false
                 }
 
-                // Refresh failed - clear tokens
-                clearTokens()
-                onLogout?.invoke()
+                // 非 200（网络错误/5xx/超时）：无法证明 refresh token 失效，
+                // 只当本次刷新失败，不清空持久化 token（TokenStore 中的令牌保留，
+                // 下次启动或网络恢复后仍可继续用）——此前一律 clearTokens 导致
+                // 一次网络抖动就让用户彻底登出
+                logW("token refresh returned ${response.status}, keeping local tokens")
                 false
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                clearTokens()
-                onLogout?.invoke()
+                // 网络层异常（超时/DNS/连接失败）：同样不清 token
+                logW("token refresh network error, keeping local tokens: ${e.message}")
                 false
             }
         }
@@ -202,19 +230,24 @@ class ApiClient(baseUrl: String = "") {
      * @return 响应体字符串
      * @throws ClientRequestException 请求失败且无法通过刷新 Token 恢复时抛出
      */
-    private suspend fun executeWithRefresh(request: suspend () -> String, isIdempotent: Boolean): String {
+    private suspend fun executeWithRefresh(
+        request: suspend () -> String,
+        @Suppress("UNUSED_PARAMETER") isIdempotent: Boolean
+    ): String {
         // 首次尝试执行请求
         try {
             return request()
-        } catch (e: ClientRequestException) {
-            if (e.response.status == HttpStatusCode.Unauthorized) {
+        } catch (e: ApiHttpException) {
+            if (e.statusCode == 401) {
                 // 收到 401，尝试刷新 Token
                 val refreshed = tryRefreshToken()
                 if (refreshed) {
-                    // 仅对幂等请求（如 GET）自动重试，避免非幂等请求重复提交
-                    if (isIdempotent) {
-                        return request()
-                    }
+                    // 401 场景一律重试（含 POST/PUT/DELETE）：
+                    // 后端 JwtRequestFilter 在 Controller 之前返回 401，
+                    // 请求从未到达业务层、无副作用（/cards/use 的扣次数在
+                    // Service 事务内，被过滤器拦截时不可能执行），
+                    // 此前"非幂等不重试"使令牌过期后首次 POST 必然失败
+                    return request()
                 }
                 throw e
             }
@@ -223,7 +256,13 @@ class ApiClient(baseUrl: String = "") {
     }
 
     /**
-     * Check HTTP response status and throw ClientRequestException if not successful.
+     * Check HTTP response status and throw [ApiHttpException] if not successful.
+     *
+     * <p>携带已读取的响应体文本：ktor 的 [ClientRequestException] 的
+     * response 在 bodyAsText() 消费后无法二次读取（allowDoubleReceive=false），
+     * 上层 ErrorMapper 再读一次会抛 DoubleReceiveException 被吞，
+     * 导致后端业务错误文案（"次数已用尽"/"机器码不匹配"/"金额超限"）全部丢失。
+     * 自定义异常把文本随异常携带，彻底规避二次读取。</p>
      */
     private suspend fun checkResponseStatus(response: HttpResponse) {
         if (!response.status.isSuccess()) {
@@ -233,7 +272,7 @@ class ApiClient(baseUrl: String = "") {
             } catch (_: Exception) {
                 ""
             }
-            throw ClientRequestException(response, bodyText)
+            throw ApiHttpException(response.status.value, bodyText)
         }
     }
 
@@ -343,3 +382,20 @@ class ApiClient(baseUrl: String = "") {
         private const val X_API_VERSION = "X-API-Version"
     }
 }
+
+/**
+ * HTTP 错误异常（携带状态码与已读取的响应体文本）。
+ *
+ * <p>取代 ktor 的 [ClientRequestException]：其 response 对象在 bodyAsText()
+ * 消费后无法二次读取（ktor `allowDoubleReceive=false` 会抛
+ * DoubleReceiveException），上层 ErrorMapper 若再读一次 body 只能拿到异常，
+ * 后端返回的业务错误文案（"次数已用尽"/"机器码不匹配"/"金额超限"等）全部丢失。
+ * 本类在 checkResponseStatus 首次读取时就把文本存下来，随异常传递。</p>
+ *
+ * @property statusCode HTTP 状态码
+ * @property bodyText 已读取的响应体原文（解析失败时为空串）
+ */
+class ApiHttpException(
+    val statusCode: Int,
+    val bodyText: String
+) : Exception("HTTP $statusCode: $bodyText")

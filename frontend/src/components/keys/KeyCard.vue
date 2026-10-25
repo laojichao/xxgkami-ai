@@ -47,15 +47,15 @@
           编辑
         </button>
         <button
-          v-if="keyData.status === 0 || keyData.status === 2"
+          v-if="keyData.status === 2"
           class="btn-success btn-sm"
-          @click="$emit('toggle-status', { id: keyData.id, status: 1 })"
+          @click="$emit('toggle-status', { id: keyData.id, status: resumeStatus })"
         >
           <i class="fas fa-play"></i>
           启用
         </button>
         <button
-          v-if="keyData.status === 1"
+          v-if="keyData.status === 0 || keyData.status === 1"
           class="btn-warning btn-sm"
           @click="$emit('toggle-status', { id: keyData.id, status: 2 })"
         >
@@ -73,6 +73,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { parseBackendDate } from '../../utils/parseDate.js'
 
 const props = defineProps({
   keyData: { type: Object, required: true },
@@ -80,6 +81,12 @@ const props = defineProps({
 })
 
 defineEmits(['copy', 'edit', 'toggle-status', 'delete'])
+
+/**
+ * 停用卡"启用"后应恢复到的状态：有使用记录恢复为已使用(1)，否则未使用(0)。
+ * 后端 enableCard 按该语义恢复，前端固定传 1 会把从未使用的卡标成已使用。
+ */
+const resumeStatus = computed(() => (props.keyData.useTime || props.keyData.use_time ? 1 : 0))
 
 const showKey = ref(false)
 
@@ -99,7 +106,7 @@ const pad2 = (n) => String(n).padStart(2, '0')
 const parseExpireTimeMs = (item) => {
   const raw = item?.expireTime || item?.expire_time
   if (raw == null || raw === '') return null
-  const t = new Date(raw).getTime()
+  const t = parseBackendDate(raw).getTime()
   return Number.isFinite(t) ? t : null
 }
 
@@ -126,7 +133,7 @@ const formatTimeCardRemaining = (item) => {
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
-  return new Date(dateString).toLocaleString('zh-CN')
+  return parseBackendDate(dateString).toLocaleString('zh-CN')
 }
 
 const getCardTypeText = (cardType) => {

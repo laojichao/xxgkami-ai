@@ -51,8 +51,10 @@ public class BackupService {
             throw new BusinessException("备份目录路径不合法");
         }
 
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        String filename = "backup_" + timestamp + ".sql";
+        // 文件名含毫秒+短随机后缀：此前秒级时间戳下，管理员双击触发两次备份
+        // 时两个 mysqldump 进程以截断方式写同一文件，产出交错损坏的 SQL
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS"));
+        String filename = "backup_" + timestamp + "_" + Integer.toHexString(new java.security.SecureRandom().nextInt(0xFFFF)) + ".sql";
         new File(backupDir).mkdirs();
 
         // Validate dbUser to prevent command injection
@@ -65,8 +67,18 @@ public class BackupService {
         if (dbName == null || !dbName.matches("^[a-zA-Z0-9_\\-\\.]+$")) {
             throw new Exception("从数据库 URL 中提取的数据库名称无效: " + dbName);
         }
-        ProcessBuilder pb = new ProcessBuilder(
-            "mysqldump", "--user=" + dbUser, dbName);
+        // 必须显式传 --host/--port：mysqldump 默认连 localhost:3306，而
+        // Docker 部署时 DB_URL 指向 db 容器（compose: jdbc:mysql://db:3306/kami），
+        // 缺 --host 会让 /backup 在容器环境下必然失败
+        String dbHost = extractDbHost(dbUrl);
+        String dbPort = extractDbPort(dbUrl);
+        java.util.List<String> cmd = new java.util.ArrayList<>();
+        cmd.add("mysqldump");
+        cmd.add("--user=" + dbUser);
+        cmd.add("--host=" + dbHost);
+        cmd.add("--port=" + dbPort);
+        cmd.add(dbName);
+        ProcessBuilder pb = new ProcessBuilder(cmd);
         if (!dbPass.isEmpty()) pb.environment().put("MYSQL_PWD", dbPass);
         File backupFile = new File(backupDir + "/" + filename);
         pb.redirectOutput(backupFile);
@@ -81,7 +93,18 @@ public class BackupService {
                 throw new BusinessException("数据库备份超时（10分钟），已终止备份进程");
             }
             int exitCode = process.exitValue();
-            if (exitCode != 0) throw new Exception("数据库备份失败，退出码: " + exitCode);
+            if (exitCode != 0) {
+                // 删除失败的半成品 .sql：空/截断文件与成功备份同目录同命名规则，
+                // 按文件名匹配的恢复脚本会误取（.err 保留供排查）
+                try {
+                    java.nio.file.Files.deleteIfExists(backupFile.toPath());
+                } catch (Exception ignore) {
+                    // 删除失败不影响错误上报
+                }
+                // BusinessException 而非裸 Exception：走兜底 handler 会变 500
+                // "服务器内部错误"，退出码等诊断信息对管理员不可见
+                throw new BusinessException("数据库备份失败，退出码: " + exitCode + "（详见同目录 .err 文件）");
+            }
         } finally {
             process.destroy();
         }
@@ -94,6 +117,17 @@ public class BackupService {
             }
         } catch (Exception e) {
             // Windows 等不支持 POSIX 权限的系统忽略此错误
+        }
+        // 清理空的 .err 文件：备份成功时 stderr 重定向文件通常为空，
+        // 残留会在备份卷中随时间累积（仅保留失败场景的 stderr 供排查）
+        try {
+            File errFile = new File(backupDir + "/" + filename + ".err");
+            if (errFile.exists() && errFile.length() == 0) {
+                //noinspection ResultOfMethodCallIgnored
+                errFile.delete();
+            }
+        } catch (Exception ignore) {
+            // 清理失败不影响备份结果
         }
         // 仅返回文件名，不暴露服务器完整路径
         return filename;
@@ -115,5 +149,33 @@ public class BackupService {
             return matcher.group(1);
         }
         return "";
+    }
+
+    /**
+     * 从 JDBC URL 提取数据库主机，解析失败回退 localhost。
+     * <p>仅提取主机名（[a-zA-Z0-9.\-] 字符集）供 ProcessBuilder 参数使用，
+     * 防止命令注入；mysqldump 参数以 --host=value 形式传递，不经过 shell。</p>
+     */
+    private String extractDbHost(String url) {
+        if (url == null) return "localhost";
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("jdbc:mysql://([a-zA-Z0-9.\\-]+)").matcher(url);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return "localhost";
+    }
+
+    /**
+     * 从 JDBC URL 提取数据库端口，未显式指定时回退 MySQL 默认 3306。
+     */
+    private String extractDbPort(String url) {
+        if (url == null) return "3306";
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("jdbc:mysql://[a-zA-Z0-9.\\-]+:(\\d+)").matcher(url);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return "3306";
     }
 }

@@ -179,7 +179,8 @@ public class CardService {
     @Transactional
     public List<Card> generateCardsBatch(String cardType, Integer duration, Integer totalCount,
                                           String creatorType, Integer creatorId, String creatorName,
-                                          String verifyMethod, Integer days, Integer apiKeyId, int count) {
+                                          String verifyMethod, Integer days, Integer apiKeyId, int count,
+                                          Boolean allowReverify, Boolean stackTimeIfSameMachine, Boolean allowSelfUnbind) {
         // 校验枚举参数
         Card.CardType type;
         Card.CreatorType creator;
@@ -257,11 +258,21 @@ public class CardService {
                     }
                 }
                 card.setEncryptionType("advanced");
+                // 生成弹窗的三个开关（null 时保留实体默认值）：
+                // 此前 DTO 缺字段导致前端提交被静默丢弃，"允许重复验证/
+                // 同机续期/允许自助解绑"全部无效
+                if (allowReverify != null) card.setAllowReverify(allowReverify);
+                if (stackTimeIfSameMachine != null) card.setStackTimeIfSameMachine(stackTimeIfSameMachine);
+                if (allowSelfUnbind != null) card.setAllowSelfUnbind(allowSelfUnbind);
                 // 同步写入过期时间，与管理后台展示保持一致
                 if (type == Card.CardType.time && days != null) {
                     card.setExpireTime(LocalDateTime.now().plusDays(days));
                 }
                 cards.add(card);
+            } catch (BusinessException e) {
+                // 业务异常直接透传（如"无效的验证方式: xxx"），
+                // 泛化改写会让管理员无法定位是哪个参数错
+                throw e;
             } catch (Exception e) {
                 log.error("批量生成卡密失败: {}", e.getMessage(), e);
                 throw new BusinessException("卡密生成失败，请联系管理员");
@@ -347,7 +358,7 @@ public class CardService {
         }
 
         // 7. 更新卡密使用状态并绑定机器码
-        finalizeCardUsage(card, machineCode, clientIp);
+        finalizeCardUsage(card, machineCode, clientIp, cardStatus);
 
         result.put("success", true);
         result.put("message", "验证成功");
@@ -469,7 +480,7 @@ public class CardService {
      * @param machineCode 待绑定的机器码（可为 null，表示未提供）
      * @param clientIp    客户端 IP（可为 null，表示未提供）
      */
-    private void finalizeCardUsage(Card card, String machineCode, String clientIp) {
+    private void finalizeCardUsage(Card card, String machineCode, String clientIp, CardStatus cardStatus) {
         if (card.getStatus() == 0) {
             card.setStatus(1);
             card.setUseTime(LocalDateTime.now());
@@ -482,6 +493,12 @@ public class CardService {
         // 记录使用 IP（审计用途：来源为请求头/连接信息，可被伪造，不得作为安全决策依据）
         if (clientIp != null && !clientIp.isBlank()) {
             card.setIpAddress(clientIp.length() > 255 ? clientIp.substring(0, 255) : clientIp);
+        }
+        // 同步 CardStatus.lastUseTime：此前仅次数卡路径更新该字段，
+        // 时长卡（占绝大多数）的"最后使用时间"审计字段永远为 null
+        if (cardStatus != null) {
+            cardStatus.setLastUseTime(LocalDateTime.now());
+            cardStatusRepository.save(cardStatus);
         }
         cardRepository.save(card);
     }
@@ -937,6 +954,16 @@ public class CardService {
         if ("1".equals(str)) return true;
         if ("0".equals(str)) return false;
         return Boolean.parseBoolean(str);
+    }
+
+    /**
+     * 查询归属指定用户的全部卡密（后台分配 + 订单购买生成）。
+     * @param userId 用户 ID
+     * @return 卡密列表
+     */
+    @Transactional(readOnly = true)
+    public List<Card> getOwnedCards(Integer userId) {
+        return cardRepository.findOwnedByUser(userId);
     }
 
     /**

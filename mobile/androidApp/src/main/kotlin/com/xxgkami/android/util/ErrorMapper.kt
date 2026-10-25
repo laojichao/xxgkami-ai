@@ -1,6 +1,7 @@
 package com.xxgkami.android.util
 
 import android.util.Log
+import com.xxgkami.shared.api.ApiHttpException
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.SerializationException
@@ -34,6 +35,10 @@ object ErrorMapper {
             is SocketTimeoutException -> "请求超时，请稍后重试"
             is UnknownHostException -> "无法连接服务器，请检查网络"
             is SerializationException -> "数据解析错误，请稍后重试"
+            // ApiHttpException 携带已读取的响应体文本，可直接解析 message，
+            // 避免对已消费的 response 二次 bodyAsText()（会抛 DoubleReceiveException
+            // 并吞掉后端业务错误文案）
+            is ApiHttpException -> mapApiHttpException(e.statusCode, e.bodyText)
             is ClientRequestException -> mapClientRequestException(e)
             is java.io.IOException -> "网络异常，请检查网络连接"
             else -> {
@@ -41,6 +46,19 @@ object ErrorMapper {
                 "操作失败，请稍后重试"
             }
         }
+    }
+
+    /**
+     * 解析 ApiHttpException：优先返回服务端 message，失败按状态码兜底。
+     */
+    private fun mapApiHttpException(statusCode: Int, bodyText: String): String {
+        val serverMessage = try {
+            json.parseToJsonElement(bodyText).jsonObject["message"]?.jsonPrimitive?.content
+        } catch (_: Exception) {
+            null
+        }
+        if (!serverMessage.isNullOrBlank()) return serverMessage
+        return defaultMessageForStatus(statusCode)
     }
 
     /**
@@ -59,13 +77,16 @@ object ErrorMapper {
         if (!serverMessage.isNullOrBlank()) return serverMessage
 
         // 解析失败时，根据 HTTP 状态码给出默认提示
-        return when (e.response.status.value) {
-            401 -> "登录已过期，请重新登录"
-            403 -> "没有权限执行此操作"
-            404 -> "请求的资源不存在"
-            in 400..499 -> "请求参数错误，请检查后重试"
-            in 500..599 -> "服务器异常，请稍后重试"
-            else -> "请求失败，请稍后重试"
-        }
+        return defaultMessageForStatus(e.response.status.value)
+    }
+
+    /** 按 HTTP 状态码返回默认中文提示 */
+    private fun defaultMessageForStatus(statusCode: Int): String = when (statusCode) {
+        401 -> "登录已过期，请重新登录"
+        403 -> "没有权限执行此操作"
+        404 -> "请求的资源不存在"
+        in 400..499 -> "请求参数错误，请检查后重试"
+        in 500..599 -> "服务器异常，请稍后重试"
+        else -> "请求失败，请稍后重试"
     }
 }
